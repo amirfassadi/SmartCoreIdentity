@@ -27,6 +27,17 @@ SmartCoreIdentity owns:
 - Owner Membership creation during registration
 - identity / organization / membership context for consuming modules
 
+## Minimal customer registration (ADR-0002 v1.5, Proposed)
+
+The user enters a basic name (`DisplayName`), a password, and a mobile
+number **or** an email address. Identity sends a one-time code to the chosen
+contact and verifies it before the ownership transaction. A mobile-only user
+is not required to enter an email. No Person/Organization/Membership is
+created solely for requesting a code. After confirmation, the atomic core
+is committed and Credential provisioning follows the PendingCredential
+flow below. Login remains unavailable until the Credential is ready.
+Other profile details are collected later when needed.
+
 ## Registration Invariant
 
 Registration uses the architecture defined by ADR-0002.
@@ -52,7 +63,7 @@ RegistrationApplicationService
 This is the limited Application Service exception for initial multi-aggregate registration coordination.
 
 Credential and Session creation occur after the atomic identity/ownership core
-has been established according to ADR-0002 v1.4 (Proposed). A durable
+has been established according to ADR-0002 v1.5 (Proposed). A durable
 registration workflow starts PendingCredential with an internal Outbox work item
 in the same ownership commit. Credential provisioning is idempotent by
 registrationId, retried with bounded backoff, and can be completed through a
@@ -160,5 +171,6 @@ The Kimia implementation must remain consistent with the existing SCI documents 
 ---
 
 > Authenticate identity once. Keep business authorization where the business rules live.
+
 
 

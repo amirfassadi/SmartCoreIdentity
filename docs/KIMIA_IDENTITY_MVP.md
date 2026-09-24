@@ -24,7 +24,15 @@ The scope intentionally follows the existing SmartCoreIdentity blueprint rather 
 
 ### Registration
 
-- Register Person
+Initial input: basic name (`DisplayName`), password, and **mobile OR email**.
+The selected contact receives a one-time verification code. Confirming that
+code precedes the atomic ownership transaction. Mobile-only registration
+shall not require email. Unverified attempts create no Person or
+Organization; the code itself grants neither login nor Session. Other
+customer information is requested later by the capability that needs it.
+These are proposed requirements under ADR-0002 v1.5 Decision 9.
+
+- Register Person after verification of the selected contact
 - atomically create Personal Organization
 - atomically create Owner Membership
 - create Credential as part of the registration flow
@@ -125,6 +133,8 @@ No Kimia-specific aggregate is introduced into SmartCoreIdentity.
 The minimum registration flow is:
 
 ```text
+Contact + DisplayName + password → one-time code → verify contact
+      ↓
 RegisterPerson
       ↓
 RegistrationApplicationService
@@ -146,7 +156,7 @@ Session may be established according to application flow
 ### Registration rule
 
 The core identity/ownership state must not exist partially. Under ADR-0002
-v1.4 (Proposed), a committed registration may temporarily be PendingCredential;
+v1.5 (Proposed), a committed registration may temporarily be PendingCredential;
 it cannot log in or receive an authenticated Session until an active Credential
 exists and the workflow is Ready. Pending is a registration workflow state,
 not a Person, Organization, or Membership lifecycle state. A pending result
@@ -310,7 +320,7 @@ My Profile
 
 The Identity portion of Kimia Release 1 is complete when:
 
-1. a new user can register successfully once an active Credential exists and the registration is Ready;
+1. a new user can register with a verified mobile OR email contact, DisplayName and password, without having to provide the other contact or unrelated profile data; registration is complete once an active Credential exists and the registration is Ready;
 2. registration establishes Person + Personal Organization + Owner Membership according to SCI invariants;
 3. the user can authenticate;
 4. a valid Session can be created and refreshed;
@@ -335,9 +345,10 @@ and maintain their basic identity profile.
 ```
 
 The registration recovery and readiness requirements above are architectural
-proposals in ADR-0002 v1.4. The complete SCI Blueprint, machine specification,
+proposals in ADR-0002 v1.5. The complete SCI Blueprint, machine specification,
 public contracts, API responses, event consumers, and security tests must be
 reviewed before calling this launch-ready. No new route is defined by this
 high-level scope document.
+
 
 
