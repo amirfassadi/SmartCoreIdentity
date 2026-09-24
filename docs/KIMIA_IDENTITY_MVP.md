@@ -29,6 +29,7 @@ The scope intentionally follows the existing SmartCoreIdentity blueprint rather 
 - atomically create Owner Membership
 - create Credential as part of the registration flow
 - establish the identity required for later authentication
+- track PendingCredential until one active Credential is ready; retry provisioning idempotently by registrationId and offer secure completion after retry exhaustion
 
 Core invariant:
 
@@ -94,7 +95,7 @@ The Kimia Identity MVP does not include:
 - additional Membership roles
 - social login
 - MFA
-- complex account recovery
+- general account recovery (the specific PendingCredential setup path is in scope)
 - capability/business authorization
 - Staff employment semantics
 - Customer/business relationship semantics
@@ -133,14 +134,25 @@ Atomic Core Transaction
 ├── Personal Organization
 └── Membership(Owner)
       ↓
-Credential / authentication setup
+PendingCredential workflow + Outbox work item committed with core
+      ↓
+Idempotent Credential provisioning / bounded retry
+      ↓
+Ready + PersonRegistered after active Credential
       ↓
 Session may be established according to application flow
 ```
 
 ### Registration rule
 
-The core identity/ownership state must not exist partially.
+The core identity/ownership state must not exist partially. Under ADR-0002
+v1.4 (Proposed), a committed registration may temporarily be PendingCredential;
+it cannot log in or receive an authenticated Session until an active Credential
+exists and the workflow is Ready. Pending is a registration workflow state,
+not a Person, Organization, or Membership lifecycle state. A pending result
+must not claim registration/authentication completion. A secure, one-time
+Credential setup challenge completes registration without registering again
+when automated retries are exhausted.
 
 For example, these states are invalid as completed registration outcomes:
 
@@ -298,7 +310,7 @@ My Profile
 
 The Identity portion of Kimia Release 1 is complete when:
 
-1. a new user can register successfully;
+1. a new user can register successfully once an active Credential exists and the registration is Ready;
 2. registration establishes Person + Personal Organization + Owner Membership according to SCI invariants;
 3. the user can authenticate;
 4. a valid Session can be created and refreshed;
@@ -307,8 +319,9 @@ The Identity portion of Kimia Release 1 is complete when:
 7. the user can update permitted profile fields;
 8. KimiaBeauty does not maintain a duplicate Person/User identity source of truth;
 9. no business authorization logic is placed inside SmartCoreIdentity;
-10. no deferred Organization/Membership lifecycle features are required for launch;
-11. documented failed-authentication outcomes publish `LoginFailed` as an Identity-owned Security Event, without creating an authenticated Session or treating it as a successful Domain state transition.
+10. committed ownership with failed Credential provisioning remains pending, retries are idempotent, and a user with a verified one-time setup challenge can complete it without duplicate Person/Organization/Membership;
+11. no deferred Organization/Membership lifecycle features are required for launch;
+12. documented failed-authentication outcomes publish `LoginFailed` as an Identity-owned Security Event, without creating an authenticated Session or treating it as a successful Domain state transition.
 
 ## 15. Explicit Non-Goals
 
@@ -321,5 +334,10 @@ Kimia customer can register, authenticate, keep a valid session,
 and maintain their basic identity profile.
 ```
 
-Nothing more is required from Identity for the first Kimia release.
+The registration recovery and readiness requirements above are architectural
+proposals in ADR-0002 v1.4. The complete SCI Blueprint, machine specification,
+public contracts, API responses, event consumers, and security tests must be
+reviewed before calling this launch-ready. No new route is defined by this
+high-level scope document.
+
 

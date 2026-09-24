@@ -51,7 +51,16 @@ RegistrationApplicationService
 
 This is the limited Application Service exception for initial multi-aggregate registration coordination.
 
-Credential and Session creation occur after the atomic identity/ownership core has been established according to the SCI design.
+Credential and Session creation occur after the atomic identity/ownership core
+has been established according to ADR-0002 v1.4 (Proposed). A durable
+registration workflow starts PendingCredential with an internal Outbox work item
+in the same ownership commit. Credential provisioning is idempotent by
+registrationId, retried with bounded backoff, and can be completed through a
+secure one-time setup challenge after retry exhaustion. Password login and
+Session creation require Ready and an active Credential; a pending response
+must not imply authenticated success. PersonRegistered is proposed to follow
+Credential readiness, without waiting for an initial Session. See the ADR for
+the full design and pending contract/Blueprint review.
 
 ## Authorization Boundary
 
@@ -76,10 +85,10 @@ Examples:
 
 For the current MVP:
 
-- Person starts Active.
+- Person starts Active; registration workflow readiness is separate and initially PendingCredential.
 - Organization starts Active.
 - Membership starts Active.
-- Credential starts Active.
+- Credential starts Active when provisioning succeeds; it does not exist as an active Credential while the workflow is PendingCredential.
 - Organization suspend/archive is out of scope.
 - Membership revoke is out of scope.
 - Role expansion beyond Owner is out of scope.
@@ -151,4 +160,5 @@ The Kimia implementation must remain consistent with the existing SCI documents 
 ---
 
 > Authenticate identity once. Keep business authorization where the business rules live.
+
 

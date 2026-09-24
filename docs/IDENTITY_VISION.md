@@ -49,6 +49,12 @@ Membership(Owner)
 ```
 
 The application orchestration boundary is `RegistrationApplicationService`.
+ADR-0002 v1.4 (Proposed) keeps ownership creation atomic while recording a
+separate durable PendingCredential workflow and Outbox provisioning work in the
+same commit. Idempotent retry and a secure one-time setup challenge complete
+Credential provisioning without a second registration. Authentication requires
+Ready and an active Credential. Person/Organization/Membership lifecycle states
+are unchanged, and initial Session creation is separate from readiness.
 
 ## Owns
 
@@ -117,4 +123,5 @@ Device/Service/AI Agent identities only through future ADRs.
 ---
 
 > Prove identity once; let each capability own its business authorization.
+
 
