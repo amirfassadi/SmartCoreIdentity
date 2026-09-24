@@ -75,6 +75,23 @@ The application orchestration boundary is `RegistrationApplicationService`.
 
 Identity provides authenticated context. Consuming modules decide business permissions.
 
+## Failed Authentication Event
+
+Per [ADR-0002 v1.3, Decision 5](https://github.com/amirfassadi/SmartCorePlatform/blob/main/SmartCore_Platform_Docs_v1/ADR-0002_Identity_Foundation_Clarifications.md), `LoginFailed` is an
+Identity-owned **Security Event** used for audit, not a Domain Event.
+Identity publishes it for the documented failed-authentication outcomes without
+requiring successful login, a business-state commit, or an authenticated Session.
+
+The event name, producer, existing payload, and conditional identity-reference
+rules are retained. Consumers must not interpret it as a successful Domain state
+transition. This classification does not select a new transport, topic, retention
+policy, or delivery guarantee.
+
+The decision direction has been agreed; ADR-0002 as a whole remains Proposed
+pending its acceptance criteria. The full SCI event/contract/machine specification
+is not present in this repository snapshot and must be synchronized and validated
+before generation readiness can be claimed.
+
 ## Growth Path
 
 ### Phase 1 — Kimia MVP
@@ -100,3 +117,4 @@ Device/Service/AI Agent identities only through future ADRs.
 ---
 
 > Prove identity once; let each capability own its business authorization.
+

@@ -50,6 +50,23 @@ must be established as the registration core.
 - Logout / Close Session
 - password-based credential flow as defined by SCI
 
+### Failed Authentication Event
+
+Per [ADR-0002 v1.3, Decision 5](https://github.com/amirfassadi/SmartCorePlatform/blob/main/SmartCore_Platform_Docs_v1/ADR-0002_Identity_Foundation_Clarifications.md), `LoginFailed` is an
+Identity-owned **Security Event** used for audit, not a Domain Event.
+Identity publishes it for the documented failed-authentication outcomes without
+requiring successful login, a business-state commit, or an authenticated Session.
+
+The event name, producer, existing payload, and conditional identity-reference
+rules are retained. Consumers must not interpret it as a successful Domain state
+transition. This classification does not select a new transport, topic, retention
+policy, or delivery guarantee.
+
+The decision direction has been agreed; ADR-0002 as a whole remains Proposed
+pending its acceptance criteria. The full SCI event/contract/machine specification
+is not present in this repository snapshot and must be synchronized and validated
+before generation readiness can be claimed.
+
 ### Profile
 
 - retrieve own Person information
@@ -290,7 +307,8 @@ The Identity portion of Kimia Release 1 is complete when:
 7. the user can update permitted profile fields;
 8. KimiaBeauty does not maintain a duplicate Person/User identity source of truth;
 9. no business authorization logic is placed inside SmartCoreIdentity;
-10. no deferred Organization/Membership lifecycle features are required for launch.
+10. no deferred Organization/Membership lifecycle features are required for launch;
+11. documented failed-authentication outcomes publish `LoginFailed` as an Identity-owned Security Event, without creating an authenticated Session or treating it as a successful Domain state transition.
 
 ## 15. Explicit Non-Goals
 
@@ -304,3 +322,4 @@ and maintain their basic identity profile.
 ```
 
 Nothing more is required from Identity for the first Kimia release.
+
