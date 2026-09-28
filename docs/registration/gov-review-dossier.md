@@ -37,6 +37,18 @@ An acceptance of only some decisions needs a clear version/scope and a consisten
 
 051 §7 orders Approval before Implementation. The acceptance criteria in ADR-0002 also say some proof/replay cases must be *tested* before changing its status, while Identity/13 describes runtime tests requiring an implementation. The architecture owner must distinguish an architectural review/approval gate from later implementation verification, or state what pre-approval evidence satisfies those criteria. Do not silently mark runtime tests passed, change ADR status, or assume this dossier resolves the tension. ADR-0004's scoped acceptance record is a precedent for making approval scope and later verification obligations explicit, not automatic authorization to apply that treatment to ADR-0002/0003.
 
+## Proposed sequencing disposition — for owner review, not adopted
+
+ADR-0002's current Acceptance Criteria say the ADR SHALL remain Proposed until specified proof, replay and security cases are tested. The following language is a proposed amendment to that ADR's criteria under 051 §9, followed by an attributable architecture approval record. Merely inserting it into this Identity dossier or an external decision record cannot override the current platform ADR.
+
+> For ADR-0002, architectural approval may rely on reviewed design, synchronized narrative/machine/API/event contracts, architecture validation and applicable structural validation. Runtime, security, failure and concurrency test requirements remain mandatory post-approval implementation and verification gates, with reproducible results required before implementation acceptance, generation readiness where applicable, or release. Architectural approval does not assert that these tests have run or waive them. No implementation precedes architectural approval under 051 §7. The approval record SHALL enumerate the exact accepted decision scope, outstanding verification obligations, owner, source revision and effect on dependent documents.
+
+If the owner chooses this sequencing, the ADR-0002 Acceptance Criteria must be revised and versioned in SmartCorePlatform first (or as one reviewable approval change), expressly moving each test-dependent checkbox to a separately tracked implementation/verification gate. The architecture/structural review and document-consistency criteria remain prerequisites to architectural acceptance. Record the reviewed platform commit and the actual test evidence later; do not replace checkboxes with unsupported PASS claims.
+
+ADR-0003's Acceptance Criteria contain document synchronization, Architecture Validation Review, Structural Validation and dependent references. They do **not** contain a comparable requirement to run proof/replay/runtime tests before changing status. Review ADR-0003 on its own stated criteria. The above ADR-0002 amendment must not be copied to ADR-0003 as an invented prerequisite. Its lifecycle implementation still needs later verification, but that is separate from its current acceptance wording.
+
+T16 and SESSION remain independent open decisions. Even an accepted GOV architecture does not automatically make the complete Blueprint READY_FOR_GENERATION.
+
 ## Review-ready decision template (unfilled)
 
 - Candidate platform commit:
@@ -44,7 +56,7 @@ An acceptance of only some decisions needs a clear version/scope and a consisten
 - ADR-0002 decision numbers accepted / revised / deferred:
 - ADR-0003 lifecycle scope accepted / revised / deferred:
 - Evidence reviewed, including consumer inventory and architecture/065 results:
-- Treatment of pre-approval tests versus post-approval runtime verification:
+- Treatment of pre-approval tests versus post-approval runtime verification (owner disposition of proposed text above):
 - Remaining conditions and responsible owner:
 - Approval/effective date and attributable record:
 - Platform ADR/document changes and accepted commit:
