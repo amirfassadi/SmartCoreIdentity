@@ -1,0 +1,109 @@
+{
+  "status": "DRAFT; generation BLOCKED",
+  "sourceArchiveSha256": "8fa6cd30dd17f8a5e1a1c2a1b06f9a5bc119b03384ad3a5bd63ec65503cba21b",
+  "identityBase": "f72a4fdf9f29edd3970b4bd719bfbf8040089534",
+  "platformReference": "91375b192dd0ec778529c4c7d8a785c94231269a",
+  "archiveIsNormative": false,
+  "files": [
+    {
+      "path": "docs/reference/uploaded-blueprint/00_Overview.md",
+      "sha256": "7990f811384b5a6116708c92d0d4cf783d4d3392e8b2f27a2093c3fea142c23d",
+      "bytes": 6924
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/01_Domain_Model.md",
+      "sha256": "5a0a6fc7ff8a8555921db99c0813043bb46040d181ed71d5befcb0180a86fb6d",
+      "bytes": 10399
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/02_Use_Cases.md",
+      "sha256": "401d9f404e0ead8ac541e7d3df7d4a6ae7359c1f9aebce4cfaa9ee3e36656369",
+      "bytes": 35554
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/03_Aggregates.md",
+      "sha256": "15b88d09c27ec7cde30ef42a7ac48d71c10773f03051839e3021ff6cf89504d7",
+      "bytes": 10130
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/04_Commands.md",
+      "sha256": "ab7b68939e113e56dce394540ab3f224c58000c490c27b06f28cba421bbe2324",
+      "bytes": 30942
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/05_Queries.md",
+      "sha256": "0bebd5e4e70c91e9cc40cf3823f12fd2b3c4e6804e994f179af3d856102693c7",
+      "bytes": 18168
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/06_Domain_Events.md",
+      "sha256": "617040005505b92746fc80abad66fbebd1f65f42129f77b160582d63a60796fb",
+      "bytes": 36860
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/07_Contracts.md",
+      "sha256": "bda5b7504463cca6203076f978d77302deb6f8f69893b43cb6ef2c5c1e207f0f",
+      "bytes": 34720
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/08_API.md",
+      "sha256": "c09958a5f15df74027ed6cee917685cea048f05f2f911e101083f17acf2d82e5",
+      "bytes": 14733
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/09_Persistence.md",
+      "sha256": "e2f221a3a050a405c8977d2fa97b9fee9b0635b7970b0128772b7dd5fd20e5cd",
+      "bytes": 76992
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/09_Persistence_CHANGELOG.md",
+      "sha256": "2f60346c9e94b135a14a4a2677fd908579918849d80ba58f0b2906537d6babf0",
+      "bytes": 9185
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/10_Configuration.md",
+      "sha256": "ad7c4ae43e90c7ce3ba1ec7e764fb7d7a0e02f7aab4ead397cb04967391485b0",
+      "bytes": 17010
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/11_Security.md",
+      "sha256": "816414df20e938e2d89dbad0012e5b13bd138e0e957f9f42ce7fe1030590c92c",
+      "bytes": 34387
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/12_Validation.md",
+      "sha256": "9ede4e048244da87262c294ca9b87e595c1ca262d3e865de1113a3b9f1f1e04a",
+      "bytes": 65861
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/13_Testing.md",
+      "sha256": "809cbe8011b328cfa4d6c882f55b00edf6f6e2b4b4601494625939a8f1bd9f83",
+      "bytes": 54273
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/14_MVP.md",
+      "sha256": "220b89b9dbf5c3493f2ff450933a230737473a3a7a5d321254a82a506e420096",
+      "bytes": 9757
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/15_Extensibility.md",
+      "sha256": "2d2dbe0f7d59edc75151109e8025b9ac14179f0c8bf26ef7e5320419fbf0af04",
+      "bytes": 30760
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/16_Examples.md",
+      "sha256": "6ea808bb24ad58e5bbd8cb7f3eb0f55cdf5ce8b6d07a3d8912398e23c3a8d0e7",
+      "bytes": 36605
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/capability_machine.yaml",
+      "sha256": "f1fd38d1e44de1cf0db331d61725f18b4bdf43136c4ce72e5f7e2ab87fef3d04",
+      "bytes": 65514
+    },
+    {
+      "path": "docs/reference/uploaded-blueprint/TASK_Identity_Foundation_Hardening.md",
+      "sha256": "24c223055532904afb2f57e8b28ed4447750608c298109879f084b863d6000fa",
+      "bytes": 12864
+    }
+  ]
+}
