@@ -1,6 +1,6 @@
 # Identity capability — validation notes
 
-Version: 0.1.4
+Version: 0.1.5
 Date: 2026-09-28
 Status: DRAFT — generation BLOCKED
 Scope: Registration-first documentary reconciliation; not a full Blueprint validation certificate.
@@ -55,7 +55,7 @@ R01–R20 are specifications in [validation-and-tests.md](validation-and-tests.m
 |---|---|---|
 | GOV | Explicit applicable ADR approvals with attributable scope and commit references; [review dossier](gov-review-dossier.md) pins candidate ADR blobs, evidence gaps and an unfilled decision template | Open; platform [draft PR #6](https://github.com/amirfassadi/SmartCorePlatform/pull/6) proposes ADR-0002 v1.8.0 sequencing, not adopted; ADR-0003 criteria checked separately |
 | T16 | Accepted ordering/consumer contract and retry/redelivery disposition; consumer/workload evidence. [Platform draft PR #8](https://github.com/amirfassadi/SmartCorePlatform/pull/8) records platform-wide Identity dependency separately from event subscribers and evaluates shared consumer rules. | Open; no option selected or subscriber inventory verified |
-| SESSION | Security-reviewed rotation, refresh and absolute/sliding lifetime policy, propagated consistently | Open |
+| SESSION | Security-reviewed rotation, refresh and absolute/sliding lifetime policy, propagated consistently; [platform draft PR #9](https://github.com/amirfassadi/SmartCorePlatform/pull/9) compares options and client-topology questions | Open; no option selected |
 | POLICY | Approved password/KDF/TTL/retry settings with benchmark and operational rationale | Open |
 | MATERIAL | Concrete protected staging, transfer, access and bounded cleanup design plus race/security evidence | Open |
 | CONSOLIDATION | Reconciled active 00–16 and machine/API/schema package; applicable 065 results | Open |
@@ -86,3 +86,4 @@ For this revision, the command passed on 2026-09-28 after adding this note and i
 | 0.1.2 | 2026-09-28 | Record proposed ADR-0002 architecture/verification sequencing; confirm ADR-0003 has no pre-acceptance runtime-test clause; GOV remains open |
 | 0.1.3 | 2026-09-28 | Link platform draft PR #6 at ed16fff8; proposal does not close GOV or change the pinned accepted baseline |
 | 0.1.4 | 2026-09-29 | Link T16 draft PR #8; distinguish platform dependency from event subscription, with no ordering option accepted |
+| 0.1.5 | 2026-09-29 | Link unsigned GOV template and SESSION draft PR #9; no governance or security policy gate closed |
