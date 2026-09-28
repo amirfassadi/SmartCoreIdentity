@@ -17,6 +17,7 @@ Source of truth for this review: accepted decisions within their scope, proposed
 3. [Source review, preserved details and open decisions](reconciliation-review.md)
 4. [Byte-preserved uploaded Blueprint](../reference/uploaded-blueprint/README.md)
 5. [Source hashes](source-manifest.json)
+6. [Current validation notes and evidence limits](capability.validation_notes.md)
 
 ## Pinned upstream references
 

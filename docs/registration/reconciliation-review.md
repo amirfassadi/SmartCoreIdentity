@@ -41,7 +41,7 @@ UoW versus repository commit ownership; Credential instance replacement versus h
 - **POLICY:** password thresholds, KDF costs, Session lifetimes and retry defaults differ; select and benchmark under approved policy, not by document length or newest timestamp alone.
 - **MATERIAL:** local “only PasswordHash persisted” versus platform protected staged material. Concrete secret representation/access/expiry implementation must satisfy no durable raw password, atomic reference binding and bounded disposal; no plaintext staging is authorized.
 - **CONSOLIDATION:** active full 00–16/machine integration and applicable 065 validation remain open; this registration package and archived baseline do not pretend to finish them.
-- **MISSING SOURCE:** capability.validation_notes.md is named by uploaded YAML but absent from the ZIP. Request the original if available; do not invent its validation evidence. This does not block recording these corrections, but old validation-complete claims cannot be relied upon.
+- **MISSING SOURCE:** capability.validation_notes.md is named by uploaded YAML but absent from the ZIP. The owner confirmed it is unavailable. New [validation notes](capability.validation_notes.md) record current evidence and gaps; they do not replace or authenticate the historical report. This does not block recording these corrections, but old validation-complete claims cannot be relied upon.
 - **DEPLOYMENT:** delivery provider, database/runtime, KMS/service trust, finite recovery settings, real operator grants and runtime tests remain undecided/unverified here.
 
 ## Change control

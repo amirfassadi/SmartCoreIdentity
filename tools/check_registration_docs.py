@@ -9,6 +9,7 @@ for item in manifest['files']:
  data=(root/item['path']).read_bytes()
  assert len(data)==item['bytes'] and hashlib.sha256(data).hexdigest()==item['sha256'],item['path']
 current=[root/'README.md',root/'docs/IDENTITY_VISION.md',root/'docs/KIMIA_IDENTITY_MVP.md',*(root/'docs/registration').glob('*.md')]
+current.append(root/'docs/reference/uploaded-blueprint/capability.validation_notes.md')
 links=0
 for p in current:
  s=p.read_text()
