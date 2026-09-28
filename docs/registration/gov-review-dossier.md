@@ -1,6 +1,6 @@
 # GOV review dossier — ADR-0002 and ADR-0003
 
-Version: 0.3.2 — 2026-09-29 — DRAFT / decision pending
+Version: 0.3.3 — 2026-09-29 — DRAFT / decision pending
 
 This is a preparation record in SmartCoreIdentity PR #1. The authoritative ADRs and any approval record belong to SmartCorePlatform. This file does not approve, amend, sign or mark either ADR Accepted.
 
@@ -66,7 +66,7 @@ Draft prepared: 2026-09-29 (Asia/Tehran). This is a preparation checklist, not o
 | Gate | Current position | Accountable decision owner / execution owner |
 |---|---|---|
 | T16 | Open. A means a defined per-Person publication **and consumer-application** ordering contract; B means version-aware unordered consumption. PR #8 explores shared consumer rules across both; buffer/lookup are supporting mechanisms, not a substitute for the event contract. No option selected. | Architecture decision: Amir; producer, consumer-library and operational execution owners: to assign in the accepted record. |
-| SESSION | Open. [Draft PR #9](https://github.com/amirfassadi/SmartCorePlatform/pull/9) compares the historical and platform policy; the owner selected a Kimia BFF direction on 2026-09-29 (implementation/topology unverified); establish its trust boundary and threat model before choosing rotation, sender constraint, absolute/sliding lifetime and TTLs. For a public OAuth client, refresh tokens require rotation or sender constraint; do not generalize that rule to an unspecified protocol. | Security/architecture decision: Amir; implementation and operations owners: to assign. |
+| SESSION | Open. [Draft PR #9](https://github.com/amirfassadi/SmartCorePlatform/pull/9) compares the historical and platform policy; the owner selected a Kimia BFF direction on 2026-09-29 (implementation/topology unverified); establish its trust boundary and threat model and review the owner-selected S2 direction (refresh rotation with fixed absolute Session cap, no sliding extension). Numerical TTLs, replay/race rules, compatibility and security approval remain open. For a public OAuth client, refresh tokens require rotation or sender constraint; do not generalize that rule to an unspecified protocol. | Security/architecture decision: Amir; implementation and operations owners: to assign. |
 | POLICY / MATERIAL | Open. Approve policy values and protected material staging, transfer and disposal design with required evidence. | Architecture/security decision: Amir; execution owner: to assign. |
 | CONSOLIDATION | Open. Reconcile active Blueprint, API, service/event schemas and machine package against one candidate; run applicable 065 validation. | Architecture decision: Amir; validation executor: to assign. |
 | DEPLOYMENT / BEHAVIOR | Open. Configure services, keys, delivery, audit and operator recovery; implement and run required failure/security/race tests after architectural approval. | Operations/verification accountable owner: to assign explicitly; Amir retains decision authority until delegation is recorded. |
