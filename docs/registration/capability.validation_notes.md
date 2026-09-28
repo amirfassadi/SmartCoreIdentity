@@ -1,6 +1,6 @@
 # Identity capability — validation notes
 
-Version: 0.1.11
+Version: 0.1.12
 Date: 2026-09-29
 Status: DRAFT — generation BLOCKED
 Scope: Registration-first documentary reconciliation; not a full Blueprint validation certificate.
@@ -55,7 +55,7 @@ R01–R20 are specifications in [validation-and-tests.md](validation-and-tests.m
 |---|---|---|
 | GOV | Explicit applicable ADR approvals with attributable scope and commit references; [review dossier](gov-review-dossier.md) pins candidate ADR blobs, evidence gaps and an unfilled decision template | Open; platform [draft PR #6](https://github.com/amirfassadi/SmartCorePlatform/pull/6) proposes ADR-0002 v1.8.0 sequencing, not adopted; ADR-0003 criteria checked separately |
 | T16 | Accepted ordering/consumer contract and retry/redelivery disposition; consumer/workload evidence. [Platform draft PR #8](https://github.com/amirfassadi/SmartCorePlatform/pull/8) records platform-wide Identity dependency separately from event subscribers and evaluates shared consumer rules. | Open; no option selected or subscriber inventory verified |
-| SESSION | Security-reviewed rotation, refresh and absolute/sliding lifetime policy, propagated consistently; [platform draft PR #9](https://github.com/amirfassadi/SmartCorePlatform/pull/9) compares options and client-topology questions | Open; BFF/S2 and strict consumed-token revocation with reauthentication selected as design directions; [S2 contract draft](https://github.com/amirfassadi/SmartCorePlatform/blob/docs/identity-session-policy-review/_Copilot_Reports/Identity_SESSION_S2_BFF_Contract_Draft.md) requires security review, propagation and tests; owner selected 900/86400-second values for review; [security checklist](https://github.com/amirfassadi/SmartCorePlatform/blob/docs/identity-session-policy-review/_Copilot_Reports/Identity_SESSION_S2_Security_Review_Checklist.md) tracks owner-selected no-idle, bounded access validity and all-Session password-change closure plus unresolved security evidence |
+| SESSION | Security-reviewed rotation, refresh and absolute/sliding lifetime policy, propagated consistently; [platform draft PR #9](https://github.com/amirfassadi/SmartCorePlatform/pull/9) compares options and client-topology questions | Open; BFF/S2 and strict consumed-token revocation with reauthentication selected as design directions; [S2 contract draft](https://github.com/amirfassadi/SmartCorePlatform/blob/docs/identity-session-policy-review/_Copilot_Reports/Identity_SESSION_S2_BFF_Contract_Draft.md) requires security review, propagation and tests; owner selected 900/86400-second values for review; [security checklist](https://github.com/amirfassadi/SmartCorePlatform/blob/docs/identity-session-policy-review/_Copilot_Reports/Identity_SESSION_S2_Security_Review_Checklist.md) tracks owner-selected no-idle, bounded access validity and all-Session password-change closure plus unresolved security evidence; [unsigned decision candidate](https://github.com/amirfassadi/SmartCorePlatform/blob/docs/identity-session-policy-review/_Copilot_Reports/Identity_SESSION_Decision_Candidate.md) awaits review |
 | POLICY | Approved password/KDF/TTL/retry settings with benchmark and operational rationale | Open |
 | MATERIAL | Concrete protected staging, transfer, access and bounded cleanup design plus race/security evidence | Open |
 | CONSOLIDATION | Reconciled active 00–16 and machine/API/schema package; applicable 065 results | Open |
@@ -93,3 +93,4 @@ For this revision, the command passed on 2026-09-28 after adding this note and i
 | 0.1.9 | 2026-09-29 | Record selected 900-second access and 86400-second absolute Session design values and S2 propagation map; no security approval |
 | 0.1.10 | 2026-09-29 | Link S2 security review checklist for BFF races, forced reauthentication, idle/revocation/password-change policy and operational ownership; no PASS asserted |
 | 0.1.11 | 2026-09-29 | Record owner-selected no separate idle timeout, bounded access validity up to 900 seconds, and all-Session closure on password change; SESSION remains open |
+| 0.1.12 | 2026-09-29 | Link unsigned SESSION decision candidate; no ADR number or approval inferred |
