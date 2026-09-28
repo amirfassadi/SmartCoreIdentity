@@ -1,6 +1,6 @@
 # GOV review dossier — ADR-0002 and ADR-0003
 
-Version: 0.1.0 — 2026-09-28 — DRAFT / decision pending
+Version: 0.2.0 — 2026-09-28 — DRAFT / decision pending
 
 This is a preparation record in SmartCoreIdentity PR #1. The authoritative ADRs and any approval record belong to SmartCorePlatform. This file does not approve, amend, sign or mark either ADR Accepted.
 
@@ -38,6 +38,8 @@ An acceptance of only some decisions needs a clear version/scope and a consisten
 051 §7 orders Approval before Implementation. The acceptance criteria in ADR-0002 also say some proof/replay cases must be *tested* before changing its status, while Identity/13 describes runtime tests requiring an implementation. The architecture owner must distinguish an architectural review/approval gate from later implementation verification, or state what pre-approval evidence satisfies those criteria. Do not silently mark runtime tests passed, change ADR status, or assume this dossier resolves the tension. ADR-0004's scoped acceptance record is a precedent for making approval scope and later verification obligations explicit, not automatic authorization to apply that treatment to ADR-0002/0003.
 
 ## Proposed sequencing disposition — for owner review, not adopted
+
+A concrete platform amendment is now [draft PR #6](https://github.com/amirfassadi/SmartCorePlatform/pull/6), ADR-0002 v1.8.0 at commit `ed16fff8b01fc4c7139d9837c154992858ae92c4`, targeting the integrated documentation branch. It is a proposal, not an accepted source. The pinned v1.7.1 review input above remains the current baseline until the owner reviews and approves the amendment; recheck its final commit and criteria before any GOV closure.
 
 ADR-0002's current Acceptance Criteria say the ADR SHALL remain Proposed until specified proof, replay and security cases are tested. The following language is a proposed amendment to that ADR's criteria under 051 §9, followed by an attributable architecture approval record. Merely inserting it into this Identity dossier or an external decision record cannot override the current platform ADR.
 
