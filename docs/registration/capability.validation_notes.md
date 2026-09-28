@@ -1,7 +1,7 @@
 # Identity capability — validation notes
 
 Version: 0.1.5
-Date: 2026-09-28
+Date: 2026-09-29
 Status: DRAFT — generation BLOCKED
 Scope: Registration-first documentary reconciliation; not a full Blueprint validation certificate.
 
