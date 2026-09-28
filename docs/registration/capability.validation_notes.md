@@ -1,6 +1,6 @@
 # Identity capability — validation notes
 
-Version: 0.1.1
+Version: 0.1.2
 Date: 2026-09-28
 Status: DRAFT — generation BLOCKED
 Scope: Registration-first documentary reconciliation; not a full Blueprint validation certificate.
@@ -53,7 +53,7 @@ R01–R20 are specifications in [validation-and-tests.md](validation-and-tests.m
 
 | Gate | Required closure evidence | State |
 |---|---|---|
-| GOV | Explicit applicable ADR approvals with attributable scope and commit references; [review dossier](gov-review-dossier.md) pins candidate ADR blobs, evidence gaps and an unfilled decision template | Open; dossier is not approval |
+| GOV | Explicit applicable ADR approvals with attributable scope and commit references; [review dossier](gov-review-dossier.md) pins candidate ADR blobs, evidence gaps and an unfilled decision template | Open; ADR-0002 sequencing amendment proposed, not adopted; ADR-0003 criteria checked separately |
 | T16 | Accepted ordering/consumer contract and retry/redelivery disposition; consumer/workload evidence | Open |
 | SESSION | Security-reviewed rotation, refresh and absolute/sliding lifetime policy, propagated consistently | Open |
 | POLICY | Approved password/KDF/TTL/retry settings with benchmark and operational rationale | Open |
@@ -83,3 +83,4 @@ For this revision, the command passed on 2026-09-28 after adding this note and i
 |---|---|---|
 | 0.1.0 | 2026-09-28 | Create new registration-scoped validation notes and explicit historical-report gap; no old PASS claim adopted |
 | 0.1.1 | 2026-09-28 | Link GOV review dossier; no gate closed or runtime evidence asserted |
+| 0.1.2 | 2026-09-28 | Record proposed ADR-0002 architecture/verification sequencing; confirm ADR-0003 has no pre-acceptance runtime-test clause; GOV remains open |
