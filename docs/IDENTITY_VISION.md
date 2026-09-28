@@ -1,7 +1,9 @@
 # SmartCoreIdentity — Capability Vision
 
-**Status:** Architecture Vision  
+**Status:** Architecture Vision
 **Repository:** SmartCoreIdentity
+
+> Current scoped registration contract: [registration/README.md](registration/README.md). ADR-0004 architecture is accepted; inherited Blueprint policy conflicts and generation gates remain open.
 
 ## Purpose
 
@@ -49,7 +51,7 @@ Membership(Owner)
 ```
 
 The application orchestration boundary is `RegistrationApplicationService`.
-ADR-0002 v1.5 (Proposed) asks for DisplayName, password, and one verified
+ADR-0002 Decisions 8–9 (Proposed) asks for DisplayName, password, and one verified
 mobile number OR email. A one-time code verifies the chosen contact before
 the ownership transaction; other profile data can be collected later.
 The same ADR keeps ownership creation atomic while recording a
