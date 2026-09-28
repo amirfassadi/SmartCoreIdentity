@@ -1,6 +1,6 @@
 # GOV review dossier — ADR-0002 and ADR-0003
 
-Version: 0.3.0 — 2026-09-29 — DRAFT / decision pending
+Version: 0.3.1 — 2026-09-29 — DRAFT / decision pending
 
 This is a preparation record in SmartCoreIdentity PR #1. The authoritative ADRs and any approval record belong to SmartCorePlatform. This file does not approve, amend, sign or mark either ADR Accepted.
 
@@ -55,7 +55,7 @@ T16 and SESSION remain independent open decisions. Even an accepted GOV architec
 
 Draft prepared: 2026-09-29 (Asia/Tehran). This is a preparation checklist, not owner approval or an amendment to a Platform ADR.
 
-- **Candidate platform commit:** PENDING. Pin one integrated candidate after disposition of platform PRs [#6](https://github.com/amirfassadi/SmartCorePlatform/pull/6), [#7](https://github.com/amirfassadi/SmartCorePlatform/pull/7), [#8](https://github.com/amirfassadi/SmartCorePlatform/pull/8), and any separately reviewed SESSION changes. The current individual PR heads are not a single accepted baseline.
+- **Candidate platform commit:** PENDING. Pin one integrated candidate after disposition of platform PRs [#6](https://github.com/amirfassadi/SmartCorePlatform/pull/6), [#7](https://github.com/amirfassadi/SmartCorePlatform/pull/7), [#8](https://github.com/amirfassadi/SmartCorePlatform/pull/8), and the separately reviewed [SESSION draft PR #9](https://github.com/amirfassadi/SmartCorePlatform/pull/9). The current individual PR heads are not a single accepted baseline.
 - **Decision authority and capacity:** Amir (`@amirfassadi`), project/architecture owner under 051 §7; this field identifies the proposed authority and does not constitute a signature.
 - **ADR-0002 decisions accepted / revised / deferred:** PENDING individual review of 1, 2, 3, 4, 5, 6, 7 (including §7.1), 8 and 9. Decision 6 describes future identity types but does not require their MVP implementation. Record a disposition for it if accepting the entire ADR.
 - **ADR-0003 lifecycle scope accepted / revised / deferred:** PENDING individual review of Decision 1 (Organization) and Decision 2 (Membership).
@@ -66,7 +66,7 @@ Draft prepared: 2026-09-29 (Asia/Tehran). This is a preparation checklist, not o
 | Gate | Current position | Accountable decision owner / execution owner |
 |---|---|---|
 | T16 | Open. A means a defined per-Person publication **and consumer-application** ordering contract; B means version-aware unordered consumption. PR #8 explores shared consumer rules across both; buffer/lookup are supporting mechanisms, not a substitute for the event contract. No option selected. | Architecture decision: Amir; producer, consumer-library and operational execution owners: to assign in the accepted record. |
-| SESSION | Open. Establish client type and threat model before choosing rotation, sender constraint, absolute/sliding lifetime and TTLs. For a public OAuth client, refresh tokens require rotation or sender constraint; do not generalize that rule to an unspecified protocol. | Security/architecture decision: Amir; implementation and operations owners: to assign. |
+| SESSION | Open. [Draft PR #9](https://github.com/amirfassadi/SmartCorePlatform/pull/9) compares the historical and platform policy; establish client type and threat model before choosing rotation, sender constraint, absolute/sliding lifetime and TTLs. For a public OAuth client, refresh tokens require rotation or sender constraint; do not generalize that rule to an unspecified protocol. | Security/architecture decision: Amir; implementation and operations owners: to assign. |
 | POLICY / MATERIAL | Open. Approve policy values and protected material staging, transfer and disposal design with required evidence. | Architecture/security decision: Amir; execution owner: to assign. |
 | CONSOLIDATION | Open. Reconcile active Blueprint, API, service/event schemas and machine package against one candidate; run applicable 065 validation. | Architecture decision: Amir; validation executor: to assign. |
 | DEPLOYMENT / BEHAVIOR | Open. Configure services, keys, delivery, audit and operator recovery; implement and run required failure/security/race tests after architectural approval. | Operations/verification accountable owner: to assign explicitly; Amir retains decision authority until delegation is recorded. |
@@ -79,7 +79,7 @@ Draft prepared: 2026-09-29 (Asia/Tehran). This is a preparation checklist, not o
 
 1. Review PR #6's acceptance-sequencing amendment and #7's 059 correction independently, then assemble one candidate with exact SHAs. PR #8 is T16 comparison work, not a selected policy.
 2. Inventory known and planned event subscribers; if none can be verified, record **unknown**, identify who can verify subscriptions, and choose a platform event contract on stated semantics and forecast rather than a fictitious zero.
-3. Draft T16 and SESSION decisions with explicit alternatives, guarantees, threat model, owner and propagation list. If their acceptance is to be a GOV prerequisite, amend the Platform architecture gate explicitly before approving ADR-0002.
+3. Review T16 and SESSION draft comparisons with explicit alternatives, guarantees, threat model, owner and propagation list. If their acceptance is to be a GOV prerequisite, amend the Platform architecture gate explicitly before approving ADR-0002.
 4. Perform architecture review and applicable 065 structural checks on the exact integrated candidate; attach command/output or report and unresolved findings. A limited package-script result may be attached separately but cannot substitute for 065.
 5. Record an attributable Platform decision with each ADR decision's disposition. Then update Identity source pins and validation notes; implementation/generation readiness remains a later gate.
 
