@@ -15,10 +15,11 @@ Source of truth for this review: accepted decisions within their scope, proposed
 1. [Workflow, persistence and API](workflow-contract.md)
 2. [Security, validation, policy and test requirements](validation-and-tests.md)
 3. [Implementation work plan and completion evidence](implementation-plan.md)
-4. [Source review, preserved details and open decisions](reconciliation-review.md)
-5. [Byte-preserved uploaded Blueprint](../reference/uploaded-blueprint/README.md)
-6. [Source hashes](source-manifest.json)
-7. [Current validation notes and evidence limits](capability.validation_notes.md)
+4. [GOV review dossier for ADR-0002/0003](gov-review-dossier.md)
+5. [Source review, preserved details and open decisions](reconciliation-review.md)
+6. [Byte-preserved uploaded Blueprint](../reference/uploaded-blueprint/README.md)
+7. [Source hashes](source-manifest.json)
+8. [Current validation notes and evidence limits](capability.validation_notes.md)
 
 ## Pinned upstream references
 
