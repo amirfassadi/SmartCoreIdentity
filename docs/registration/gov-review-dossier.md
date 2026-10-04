@@ -1,6 +1,6 @@
 # GOV review dossier — ADR-0002 and ADR-0003
 
-Version: 0.3.5 — 2026-09-29 — DRAFT / decision pending
+Version: 0.3.6 — 2026-10-04 — DRAFT / decision pending
 
 This is a preparation record in SmartCoreIdentity PR #1. The authoritative ADRs and any approval record belong to SmartCorePlatform. This file does not approve, amend, sign or mark either ADR Accepted.
 
@@ -84,3 +84,7 @@ Draft prepared: 2026-09-29 (Asia/Tehran). This is a preparation checklist, not o
 5. Record an attributable Platform decision with each ADR decision's disposition. Then update Identity source pins and validation notes; implementation/generation readiness remains a later gate.
 
 The sequence does not require runtime tests before architecture approval if the proposed #6 amendment is adopted. It does require the accepted architecture and contracts to be coherent before implementation under 051 §7.
+
+## Integrated candidate and gate follow-up — 2026-10-04
+
+[Latest review status](platform-review-status.md) pins the new integrated Platform input. Original blob/PR pins above are historical inputs, not accepted authority. Analyst architecture review now exists with open findings; full gate PASS and architectural acceptance remain unrecorded. All four 064 code-entry gates plus 065 governance/quality evidence apply; ADR sequencing does not amend 064. Final accepted SHAs, attributable decision and compatibility dispositions remain PENDING.

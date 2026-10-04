@@ -1,6 +1,6 @@
 # Registration implementation work plan
 
-Version: 0.1.0 — DRAFT — 2026-09-28
+Version: 0.1.1 — DRAFT — 2026-10-04
 Scope: first delivery milestone in SmartCoreIdentity. This is a work breakdown, not an accepted ADR, active machine specification, or readiness certificate.
 
 ## Authority and starting point
@@ -37,6 +37,7 @@ No distributed transaction is assumed between A, B, C and D. Reconciliation afte
 
 | Gate | Decision/evidence needed | Impact |
 |---|---|---|
+| CODE ENTRY | All four applicable 064 documentary gates and 065 quality/governance evidence on one coherent accepted candidate; owner signature alone is insufficient. | Before Slice 1 or any dependent implementation; Slice 0 evidence work remains allowed. |
 | GOV | Accept applicable ADR-0002/0003 scope under 051; retain ADR-0004's separately accepted scope. | Architecture baseline for ownership, contact and lifecycle. |
 | T16 | Decide PersonRegistered/PersonUpdated ordering and consumer replay contract. | Event allocator, publication and consumer tests. |
 | SESSION | Resolve uploaded rotation/sliding policy against platform absolute/nonrotation proposal. | Refresh, logout, token and expiry implementation. |
@@ -46,3 +47,7 @@ No distributed transaction is assumed between A, B, C and D. Reconciliation afte
 | BEHAVIOR | Implement and run R01–R20 plus Session/T16 tests against an identified revision/environment. | Evidence for release, not merely documentary consistency. |
 
 The owner decides architectural/policy options; this plan does not choose an open option by implication. Track each closure in [validation notes](capability.validation_notes.md) with decision reference, exact commit and test evidence. Revalidate pinned platform sources before merge and after any upstream change.
+
+## Current review clarification — 2026-10-04
+
+[Integrated review status](platform-review-status.md) separates latest proposals from accepted sources. Slice order is delivery order inside Identity MVP, not permission to exclude its required behavior. Select final accepted wire/service/machine versions before using the historical schemas above. All applicable 064 gates precede code. Runtime verification is later evidence, never passed by documents. The active Draft still describes static refresh and unchanged Sessions after password change; S2/fence changes remain pending acceptance/propagation.

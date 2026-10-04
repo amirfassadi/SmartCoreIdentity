@@ -1,7 +1,7 @@
 # Identity capability — validation notes
 
-Version: 0.1.12
-Date: 2026-09-29
+Version: 0.1.13
+Date: 2026-10-04
 Status: DRAFT — generation BLOCKED
 Scope: Registration-first documentary reconciliation; not a full Blueprint validation certificate.
 
@@ -94,3 +94,9 @@ For this revision, the command passed on 2026-09-28 after adding this note and i
 | 0.1.10 | 2026-09-29 | Link S2 security review checklist for BFF races, forced reauthentication, idle/revocation/password-change policy and operational ownership; no PASS asserted |
 | 0.1.11 | 2026-09-29 | Record owner-selected no separate idle timeout, bounded access validity up to 900 seconds, and all-Session closure on password change; SESSION remains open |
 | 0.1.12 | 2026-09-29 | Link unsigned SESSION decision candidate; no ADR number or approval inferred |
+
+## 7. Integrated review follow-up — 2026-10-04
+
+[Current Platform review status](platform-review-status.md) records the new input. Content matrix and analyst architecture/legacy review exist; full certification remains incomplete. Updated Platform subset: 557 focused checks, 433 limited package checks and 297 PASS / 6 WARN / 97 INFO. No complete 064/065 acceptance or runtime behavior is certified. Generation remains BLOCKED. All four applicable documentary gates precede implementation; ADR signature alone is insufficient. Archive bytes/manifest and historical source pins remain preserved.
+
+Change v0.1.13: new review input and code-entry clarification; no governance decision or historical PASS adopted.
