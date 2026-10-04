@@ -1,0 +1,1592 @@
+specification:
+  name: SmartCore Identity Platform Capability Machine Specification
+  file: capability.machine.yaml
+  document_id: IDENTITY-MACHINE
+  version: 1.0.7
+  status: VALIDATION_READY
+  normative: true
+  narrative_authority: Blueprint narrative documents (00_Overview.md through 16_Examples.md)
+  status_note: >-
+    VALIDATION_READY = Structural/Semantic/Architectural review complete and
+    internally consistent with the narrative package. It does NOT mean
+    approved for AI Code Generation; see generation_readiness below.
+  rationale_document: capability.validation_notes.md
+  rationale_document_note: >-
+    Detailed audit rationale, per-correction citations, and open questions
+    deferred for future review live in the companion document above, not in
+    this file, per 064 §6.4 Single Source of Truth (this file is the
+    machine-first specification; the companion file is the human-audit
+    trail).
+  blueprint_standard:
+    document_id: '064'
+    title: SmartCore Blueprint Standard
+    version: 1.1.4
+  validator:
+    document_id: '065'
+    title: SmartCore Blueprint Validator Specification
+  ai_generation_specification:
+    document_id: '066'
+    title: SmartCore AI Code Generation Specification
+generation_readiness:
+  status: BLOCKED
+  rule: "status SHALL be BLOCKED while any governance_dependencies[].status != required_status."
+  governance_dependencies:
+  - id: ADR-0002_Identity_Foundation_Clarifications.md
+    status: Proposed
+    required_status: Accepted
+  - id: ADR-0003_Organization_and_Membership_Lifecycle_Standardization.md
+    status: Proposed
+    required_status: Accepted
+  source: 065 §13 (Quality Gate 3 — Governance Approved); 066 §4 (Preconditions)
+capability:
+  id: SmartCoreIdentity
+  name: SmartCore Identity
+  type: CapabilityPlatform
+  purpose: Provide person identity, authentication, session continuity, personal organization ownership, membership participation,
+    and credential management.
+  boundary:
+    owns:
+    - Person
+    - Organization
+    - Membership
+    - Credential
+    - Session
+    does_not_own:
+    - Resource
+    - Device
+    - Building
+    - Contract
+    - FinancialAccount
+    - Inventory
+    - WorkflowDefinition
+    - CapabilityAuthorizationPolicy
+  architectural_invariants:
+  - Identity is immutable.
+  - Every Person belongs to at least one Organization.
+  - Every Person has at least one Membership after successful registration.
+  - Resources SHALL NOT belong directly to Persons.
+  - Authorization SHALL be evaluated through Membership.
+  - Authentication SHALL remain independent from Authorization.
+  - Identity SHALL remain independent from Session.
+  - Session expiration SHALL NOT remove or invalidate Person identity.
+  - All Aggregate state changes SHALL occur through Aggregate Roots.
+  - Cross-Aggregate intrinsic business rules SHALL be enforced outside individual Aggregates.
+  - RegisterPerson is the only approved MVP Application Service orchestration exception for initial Person, Organization,
+    and Membership creation.
+  architectural_invariants_notes:
+    identity_is_immutable: >-
+      Verbatim from 01_Domain_Model.md §2 ("Identity is immutable"), quoted
+      in isolation here. In the same paragraph, the narrative immediately
+      clarifies "Email may change. DisplayName may change." — the
+      invariant refers to PersonId/identity continuity (reinforced by
+      §6 Person Invariants: "PersonId is immutable"; "Identity survives
+      Session expiration"), not literal immutability of all Person
+      attributes. UpdatePersonProfile changing Email/DisplayName does
+      not contradict this invariant.
+    person_belongs_to_organization: >-
+      Verbatim from 01_Domain_Model.md §6 ("Person MUST belong to at
+      least one Organization"). The Person Aggregate holds no
+      OrganizationId attribute (see aggregates[Person].attributes
+      below) — this relationship is mediated exclusively through
+      Membership (Person → Membership → Organization), never a direct
+      Person→Organization reference. See aggregates[Membership] for the
+      mediating Aggregate.
+    organization_owns_resources:
+      quoted_text: >-
+        "Organization owns resources." (01_Domain_Model.md §6, quoted
+        verbatim above in architectural_invariants)
+      explanation: >-
+        Describes the tenancy/ownership boundary for Resource entities
+        owned by OTHER Capability Platforms, not a Resource entity inside
+        Identity itself — Resource is explicitly listed under
+        capability.boundary.does_not_own above, and "Resources SHALL NOT
+        belong directly to Persons" (same invariant list) is the
+        complementary rule.
+      generator_directive: >-
+        SHALL NOT create a Resource Aggregate, Resource Entity, or any
+        Resource-owning relationship inside this Capability from this
+        line. If code generation from this line produces any Resource-
+        shaped artifact scoped to Identity, that is a misread of this
+        invariant, not a valid interpretation of it.
+  dependencies:
+    runtime:
+    - Shared Kernel
+    - Event Engine
+    - Messaging Engine
+    future:
+    - Policy Engine
+    note: >-
+      Policy Engine is listed separately under `future` because Identity
+      has no Policy Engine integration in MVP (11_Security.md §4.4: "In
+      MVP, no Policy Engine integration exists"). It SHALL NOT be read as
+      a current runtime dependency.
+aggregates:
+- id: Person
+  root: Person
+  purpose: Own person identity and profile attributes.
+  attributes:
+  - PersonId
+  - Email
+  - DisplayName
+  - Status
+  - CreatedAt
+  - UpdatedAt
+  value_objects:
+  - EmailAddress
+  child_entities: []
+  lifecycle:
+    defined:
+    - Registered
+    - Active
+    - Suspended
+    - Archived
+    mvp_reachable:
+    - Active
+    mvp_reachable_note: >-
+      Registered is a full-lifecycle state defined by 01_Domain_Model.md §5
+      but is not a distinct MVP-visible state: 14_MVP.md §3 states Persons
+      are "created in Active state" directly, and 04_Commands.md §4.1
+      Postconditions confirms "Person exists with status = Active" as the
+      RegisterPerson outcome. Registered is not skipped due to omission;
+      it is out of MVP scope by explicit narrative statement.
+    future:
+    - Suspended
+    - Archived
+  invariants:
+    aggregate_local:
+    - PersonId is immutable.
+    - Person identity persists across Session and Credential changes.
+    cross_aggregate:
+    - Every Person belongs to at least one Organization.
+    - Every Person has at least one Membership after successful registration.
+    cross_aggregate_note: >-
+      Duplicated from capability.architectural_invariants for local
+      discoverability. These SHALL NOT be enforced inside the Person
+      Aggregate itself; enforcement is a Registration-flow / cross-Aggregate
+      concern (057 §5, ADR-0002 Decision 1). Source of truth for the text
+      remains capability.architectural_invariants above.
+  repository: PersonRepository
+- id: Organization
+  root: Organization
+  purpose: Define the tenancy and resource-ownership boundary.
+  attributes:
+  - OrganizationId
+  - Name
+  - Category
+  - Status
+  - CreatedAt
+  value_objects: []
+  child_entities: []
+  lifecycle:
+    defined:
+    - Created
+    - Active
+    - Suspended
+    - Archived
+    mvp_reachable:
+    - Active
+    future:
+    - Suspended
+    - Archived
+    source: ADR-0003 §1 Organization Lifecycle
+    state_definitions:
+      Created: Initial state upon organization creation; reserved for future
+        staged-initialization workflows. MVP registration bypasses this
+        state entirely.
+      Active: Normal operating state; Organization owns and manages
+        resources; Members access resources per authorization rules.
+      Suspended: Operations paused; existing resources remain owned but
+        inaccessible; "Memberships remain active but non-functional" (this
+        is the answer to "what happens to Membership when its Organization
+        is Suspended" — Membership.Status does NOT change to reflect
+        Organization state; access is blocked at the authorization-
+        evaluation layer, not by mutating Membership).
+      Archived: Permanently retired; historical records retained; no further
+        transitions.
+    transition_rules:
+      - Created → Active: automatic or explicit completion of initialization
+      - Active → Suspended: explicit administrator action (future scope for MVP)
+      - Suspended → Active: explicit administrator action (future scope for MVP)
+      - Suspended → Archived: explicit administrator action (future scope for MVP)
+      - >-
+        All transitions are forward-only EXCEPT Suspended → Active, which
+        is the only reversible transition. Once any other transition has
+        occurred, the prior state cannot be re-entered.
+    mvp_note: Organizations SHALL be created in Active state for MVP; Suspend
+      and Archive are future scope (ADR-0003 §1 MVP Scope).
+  invariants:
+    aggregate_local:
+    - OrganizationId is immutable.
+    - Organization is the tenancy boundary.
+    - Organization owns resources.
+    cross_aggregate:
+    - Organization SHALL have at least one Membership.
+    cross_aggregate_note: >-
+      Enforced by the Registration flow (RegistrationApplicationService),
+      not by the Organization Aggregate itself — Membership is a separate
+      Aggregate (03_Aggregates.md §9).
+    mvp_scope_note: >-
+      Questions about Organization/Membership lifecycle interaction under
+      Suspended/Archived Organization states, or the last Active
+      Membership of a Person being revoked, do not arise in MVP:
+      14_MVP.md §2 excludes SuspendOrganization/ArchiveOrganization/
+      RevokeMembership entirely from Version 1.0, and §3 confirms
+      Organizations and Memberships are created in, and remain in, Active
+      state "for the entire Version 1.0 lifecycle." These interactions
+      become relevant only when lifecycle-transition Commands are
+      introduced in a future version, per ADR-0003. The Suspended-state
+      Membership-interaction question specifically is now answered above
+      (lifecycle.state_definitions.Suspended) directly from ADR-0003 §1,
+      for when that future version arrives.
+    future_adr_candidate: >-
+      "What happens to Person if their last Active Membership is revoked"
+      (does Person remain valid, given capability.architectural_invariants
+      states "Every Person belongs to at least one Organization"?) is
+      flagged, not resolved, as a candidate topic for the future ADR that
+      will introduce RevokeMembership — this specification does not
+      pre-decide it. ADR-0003 explicitly scopes revocation as future and
+      does not address this question.
+  repository: OrganizationRepository
+- id: Membership
+  root: Membership
+  purpose: Represent Person participation in an Organization.
+  attributes:
+  - MembershipId
+  - PersonId
+  - OrganizationId
+  - Role
+  - Status
+  - CreatedAt
+  value_objects: []
+  child_entities: []
+  lifecycle:
+    defined:
+    - Created
+    - Active
+    - Revoked
+    mvp_reachable:
+    - Active
+    future:
+    - Revoked
+    source: ADR-0003 §2 Membership Lifecycle
+    state_definitions:
+      Created: Invitation or initial-creation state; not yet active for
+        resource access. Exists to support future invitation-based
+        workflows. MVP's Owner Membership creation (RegisterPerson)
+        bypasses this state entirely, since MVP has no invitation flow.
+      Active: Person may interact with Organization and its resources per
+        authorization rules.
+      Revoked: Terminated; Person no longer participates in Organization;
+        irreversible terminal state.
+    transition_rules:
+      - Created → Active: acceptance of invitation or explicit activation
+      - Active → Revoked: explicit revocation (future scope for MVP)
+      - Revoked is terminal, no further transitions
+    mvp_note: Memberships SHALL be created in Active state for MVP; revocation
+      is future scope (ADR-0003 §2 MVP Scope).
+  invariants:
+    aggregate_local:
+    - MembershipId is immutable.
+    - Membership references exactly one Person.
+    - Membership references exactly one Organization.
+    - Membership is the participation path between Person and Organization.
+    cross_aggregate:
+    - MVP creates exactly one Owner Membership for the Personal Organization.
+    cross_aggregate_note: >-
+      A Registration-flow (RegistrationApplicationService) / MVP-scope
+      constraint, not a Membership Aggregate-internal rule (14_MVP.md §1;
+      ADR-0002 Decision 1).
+  repository: MembershipRepository
+- id: Session
+  root: Session
+  purpose: Own authenticated execution context and token lifecycle.
+  attributes:
+  - SessionId
+  - PersonId
+  - AccessTokenId
+  - RefreshTokenId
+  - DeviceInfo
+  - IpAddress
+  - ExpiresAt
+  - Status
+  - CreatedAt
+  value_objects:
+  - AccessTokenId
+  - RefreshToken
+  naming_note: >-
+    Attribute name RefreshTokenId and Value Object name RefreshToken
+    intentionally differ (01_Domain_Model.md §2 vs §3: "AccessTokenId...
+    Note: This Value Object replaces the former SessionToken" /
+    "RefreshToken... Represents session continuation token"); AccessTokenId
+    is used identically as both attribute name and Value Object name. This
+    asymmetry is explicit, pre-existing narrative convention — not an
+    inconsistency introduced by this specification — and is independently
+    reconciled by 11_Security.md §2.1's own Terminology Note, which this
+    specification follows.
+  attribute_value_object_mapping:
+    AccessTokenId: AccessTokenId
+    RefreshTokenId: RefreshToken
+    note: >-
+      Completes the three-layer chain end to end: domain attribute → Value
+      Object → wire field. AccessTokenId is used identically as attribute
+      and VO name; RefreshTokenId (attribute) intentionally maps to
+      RefreshToken (VO) — see naming_note above for why this asymmetry is
+      correct, pre-existing narrative convention (01_Domain_Model.md §2-§3;
+      11_Security.md §2.1), not an error to fix. See wire_field_mapping
+      immediately below for the third link (VO/attribute → client-facing
+      field).
+  wire_field_mapping:
+    AccessTokenId: accessToken
+    RefreshTokenId: refreshToken
+    source: 07_Contracts.md §3.1
+    rationale: >-
+      Full three-layer reconciliation (domain attribute → Value Object →
+      wire field), closing the ambiguity raised across multiple review
+      rounds: 01_Domain_Model.md §3 defines AccessTokenId as "access token
+      identity" and states "Token content is implementation-specific" —
+      the domain deliberately does not decide whether the VO's content is
+      an opaque reference or a self-contained bearer credential (e.g. a
+      JWT). 07_Contracts.md does not resolve that either; it names the wire
+      field for what the CLIENT does with it, not for what the SERVER
+      stores. The wire field is `accessToken` (not `accessTokenId`)
+      because, regardless of internal representation, the value the client
+      receives is the literal bearer credential it SHALL present on
+      subsequent requests — the client never dereferences an identifier to
+      obtain a separate token value. Even if a future implementation stores
+      AccessTokenId as a database-side reference to a token record, the
+      wire value returned is still the usable bearer credential, not the
+      internal reference. This is a statement about client-facing usage,
+      not server-side storage, and does not constrain or contradict
+      01_Domain_Model.md §3.
+  child_entities: []
+  lifecycle:
+    defined:
+    - Created
+    - Authenticated
+    - Active
+    - Suspended
+    - Expired
+    - Closed
+    mvp_reachable:
+    - Created
+    - Authenticated
+    - Active
+    - Expired
+    - Closed
+    future_or_optional:
+    - Suspended
+  invariants:
+    aggregate_local:
+    - SessionId is immutable.
+    - Session references exactly one Person.
+    - AccessTokenId and RefreshTokenId are distinct.
+    - Session has a defined expiration time.
+    - Multiple concurrent Sessions MAY exist for one Person.
+    - Session changes do not cascade to Person.
+    - Session expiration does not affect Person identity or Membership status.
+    - A Session SHALL reach at most one terminal outcome (Expired or Closed, never both).
+    terminal_states:
+      mutually_exclusive:
+      - Expired
+      - Closed
+      source: 01_Domain_Model.md §5 Session Lifecycle (linear transition to
+        exactly one terminal state)
+    terminal_events:
+      mutually_exclusive:
+      - SessionExpired
+      - LogoutCompleted
+      source: 06_Domain_Events.md §6.4
+    aggregate_local_source_note: >-
+      The terminal-outcome invariant is not a paraphrase; it is sourced
+      directly from 06_Domain_Events.md §6.4 ("SessionExpired and
+      LogoutCompleted Are Mutually Exclusive... at most one of
+      SessionExpired / LogoutCompleted SHALL ever be published for a given
+      SessionId"), itself grounded in 01_Domain_Model.md §5 Session
+      Lifecycle (a Session transitions to exactly one terminal state). The
+      state-level exclusivity (terminal_states) and event-level exclusivity
+      (terminal_events) are stated separately above because event
+      publication mutual-exclusivity does not, by itself, prove state-
+      machine correctness — they are two distinct guarantees from two
+      distinct sources, not one derived from the other.
+    cross_aggregate: []
+  repository: SessionRepository
+- id: Credential
+  root: Credential
+  purpose: Own authentication material and credential lifecycle.
+  attributes:
+  - CredentialId
+  - PersonId
+  - PasswordHash
+  - PasswordVersion
+  - CreatedAt
+  value_objects:
+  - PasswordHash
+  child_entities: []
+  lifecycle:
+    defined:
+    - Created
+    - Active
+    - Replaced
+    - Revoked
+    mvp_reachable:
+    - Created
+    - Active
+    - Replaced
+    future:
+    - Revoked
+  invariants:
+    aggregate_local:
+    - CredentialId is immutable.
+    - Credential belongs to exactly one Person.
+    - Password SHALL NOT be stored in plain text.
+    - MVP supports exactly one active Password Credential per Person.
+    - Credential changes do not affect Person identity.
+    credential_history_query:
+      mvp: excluded
+    credential_record_retention:
+      mvp: retained
+    credential_history:
+      persistence: retained
+      queryable: false
+      note: >-
+        Replaced Credential rows are NOT physically deleted; they persist
+        as ordinary Credential records with Status = Replaced
+        (09_Persistence.md §7.5). What is excluded from MVP is a separate
+        queryable PasswordHistory structure (e.g. a table keyed by
+        PersonId listing prior PasswordHash values for reuse-prevention
+        lookups) — that capability, not the underlying rows, is what
+        "future scope" refers to (01_Domain_Model.md §2; 09_Persistence.md
+        §7.5).
+    cross_aggregate: []
+  repository: CredentialRepository
+orchestration_pattern_guidance:
+  status: derived_synthesis_not_narrative_quote
+  applies_to: All Commands with orchestration_type = DomainService (i.e. every
+    Command except RegisterPerson).
+  note: >-
+    This block is this specification's own synthesis, constructed to make
+    064/066 Code Generation compliant with 004_SmartCore_Composition_Rules.md
+    §8.4 ("Domain Services SHALL NOT perform persistence operations. Domain
+    Services SHALL NOT access repositories directly... operate exclusively
+    on supplied domain objects") — it is NOT copied verbatim from any single
+    narrative document, because no single document draws this exact
+    sequence diagram. It is offered as generation guidance to close the gap
+    raised by reviewers who worried "orchestrator: AuthenticationDomainService"
+    might, by itself, cause a generator to wire the Domain Service directly
+    to a Repository.
+  command_flow:
+    - Transport Adapter (REST controller etc.) — 08_API.md / 07_Contracts.md
+    - Command Handler / Application boundary — loads/queries needed
+      Aggregates via their owning Repository (09_Persistence.md — "Each
+      Aggregate Root has exactly one owning Repository")
+    - Domain Service — receives already-loaded Aggregates as supplied
+      objects; enforces intrinsic cross-Aggregate business rules; returns
+      mutated Aggregates or a decision (004§8.4)
+    - Command Handler — persists mutated Aggregates via Repository, commits
+    - >-
+        Command Handler — publishes resulting Domain Event(s) after commit
+        (capability.architectural_invariants states "Failed persistence
+        SHALL NOT produce a Domain Event")
+  query_flow:
+    - Transport Adapter
+    - Query Handler — reads via Repository / read model directly (no Domain
+      Service involved for pure reads, consistent with Domain Services
+      existing to enforce intrinsic business rules, not to serve reads)
+    - DTO projection and return
+  exception: RegisterPerson uses RegistrationApplicationService in place of
+    the Command Handler + Domain Service split above — the Application
+    Service itself performs orchestration/repository-coordination directly,
+    per ADR-0002 Decision 7/7.1. This is the only Command where that
+    collapsed shape applies.
+domain_services:
+- id: AuthenticationDomainService
+  responsibility:
+  - Validate credentials.
+  - Resolve authenticated Person identity.
+  - Create authenticated Session context.
+- id: SessionManagementDomainService
+  responsibility:
+  - Refresh Session.
+  - Expire Session.
+  - Close Session.
+- id: PersonManagementDomainService
+  responsibility:
+  - Update Person profile attributes.
+  - Enforce Person profile domain rules.
+- id: CredentialManagementDomainService
+  responsibility:
+  - Change Password.
+  - Manage Credential replacement lifecycle.
+domain_services_classification_note: >-
+  Classification as Domain Service (rather than Application Service) for all
+  four services above is taken verbatim from 01_Domain_Model.md §7,
+  03_Aggregates.md, and 04_Commands.md §7, which agree unanimously and
+  repeatedly across the narrative package. This specification mirrors that
+  classification without independent re-derivation.
+  RESOLVED (previously open): ADR-0002 §7.1 "Registration Orchestration
+  Responsibility" settles the classification question, but narrowly — it
+  states the RegisterPerson orchestrator (RegistrationApplicationService)
+  "SHALL be classified as an Application Service... SHALL NOT be modeled as
+  a Domain Service." It does not address AuthenticationDomainService,
+  SessionManagementDomainService, PersonManagementDomainService, or
+  CredentialManagementDomainService at all — ADR-0002 has no opinion on
+  them. Checked separately against 004_SmartCore_Composition_Rules.md §8.4
+  Service Responsibility Principle ("Domain Services SHALL NOT perform
+  persistence operations. Domain Services SHALL NOT access repositories
+  directly... operate exclusively on supplied domain objects"): this is not
+  a classification contradiction but an implementation-shape constraint —
+  it requires that any compliant implementation of these four Domain
+  Services receive already-loaded Person/Credential/Session objects from an
+  outer (Command Handler / infrastructure) layer rather than querying
+  repositories themselves. 01_Domain_Model.md's "Resolve Person" wording for
+  AuthenticationDomainService is compatible with this reading (business-
+  level identification against supplied/loaded data, not the service
+  performing its own repository query) and is not itself proof of a
+  violation. This is a code-generation-time implementation constraint on
+  064/066, not an unresolved Blueprint-layer architecture question, and does
+  not block validation_status.architectural: PASS.
+application_services:
+- id: RegistrationApplicationService
+  status: approved_exception
+  authorization: ADR-0002 Decision 7
+  authorization_status_note: >-
+    ADR-0002 is currently Status: Proposed, not Accepted. See
+    generation_readiness.governance_dependencies.
+  responsibility:
+  - Coordinate initial Person creation.
+  - Coordinate Personal Organization creation.
+  - Coordinate Owner Membership creation.
+  - Preserve the Core Ownership Transaction boundary.
+  - Coordinate post-commit identity operations without invalidating an already committed ownership transaction.
+  constraint: This exception SHALL NOT be generalized to other multi-Aggregate orchestration.
+commands:
+- name: RegisterPerson
+  actor: New User
+  actor_source: 04_Commands.md §4.1 Actor
+  aggregate_interaction:
+    atomic:
+    - Person
+    - Organization
+    - Membership
+    post_commit:
+    - Credential
+    - Session
+    source: 04_Commands.md §4.1 Aggregate Interaction (Core Ownership Transaction
+      table / Post-Commit Operations table); §6 Command → Aggregate Mapping
+      ("Create (Post-Commit)" label for Credential, Session)
+  registration_defaults:
+    person:
+      status: Active
+    organization:
+      status: Active
+      category: Personal
+    membership:
+      status: Active
+      role: Owner
+    credential:
+      status: Active
+      source_note: 14_MVP.md §3 Credential Lifecycle in MVP ("Credentials
+        created in Active state")
+    source: 04_Commands.md §4.1 Postconditions ("Person exists with status =
+      Active", "Personal Organization exists with status = Active",
+      "Organization category = Personal", "Owner Membership exists with status
+      = Active")
+  transaction_boundary:
+    atomic:
+    - Person
+    - Organization
+    - Membership
+    atomic_label: Core Ownership Transaction
+    post_commit:
+    - Credential
+    - Session
+    post_commit_label: Post-Commit Operations
+    post_commit_failure_semantics: >-
+      Failure of a post_commit operation SHALL NOT invalidate or roll back
+      the already-committed atomic transaction (04_Commands.md §4.1;
+      059 §6 Non-Invalidating Policy).
+    source: 04_Commands.md §4.1 Aggregate Interaction (Core Ownership Transaction / Post-Commit Operations); 09_Persistence.md §5-§6
+  orchestrator: RegistrationApplicationService
+  orchestration_type: ApplicationService
+  events:
+  - PersonRegistered
+  - OrganizationCreated
+  - MembershipCreated
+  transport:
+    method: POST
+    path: /auth/register
+    success_status: 201
+  response_contract:
+    fields:
+      person:
+        dto: PersonDto
+        required: true
+      organization:
+        dto: OrganizationDto
+        required: true
+      membership:
+        dto: MembershipDto
+        required: true
+      session:
+        dto: SessionFullProjectionDto
+        required: false
+    session_optionality_note: >-
+      07_Contracts.md §5.1: person/organization/membership are always
+      present on a 201 response (they are the atomic Core Ownership
+      Transaction result); session MAY be absent if post-commit Session
+      creation failed. A 201 without session is still a successful
+      registration — "the only Command response in this catalog where a
+      field's absence does not indicate any error." The client SHALL
+      treat it as success and call AuthenticatePerson to obtain a
+      Session.
+  idempotency_and_retry_semantics:
+    retry_same_email_after_partial_failure: >-
+      RegisterPerson is NOT idempotent at the Command level. Per
+      07_Contracts.md §5.1 Error Responses and 02_Use_Cases.md UC-001
+      Failure Conditions, a retried call with the same email after the
+      Core Ownership Transaction has already committed returns
+      PERSON_ALREADY_EXISTS (409) — it does not create a duplicate
+      Person, but it also does not retroactively complete a failed
+      Credential/Session post-commit step. Recovery from a specific
+      post-commit failure is out of scope for this Command contract.
+    credential_post_commit_failure: >-
+      NOT RESOLVED by any Blueprint document read so far (01, 02, 04,
+      06, 07, 08, 09, 11, 14). Unlike Session-creation failure (which
+      07_Contracts §5.1 explicitly handles via the optional `session`
+      field + re-authenticate-to-recover flow), no document defines
+      what happens if Credential creation itself fails post-commit —
+      a Person could exist with no Credential, and AuthenticatePerson
+      requires an active Credential to exist (02_Use_Cases.md UC-003
+      Preconditions), so the re-authenticate recovery path does not
+      apply to this specific failure mode. 04_Commands.md §4.1 covers
+      it only at the general level ("Recovery behavior is
+      implementation-specific"), consistent with 064's rule that
+      Blueprints do not freeze implementation detail — this is a
+      deliberate Blueprint-layer non-decision, not an omission this
+      specification can resolve without a narrative source.
+    credential_post_commit_failure_next_step: >-
+      This remains genuinely open and this specification deliberately
+      does NOT pick a resolution — doing so would be inventing an
+      architectural decision with no narrative source, the exact
+      mistake narrative_authority above exists to prevent. Reviewers
+      have proposed candidate shapes (e.g. a distinguishable/recoverable
+      "registration incomplete — credential pending" state with a
+      dedicated recovery Command, as one option among several with
+      different tradeoffs) — these are candidate designs for a future
+      ADR, not decisions this file adopts. Recommended next step:
+      raise as a new ADR (parallel to ADR-0002/0003), since it is a
+      genuine multi-option architectural choice, not a documentation
+      clarification.
+    source: 07_Contracts.md §5.1; 02_Use_Cases.md UC-001 Alternative
+      Flows / Failure Conditions; 04_Commands.md §4.1 Post-Commit
+      Failure
+  mvp: true
+- name: AuthenticatePerson
+  actor: User
+  actor_source: 04_Commands.md §4.2 Actor
+  aggregate_interaction:
+  - Person
+  - Credential
+  - Session
+  orchestrator: AuthenticationDomainService
+  orchestration_type: DomainService
+  events:
+  - LoginSucceeded
+  - LoginFailed
+  - SessionCreated
+  transport:
+    method: POST
+    path: /auth/login
+    success_status: 200
+  mvp: true
+- name: UpdatePersonProfile
+  actor: User (Person)
+  actor_source: 04_Commands.md §4.3 Actor
+  aggregate_interaction:
+  - Person
+  - Session
+  orchestrator: PersonManagementDomainService
+  orchestration_type: DomainService
+  events:
+  - PersonUpdated
+  transport:
+    method: PATCH
+    path: /me
+    success_status: 200
+  mvp: true
+- name: LogoutSession
+  actor: User
+  actor_source: 04_Commands.md §4.4 Actor
+  authorization:
+    session_owner_required: true
+    source: 04_Commands.md §4.4 Validation Rules ("Session SHALL belong to
+      requesting Person")
+    rest_resolution_note: >-
+      07_Contracts.md §5.4: in the REST Transport, the target Session is
+      normally resolved from the caller's bearer Access Token, not a
+      request-body sessionId; an explicit sessionId is only needed to
+      log out a Session other than the current one. "Session belongs to
+      a different Person" → FORBIDDEN (403) either way.
+  aggregate_interaction:
+  - Session
+  orchestrator: SessionManagementDomainService
+  orchestration_type: DomainService
+  events:
+  - LogoutCompleted
+  transport:
+    method: POST
+    path: /auth/logout
+    success_status: 200
+  mvp: true
+- name: RefreshSession
+  actor: Authenticated Client / System
+  actor_source: 04_Commands.md §4.5 Actor
+  refresh_policy:
+    access_token:
+      rotation: true
+      note: A new AccessTokenId is issued on every successful refresh.
+    refresh_token:
+      rotation: not_mandated
+      note: >-
+        11_Security.md §8.4: "The Domain Model does not require refresh
+        token rotation in MVP" (optional generation of a new
+        RefreshTokenId is implementation-specific). Whether rotation is
+        enabled is a deployment-specific default owned by
+        10_Configuration.md — this Blueprint deliberately neither
+        mandates nor prohibits it.
+    reuse_detection: not_in_mvp
+    reuse_detection_note: >-
+      Flagged in 03_Aggregates.md §11.1 as a future Aggregate-boundary
+      decision; not resolved by this specification or 11_Security.md.
+    authorization_model: >-
+      No separate Session-ownership check applies to RefreshSession:
+      11_Security.md §5.2 treats RefreshTokenId as a bearer secret —
+      "possession of a valid, non-revoked RefreshTokenId is sufficient
+      to obtain a new AccessTokenId." Possession of the token itself is
+      the authorization, not a Person/Session identity comparison.
+  aggregate_interaction:
+  - Session
+  orchestrator: SessionManagementDomainService
+  orchestration_type: DomainService
+  events: []
+  event_policy:
+    domain_event: none
+    rationale: >-
+      Deliberate, not an omission: 04_Commands.md §4.5 lists no Event
+      Produced for RefreshSession (unlike every other Command in §4, which
+      lists at least one), and Token refresh is treated as operational
+      session-continuity state maintenance rather than a business fact
+      requiring a Domain Event. This is consistent with 06_Domain_Events.md
+      never mentioning a refresh-related event anywhere in its catalog.
+    audit_event: implementation_specific
+    audit_note: >-
+      Whether a refresh is separately logged for operational/audit
+      purposes (as opposed to a Domain Event) is not addressed by any
+      Blueprint document read so far and is left to implementation.
+  transport:
+    method: POST
+    path: /auth/refresh
+    success_status: 200
+  mvp: true
+- name: ChangePassword
+  actor: User (Person)
+  actor_source: 04_Commands.md §4.6 Actor
+  password_change_session_policy:
+    existing_sessions:
+      action: remain_active
+    source: >-
+      11_Security.md §8.2: "Credential replacement... SHALL NOT, by
+      itself, revoke existing Sessions in MVP" ("Credential change does
+      not affect active Sessions"). Any future policy requiring session
+      invalidation on password change is Future Scope requiring an ADR
+      before being added to this Blueprint.
+  aggregate_interaction:
+    Person:
+      operation: Read
+      role: Identity context validation (confirms Person is Active) — not
+        a state change to Person.
+    Credential:
+      operation: Create / Update
+      role: State change — see credential_replacement_strategy below.
+    Session:
+      operation: Read / Validate
+      role: Ownership context validation ("Authenticated Session SHALL
+        belong to the Person") — not a state change to Session.
+    source: >-
+      04_Commands.md §4.6 Aggregate Interaction table + Validation Rules
+      ("Session Ownership: Authenticated Session SHALL belong to the
+      Person")
+    generation_note: Only Credential undergoes a state change in this
+      Command; Person and Session are read/validated for context, not
+      mutated. A generator SHOULD NOT model this as a 3-Aggregate write
+      transaction.
+  credential_replacement_strategy:
+    strategy: replace_credential
+    old_credential:
+      status: Replaced
+    new_credential:
+      status: Active
+    source: 04_Commands.md §4.6 Purpose ("Replaces the active Credential of
+      a Person with a new Credential") + Aggregate Interaction ("Credential
+      | Create / Update" — both operations listed, confirming a new
+      Credential row is created while the prior Active row is updated to
+      Replaced, consistent with 09_Persistence.md §7.5's retained-Replaced-
+      rows model).
+  orchestrator: CredentialManagementDomainService
+  orchestration_type: DomainService
+  events:
+  - PasswordChanged
+  transport:
+    method: POST
+    path: /me/password
+    success_status: 200
+  mvp: true
+queries:
+- name: GetCurrentPerson
+  category: user_interaction
+  transport:
+    method: GET
+    path: /me
+    success_status: 200
+  response_dto: PersonDto
+  mvp: true
+  ownership_scope: Caller may retrieve only their own Person data.
+- name: GetOrganizationsForPerson
+  category: user_interaction
+  transport:
+    method: GET
+    path: /organizations
+    success_status: 200
+  response_dto: OrganizationDto (list)
+  mvp: true
+  ownership_scope: Caller may retrieve Organizations reached through their own Membership records.
+- name: GetMembershipsForPerson
+  category: user_interaction
+  transport:
+    method: GET
+    path: /me/memberships
+    success_status: 200
+  response_dto: MembershipDto (list)
+  mvp: true
+  ownership_scope: Caller may retrieve only their own Membership records.
+- name: GetSessionsForPerson
+  category: user_interaction
+  transport:
+    method: GET
+    path: /sessions
+    success_status: 200
+  response_dto: SessionListProjectionDto (list)
+  mvp: true
+  ownership_scope: Caller may retrieve only their own Sessions.
+- name: GetPersonById
+  category: platform_integration
+  transport:
+    rest:
+      status: not_defined_in_v1
+      public: false
+    internal_service_to_service:
+      status: shape_reserved_not_yet_defined
+    note: >-
+      transport.rest.status = not_defined_in_v1 means "intentionally
+      excluded from public REST Version 1.0" (a documented decision), not
+      "undefined/unspecified". No internal/service-to-service Transport
+      shape exists yet either; the Contract itself is defined and valid
+      regardless (05_Queries.md §5.1).
+  response_dto: PersonMinimalDto
+  mvp: true
+  ownership_scope: Platform-to-platform Identity data resolution; Capability Authorization remains outside Identity.
+  source: 05_Queries.md §3.2, §5.1; 08_API.md §4.2; 07_Contracts.md §6.5
+events:
+- name: PersonRegistered
+  producer: RegistrationApplicationService
+  triggering_command: RegisterPerson
+  aggregate: Person
+  state_change: true
+  delivery: publish_after_commit
+  ordering_guarantee: none
+  ordering_note: >-
+    No publish-order guarantee exists among PersonRegistered,
+    OrganizationCreated, and MembershipCreated (same RegisterPerson call).
+    This is architecturally safe, not an oversight: per 06_Domain_Events.md
+    §2.3/§6.3, the Core Ownership Transaction has already committed Person
+    + Organization + Membership atomically before any of the three events
+    is published — a consumer receiving these out of order is never
+    observing a partially-consistent state. Consumers SHALL correlate via
+    IDs, not via arrival order.
+  payload:
+    fields:
+    - {name: PersonId, type: string (UUID), required: true}
+    - {name: Email, type: string, required: true}
+    - {name: DisplayName, type: string, required: true}
+    - {name: OrganizationId, type: string (UUID), required: true}
+    - {name: MembershipId, type: string (UUID), required: true}
+    source: 06_Domain_Events.md §4.2
+    note: >-
+      OrganizationId/MembershipId are included directly (not left to
+      consumer correlation) because ADR-0002 Decision 1 guarantees they
+      already exist and are valid by the time this event exists.
+- name: OrganizationCreated
+  producer: RegistrationApplicationService
+  triggering_command: RegisterPerson
+  aggregate: Organization
+  state_change: true
+  delivery: publish_after_commit
+  ordering_guarantee: none
+  payload:
+    fields:
+    - {name: OrganizationId, type: string (UUID), required: true}
+    - {name: Name, type: string, required: true}
+    - {name: Category, type: 'string enum: Personal', required: true}
+    - {name: Status, type: 'string enum: Active', required: true}
+    source: 06_Domain_Events.md §4.3
+- name: MembershipCreated
+  producer: RegistrationApplicationService
+  triggering_command: RegisterPerson
+  aggregate: Membership
+  state_change: true
+  delivery: publish_after_commit
+  ordering_guarantee: none
+  payload:
+    fields:
+    - {name: MembershipId, type: string (UUID), required: true}
+    - {name: PersonId, type: string (UUID), required: true}
+    - {name: OrganizationId, type: string (UUID), required: true}
+    - {name: Role, type: 'string enum: Owner', required: true}
+    - {name: Status, type: 'string enum: Active', required: true}
+    source: 06_Domain_Events.md §4.4
+- name: LoginSucceeded
+  producer: AuthenticationDomainService
+  triggering_command: AuthenticatePerson
+  aggregate: Session
+  state_change: true
+  delivery: publish_after_commit
+  payload:
+    fields:
+    - {name: PersonId, type: string (UUID), required: true}
+    - {name: SessionId, type: string (UUID), required: true}
+    source: 06_Domain_Events.md §4.5
+- name: LoginFailed
+  producer: AuthenticationDomainService
+  triggering_command: AuthenticatePerson
+  state_change: false
+  state_change_note: >-
+    Per 06_Domain_Events.md §5.3 ("LoginFailed Is the One Event That Is Not a
+    State Change"): no Aggregate state changes on a failed authentication
+    attempt. Governed by the same immutability/audit rules as every other
+    event, but published once the authentication accept/reject decision is
+    finalized, not tied to a commit.
+  aggregate:
+    type: Person
+    identity_required: false
+    identity_required_note: >-
+      AggregateType is fixed to Person regardless of Reason
+      (06_Domain_Events.md §4.6: "a login attempt is conceptually an
+      operation against a Person, whether or not resolution succeeds").
+      identity_required: false signals to a generator that this Event
+      MAY exist with no resolvable Aggregate instance behind it (when
+      Reason == PersonNotFound) — it is not an Event about a real Person
+      record in that case, only about an attempted operation. Do not
+      fabricate a placeholder Person Aggregate instance to satisfy this
+      field; leave AggregateId absent per aggregate_id.absent_when below.
+  aggregate_id:
+    required: conditional
+    absent_when:
+    - "Reason == PersonNotFound"
+    source: 06_Domain_Events.md §4.6
+  visibility_note: >-
+    This event intentionally carries no visibility/masking field.
+    Enumeration mitigation is enforced at the Authentication response
+    layer, not by withholding Reason from this internal event contract:
+    11_Security.md §3.1/§11.2 requires Person-not-found,
+    no-active-Credential, and password-mismatch to "all be treated as
+    authentication failure and SHALL produce the same class of outward
+    response," while 06_Domain_Events.md §4.6 confirms Reason is
+    preserved internally "for audit purposes." External collapsing is a
+    Contract/API-layer concern, not a Domain Event field.
+  delivery: publish_after_authentication_attempt
+  payload:
+    fields:
+    - {name: Email, type: string, required: true}
+    - name: Reason
+      type: 'string enum: PersonNotFound | CredentialMissing | InvalidPassword'
+      required: true
+    source: 06_Domain_Events.md §4.6
+- name: SessionCreated
+  producer: AuthenticationDomainService
+  triggering_command: AuthenticatePerson
+  aggregate: Session
+  state_change: true
+  delivery: publish_after_commit
+  payload:
+    fields:
+    - {name: SessionId, type: string (UUID), required: true}
+    - {name: PersonId, type: string (UUID), required: true}
+    - {name: ExpiresAt, type: string (timestamp), required: true}
+    source: 06_Domain_Events.md §4.7
+    note: DeviceInfo/IpAddress deliberately not duplicated here — they live
+      on ExecutionContext (§4.1.1) uniformly across all events.
+- name: SessionExpired
+  producer: SessionManagementDomainService
+  trigger: SessionExpiration
+  triggering_command: null
+  trigger_note: >-
+    Not client-initiated. Originates from a scheduled/system process
+    (02_Use_Cases.md UC-007 "Main Flow — System Expiration"); ActorIdentity
+    is the reserved value "System" (06_Domain_Events.md §4.8).
+  aggregate: Session
+  state_change: true
+  delivery: publish_after_commit
+  payload:
+    fields:
+    - {name: SessionId, type: string (UUID), required: true}
+    - {name: PersonId, type: string (UUID), required: true}
+    source: 06_Domain_Events.md §4.8
+- name: LogoutCompleted
+  producer: SessionManagementDomainService
+  triggering_command: LogoutSession
+  aggregate: Session
+  state_change: true
+  delivery: publish_after_commit
+  payload:
+    fields:
+    - {name: SessionId, type: string (UUID), required: true}
+    - {name: PersonId, type: string (UUID), required: true}
+    source: 06_Domain_Events.md §4.9
+- name: PersonUpdated
+  producer: PersonManagementDomainService
+  triggering_command: UpdatePersonProfile
+  aggregate: Person
+  state_change: true
+  delivery: publish_after_commit
+  payload:
+    fields:
+    - {name: PersonId, type: string (UUID), required: true}
+    - {name: Email, type: string, required: true}
+    - {name: DisplayName, type: string, required: true}
+    source: 06_Domain_Events.md §4.10
+    note: >-
+      Full current-state snapshot (Email + DisplayName as they now stand),
+      not a before/after delta — 04_Commands §4.3 allows updating either
+      or both fields in one request, and a snapshot avoids ambiguity about
+      which field actually changed. Deferred future concern if Person's
+      attribute set grows: splitting into field-specific events.
+- name: PasswordChanged
+  producer: CredentialManagementDomainService
+  triggering_command: ChangePassword
+  aggregate: Credential
+  state_change: true
+  delivery: publish_after_commit
+  payload:
+    fields:
+    - {name: PersonId, type: string (UUID), required: true}
+    - {name: CredentialId, type: string (UUID), required: true}
+    source: 06_Domain_Events.md §4.11
+    note: >-
+      SHALL NEVER include PasswordHash or any password value, plain or
+      hashed (06_Domain_Events.md §2.5). CredentialId identifies which
+      Credential record became Active — an identity reference, not
+      secret material.
+contracts:
+  common:
+    error_response: Common Error Response Shape defined in 07_Contracts.md §3.4
+    authentication: Authenticated requests require a valid Session context where specified by the contract.
+    authorization: Identity Data Ownership Scope is distinct from Capability Authorization.
+  dto:
+    naming_convention_note: >-
+      07_Contracts.md §4 defines each DTO below by descriptive section
+      heading only (e.g. "Person DTO (full projection)"), not by a single
+      canonical identifier token. The *Dto names used here are this machine
+      specification's own derived, stable identifiers for deterministic AI
+      Code Generation (066 §16 Layer Mapping) — they are not verbatim
+      narrative terms, and MAY be renamed by a code generator's own
+      convention without narrative impact. Field lists, optionality, and
+      semantics are taken verbatim from 07_Contracts.md.
+    items:
+    - name: PersonDto
+      purpose: Full Person projection (self-service contexts).
+      source: 07_Contracts.md §4.1
+      fields:
+      - personId
+      - email
+      - displayName
+      - status
+      - createdAt
+      - updatedAt
+      used_by:
+      - RegisterPerson (response)
+      - GetCurrentPerson (response)
+      - UpdatePersonProfile (response)
+    - name: PersonMinimalDto
+      purpose: Minimal identity representation for platform-to-platform resolution.
+      source: 07_Contracts.md §4.2
+      fields:
+      - personId
+      - displayName
+      used_by:
+      - GetPersonById (response; no REST Transport in Version 1.0)
+      excluded_fields_note: "email and status are deliberately excluded, per 05_Queries.md §5.1."
+    - name: OrganizationDto
+      purpose: Organization projection.
+      source: 07_Contracts.md §4.3
+      fields:
+      - organizationId
+      - name
+      - category
+      - status
+      - createdAt
+      used_by:
+      - RegisterPerson (response)
+      - GetOrganizationsForPerson (response)
+    - name: MembershipDto
+      purpose: Membership projection.
+      source: 07_Contracts.md §4.4
+      fields:
+      - membershipId
+      - personId
+      - organizationId
+      - role
+      - status
+      - createdAt
+      used_by:
+      - RegisterPerson (response)
+      - GetMembershipsForPerson (response)
+    - name: SessionFullProjectionDto
+      purpose: Full Session projection, including tokens.
+      source: 07_Contracts.md §4.5
+      fields:
+      - sessionId
+      - accessToken
+      - refreshToken
+      - expiresAt
+      - status
+      used_by:
+      - RegisterPerson (response, post-commit session)
+      - AuthenticatePerson (response)
+      variant_note: >-
+        RefreshSession's response is a narrower shape reusing these same
+        fields minus status (07_Contracts.md §5.5) — not modeled as a
+        separate named DTO here, since 07_Contracts.md itself does not name
+        it separately.
+    - name: SessionListProjectionDto
+      purpose: List projection excluding tokens.
+      source: 07_Contracts.md §4.6
+      fields:
+      - sessionId
+      - deviceInfo
+      - ipAddress
+      - expiresAt
+      - status
+      - createdAt
+      used_by:
+      - GetSessionsForPerson (response)
+      excluded_fields_note: "accessToken and refreshToken SHALL NOT be included, per 05_Queries.md §4.4."
+  commands:
+  - RegisterPerson
+  - AuthenticatePerson
+  - UpdatePersonProfile
+  - LogoutSession
+  - RefreshSession
+  - ChangePassword
+  queries:
+  - GetCurrentPerson
+  - GetOrganizationsForPerson
+  - GetMembershipsForPerson
+  - GetSessionsForPerson
+  - GetPersonById
+api:
+  transport: REST
+  mvp_endpoints:
+  - method: POST
+    path: /auth/register
+    operation: RegisterPerson
+    status: 201
+  - method: POST
+    path: /auth/login
+    operation: AuthenticatePerson
+    status: 200
+  - method: POST
+    path: /auth/logout
+    operation: LogoutSession
+    status: 200
+  - method: POST
+    path: /auth/refresh
+    operation: RefreshSession
+    status: 200
+  - method: GET
+    path: /me
+    operation: GetCurrentPerson
+    status: 200
+  - method: PATCH
+    path: /me
+    operation: UpdatePersonProfile
+    status: 200
+  - method: POST
+    path: /me/password
+    operation: ChangePassword
+    status: 200
+  - method: GET
+    path: /organizations
+    operation: GetOrganizationsForPerson
+    status: 200
+  - method: GET
+    path: /me/memberships
+    operation: GetMembershipsForPerson
+    status: 200
+  - method: GET
+    path: /sessions
+    operation: GetSessionsForPerson
+    status: 200
+  transport_boundary: API documents client-facing transport; platform interoperability Contracts remain transport-independent.
+persistence:
+  repositories:
+  - aggregate: Person
+    repository: PersonRepository
+  - aggregate: Organization
+    repository: OrganizationRepository
+  - aggregate: Membership
+    repository: MembershipRepository
+  - aggregate: Session
+    repository: SessionRepository
+  - aggregate: Credential
+    repository: CredentialRepository
+  rules:
+  - Each Aggregate Root has exactly one owning Repository.
+  - Aggregate state changes occur within the Aggregate transaction boundary.
+  - Cross-Aggregate registration ownership creation is atomic (see commands[RegisterPerson].transaction_boundary).
+  - Failed persistence SHALL NOT produce a Domain Event.
+  - Events are published after successful commit (except LoginFailed — see events[LoginFailed].state_change_note).
+  - At-most-one Active Credential per Person is an MVP integrity constraint.
+  - Membership uniqueness is enforced for the Person-Organization pair.
+  - RefreshToken remains internal to Session persistence in MVP.
+  - LoginHistory remains optional and non-transactional.
+  - PasswordHistory is not a separate MVP queryable capability.
+configuration:
+  feature_flags_reserved:
+  - feature.mfa.enabled
+  - feature.oauth.enabled
+  - feature.enterprise_sso.enabled
+  - feature.organization_switching.enabled
+  - feature.session_suspension.enabled
+  security_constraint: Configuration SHALL NOT weaken mandatory security invariants.
+security:
+  authentication:
+    mvp:
+    - Password Authentication
+    future:
+    - MFA
+    - OAuth
+    - Social Login
+    - Enterprise SSO
+  authorization:
+    identity_responsibility: Identity resolves identity and intrinsic ownership scope.
+    capability_responsibility: Consuming Capability Platforms evaluate business authorization.
+    membership_role: Authorization decisions are evaluated through Membership.
+    membership_role_boundary_note: >-
+      Membership.Role is an INPUT to authorization, not the authorization
+      decision or policy itself. Identity supplies (Person, Membership,
+      Role, Organization) as context; the actual Authorization Policy
+      Decision is made by the consuming Capability Platform
+      (capability_responsibility above; capability.boundary.does_not_own:
+      CapabilityAuthorizationPolicy). A generator SHALL NOT model
+      Membership.Role as an authorization engine or policy evaluator
+      within this Capability — Role is data Identity exposes, not a
+      decision Identity makes.
+  credential_security:
+  - Passwords SHALL NOT be stored in plain text.
+  - Credential secrets SHALL NOT appear in Domain Events.
+  - Credential material SHALL be represented by PasswordHash in the domain model.
+  session_security:
+  - AccessTokenId and RefreshTokenId are distinct.
+  - Sessions have defined expiration.
+  - Session expiration does not invalidate Person identity.
+  sensitive_data:
+  - Credential secrets are excluded from event payloads.
+  - Session list projections SHALL NOT expose AccessTokenId or RefreshTokenId.
+validation:
+  identity_rules:
+  - EmailAddress format is valid.
+  - PersonId is immutable.
+  - OrganizationId is immutable.
+  - Every Person belongs to at least one Organization.
+  - Every Person has at least one Membership after registration.
+  - Membership references exactly one Person and one Organization.
+  - Only Owner role is created by MVP registration.
+  - Only Personal Organization is created automatically by MVP registration.
+  - Exactly one active Password Credential exists per Person in MVP.
+  - PasswordHash never stores plaintext password.
+  - Session belongs to exactly one Person.
+  uniqueness_constraints:
+  - name: UniquePersonEmail
+    applies_to: Person
+    field: Email
+    field_type: EmailAddress (Value Object)
+    comparison:
+      case_sensitive: false
+      source: 01_Domain_Model.md §3 EmailAddress rules ("Case-insensitive
+        comparison"); 11_Security.md §9 ("Comparison of Email SHALL be
+        case-insensitive... applied consistently so that case variation
+        cannot be used to bypass the uniqueness constraint or to
+        enumerate accounts")
+    naming_note: >-
+      01_Domain_Model.md §2 names the Person attribute "Email"; "EmailAddress"
+      (§3) is the Value Object type governing its format/comparison rules,
+      not the attribute name. This entry uses the attribute name, matching
+      09_Persistence.md §8.3's own "Person.Email" naming exactly.
+    scope: >-
+      Global uniqueness across all Persons (09_Persistence.md §8.3: "Person.Email
+      unique across all Persons"). No partitioning concept is defined by any
+      Blueprint document for this constraint.
+    enforcement:
+    - CommandValidation
+    - PersistenceConstraint
+    source: 04_Commands.md §4.1, §4.3; 09_Persistence.md §8.3
+    classification_note: >-
+      Cross-Aggregate/Persistence constraint (12_Validation.md §2.4, §5.1),
+      not a Person Aggregate-internal invariant — 01_Domain_Model.md does not
+      state Email uniqueness anywhere. Accordingly not listed under
+      aggregates[Person].invariants above.
+  - name: UniqueMembershipPersonOrganizationPair
+    applies_to: Membership
+    fields:
+    - PersonId
+    - OrganizationId
+    scope: >-
+      Composite uniqueness over (PersonId, OrganizationId) — 09_Persistence.md
+      §8.3 states this exactly as "(Membership.PersonId,
+      Membership.OrganizationId) unique," with no partition-key concept.
+      "Partition-scoped" in earlier versions of this file was this
+      specification's own invented term, not sourced from any Blueprint
+      document; 09_Persistence.md §1.2 explicitly places physical
+      partitioning/indexing mechanism out of scope ("DDL, column types,
+      physical indexing syntax, partitioning... are implementation-
+      specific"). The mechanism enforcing this constraint (unique index,
+      serializable isolation, etc.) is deliberately left
+      implementation-specific by that document.
+    enforcement:
+    - CommandValidation
+    - PersistenceConstraint
+    source: 02_Use_Cases.md UC-008 Constraints; 09_Persistence.md §8.3
+  - name: UniqueSessionAccessTokenId
+    applies_to: Session
+    field: AccessTokenId
+    scope: Global
+    enforcement:
+    - PersistenceConstraint
+    source: 09_Persistence.md §8.3
+  - name: UniqueSessionRefreshTokenId
+    applies_to: Session
+    field: RefreshTokenId
+    scope: Global
+    enforcement:
+    - PersistenceConstraint
+    source: 04_Commands.md §4.5; 09_Persistence.md §8.3
+  - name: AtMostOneActiveCredentialPerPerson
+    applies_to: Credential
+    field: Status
+    scope: Partition-scoped (per PersonId, among Active-status instances)
+    enforcement:
+    - CommandValidation
+    - PersistenceConstraint
+    source: 04_Commands.md Invariant-005; 09_Persistence.md §8.3
+  transactional_rules:
+  - RegisterPerson Core Ownership Transaction is atomic across Person, Organization, and Membership creation.
+  - Post-commit Credential and Session operations do not invalidate a successfully committed ownership transaction.
+  - Failed persistence does not publish a state-change event.
+  event_rules:
+  - Domain Events represent completed facts.
+  - Domain Events are immutable.
+  - Events are published after commit except LoginFailed, which records an authentication failure outcome.
+  - SessionExpired and LogoutCompleted are mutually exclusive terminal outcomes for a Session.
+  validation_order:
+  - Input validation
+  - Identity and uniqueness validation
+  - Authentication/session ownership validation where applicable
+  - Aggregate invariant validation
+  - Cross-Aggregate consistency validation
+  - Persistence constraint validation
+testing:
+  required:
+  - Unit tests for each Aggregate invariant.
+  - Domain Service tests.
+  - RegistrationApplicationService atomicity tests.
+  - Command validation tests.
+  - Query ownership-scope tests.
+  - Domain Event payload and publication timing tests.
+  - Persistence and concurrency tests.
+  - REST contract tests.
+  - Authentication and credential security tests.
+  - Session expiration and logout exclusivity tests.
+  - MVP acceptance tests.
+  acceptance_criteria:
+  - Registration creates Person, Personal Organization, and Owner Membership atomically.
+  - Login creates a Session only after successful authentication.
+  - Invalid authentication produces LoginFailed and no authenticated Session.
+  - Logout closes the targeted Session.
+  - Session refresh updates session token state without producing a Domain Event in MVP.
+  - Password change replaces the active Credential without changing Person identity.
+  - User-facing queries enforce Identity Data Ownership Scope.
+  - GetPersonById remains a platform integration query and does not perform Capability Authorization.
+  - All MVP REST endpoints match the command/query transport mappings.
+mvp:
+  included:
+  - Register Person
+  - Update Person Profile
+  - Retrieve Person Information
+  - Password Authentication
+  - Login and Session Creation
+  - Logout
+  - Session Refresh
+  - Personal Organization Creation
+  - Owner Membership Creation
+  - Credential Creation
+  - Password Change
+  - Public REST API Contracts
+  - MVP Domain Events
+  excluded_future:
+  - SuspendOrganization
+  - ResumeOrganization
+  - ArchiveOrganization
+  - RevokeMembership
+  - RevokePerson
+  - RestoreArchivedOrganization
+  - MFA
+  - OAuth
+  - Google Login
+  - Apple Login
+  - Telegram Login
+  - Enterprise SSO
+  - Delegated Administration
+  - Organization Switching
+  - Advanced Authorization
+  - Queryable Credential History
+  - Multiple Credential Types
+  - Device Identity
+  - Service Identity
+  - AI Agent Identity
+  - Organization Hierarchy
+  - Delegation
+  - Audit Log
+extensibility:
+  future_aggregates_or_identity_types:
+  - Device Identity
+  - Service Identity
+  - AI Agent Identity
+  - Organization Hierarchy
+  - Delegation
+  future_capabilities:
+  - Audit Log
+  future_capabilities_note: >-
+    Audit Log was previously listed under future_aggregates_or_identity_types
+    in this file; it is neither an Aggregate nor an Identity type by any
+    Blueprint definition read so far, so it is recategorized here. This is
+    this specification's own internal taxonomy correction, not a change to
+    any narrative claim.
+  future_security:
+  - MFA
+  - OAuth
+  - Social Login
+  - Enterprise SSO
+  - Refresh token rotation and reuse detection
+  - Device/IP anomaly detection
+  - Session binding
+  - RBAC and delegated administration
+  promotion_candidates:
+  - name: RefreshToken
+    current_model: Internal to Session Aggregate
+    promotion_trigger: Token-family revocation, reuse detection, or comparable independent lifecycle/invariants.
+  - name: Additional Credential Types
+    current_model: Password-only Credential Aggregate in MVP
+    promotion_trigger: Introduction of Passkey, WebAuthn, TOTP, Recovery Code, OAuth Identity, or another credential type
+      requiring architectural review.
+  governance: Future extensions SHALL follow the Blueprint extension governance process and SHALL NOT silently alter MVP architecture.
+traceability:
+  foundational:
+  - 001_SmartCore_Foundational_Principles.md
+  - 002_SmartCore_Meta_Model.md
+  - 003_SmartCore_Modeling_Rules.md
+  - 004_SmartCore_Composition_Rules.md
+  - 005_SmartCore_Domain_Layer.md
+  platform_architecture:
+  - 047_SmartCore_Reference_Architecture.md
+  - "048_SmartCore_Architecture& Taxonomy_Layer_Model.md"
+  - 049_SmartCore_Platform_Taxonomy.md
+  platform_architecture_filename_note: >-
+    The space after "&" in the 048 filename above is verified correct
+    against the actual project file path (not a typo introduced by this
+    specification) — 047_SmartCore_Reference_Architecture.md itself
+    cross-references 048 using this identical spelling.
+  governance:
+  - 051_SmartCore_Governance_and_Decision_Model.md
+  - 064_SmartCore_Blueprint_Standard.md
+  - 065_SmartCore_Blueprint_Validator_Specification.md
+  - 066_SmartCore_AI_Code_Generation_Specification.md
+  identity_authority:
+  - 019_SmartCore_Identity_and_Session_Continuity_Model.md
+  - 041_SmartCore_Identity_Model.md
+  - 057_SmartCore_Tenancy_and_Ownership_Model.md
+  - 059_SmartCore_Identity_Platform.md
+  identity_authority_note: >-
+    059 is the primary source for the Event Ownership Table, Registration
+    Model, and Role Model this specification encodes; 057 is the source for
+    Organization-Centric Ownership and the Registration Core Transaction; 041
+    and 019 provide the underlying Identity/Session semantic model.
+  decisions:
+  - ADR-0002_Identity_Foundation_Clarifications.md
+  - ADR-0003_Organization_and_Membership_Lifecycle_Standardization.md
+  glossary_and_validation:
+  - 029_SmartCore_Glossary.md
+  - 030_SmartCore_Model_Validation_Matrix.md
+  blueprint:
+  - 00_Overview.md
+  - 01_Domain_Model.md
+  - 02_Use_Cases.md
+  - 03_Aggregates.md
+  - 04_Commands.md
+  - 05_Queries.md
+  - 06_Domain_Events.md
+  - 07_Contracts.md
+  - 08_API.md
+  - 09_Persistence.md
+  - 10_Configuration.md
+  - 11_Security.md
+  - 12_Validation.md
+  - 13_Testing.md
+  - 14_MVP.md
+  - 15_Extensibility.md
+  - 16_Examples.md
+validation_status:
+  structural: PASS
+  semantic: PASS
+  architectural: PASS
+  governance: BLOCKED
+  ai_readiness: PASS
+  machine_consumability: PASS
+  machine_consumability_note: >-
+    Renamed/aliased from ai_readiness after this exact naming ambiguity was
+    raised independently across three separate review rounds — "ai_readiness:
+    PASS" next to "generation_readiness: BLOCKED" kept reading, in isolation,
+    as if AI code generation were cleared. machine_consumability is the
+    field a tool SHOULD check for "is this specification well-formed enough
+    to reason about"; generation_readiness.status remains the ONLY field
+    that gates actual code generation. ai_readiness is retained, set equal
+    to machine_consumability, purely for backward compatibility with any
+    tooling already reading the old key — it SHALL NOT be treated as a
+    second, independent signal.
+  ai_readiness_note: >-
+    PASS here means "this specification is structurally/semantically
+    well-formed enough for an AI system to consume and reason about" —
+    it is a specification-quality judgment, not a generation-clearance
+    judgment. It SHALL NOT be read in isolation as "cleared to generate
+    code." The sole authoritative generation gate is
+    generation_readiness.status above (and the mirrored value here),
+    which remains BLOCKED pending ADR-0002/ADR-0003 acceptance.
+  generation_readiness: BLOCKED
+  notes:
+  - See capability.validation_notes.md for v1.0.0 → v1.0.2 correction rationale, citations, and open review items.
+    Later corrections (v1.0.3 RegisterPerson aggregate_interaction/registration_defaults/actor fields; v1.0.4
+    ai_readiness clarification, event ordering, session policy, credential history precision; v1.0.5 RegisterPerson
+    response contract and idempotency semantics) are recorded only in this file's own inline source/note fields to
+    date — capability.validation_notes.md has not yet been updated to cover v1.0.3-v1.0.5 and should be treated as
+    covering only through v1.0.2 until updated.
+  - Final implementation eligibility remains subject to the authoritative validation process of Document 065 and the Governance
+    process of Document 051, in addition to this specification's own generation_readiness gate above.

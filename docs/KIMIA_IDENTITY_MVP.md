@@ -1,8 +1,10 @@
 # Kimia Beauty — SmartCoreIdentity MVP
 
-**Status:** MVP Scope  
-**Target:** Kimia Beauty Release 1  
+**Status:** DRAFT — registration-first scope
+**Target:** Registration-first milestone before Kimia public-site release
 **Module:** SmartCoreIdentity
+
+> Read [registration/README.md](registration/README.md) for pinned sources, current registration semantics and unresolved Session/security policy. This scoped package supersedes conflicting historical registration wording; no architecture acceptance is inferred.
 
 ## 1. Objective
 
@@ -30,7 +32,7 @@ code precedes the atomic ownership transaction. Mobile-only registration
 shall not require email. Unverified attempts create no Person or
 Organization; the code itself grants neither login nor Session. Other
 customer information is requested later by the capability that needs it.
-These are proposed requirements under ADR-0002 v1.5 Decision 9.
+These are proposed requirements under ADR-0002 Decision 9.
 
 - Register Person after verification of the selected contact
 - atomically create Personal Organization
@@ -102,7 +104,7 @@ The Kimia Identity MVP does not include:
 - invitation flow
 - additional Membership roles
 - social login
-- MFA
+- Person-facing MFA (operator MFA/step-up for administrative recovery is required)
 - general account recovery (the specific PendingCredential setup path is in scope)
 - capability/business authorization
 - Staff employment semantics
@@ -150,7 +152,7 @@ Idempotent Credential provisioning / bounded retry
       ↓
 Ready + PersonRegistered after active Credential
       ↓
-Session may be established according to application flow
+Explicit AuthenticatePerson may establish Session after Ready
 ```
 
 ### Registration rule
@@ -294,9 +296,11 @@ can use the Organization/Person context required for Business creation and owner
 
 ```text
 Register page
-→ submit identity credentials/profile
-→ registration succeeds
-→ user becomes authenticated or is directed to login
+→ submit one contact, DisplayName and password
+→ verify contact code with request binding
+→ ownership commits; display PendingCredential until Ready
+→ retry/recover through the authorized registration flow if needed
+→ Ready permits explicit login; registration itself issues no Session
 ```
 
 ### Login
@@ -345,7 +349,7 @@ and maintain their basic identity profile.
 ```
 
 The registration recovery and readiness requirements above are architectural
-proposals in ADR-0002 v1.5. The complete SCI Blueprint, machine specification,
+proposals in ADR-0002 Decisions 8–9. The complete SCI Blueprint, machine specification,
 public contracts, API responses, event consumers, and security tests must be
 reviewed before calling this launch-ready. No new route is defined by this
 high-level scope document.

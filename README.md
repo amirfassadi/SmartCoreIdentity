@@ -4,6 +4,11 @@ SmartCoreIdentity is the identity and authentication foundation of the SmartCore
 
 > Identity proves who the actor is and provides identity, organization, membership, and session context. Business authorization belongs to consuming capabilities.
 
+
+## Current registration review package
+
+The first delivery milestone is registration → contact verification → Pending/Ready → explicit login → self read → logout. Kimia Business/staff/booking/finance follow later. See [registration Blueprint index](docs/registration/README.md), its pinned platform sources, and the preserved uploaded 00–16 baseline. ADR-0004 architecture is accepted within its recorded scope; ADR-0002, T16, Session-policy reconciliation and runtime/generation gates remain open. The historical uploaded readiness labels are not current clearance.
+
 ## Core Aggregates
 
 SmartCoreIdentity is based on five primary aggregates:
@@ -27,7 +32,7 @@ SmartCoreIdentity owns:
 - Owner Membership creation during registration
 - identity / organization / membership context for consuming modules
 
-## Minimal customer registration (ADR-0002 v1.5, Proposed)
+## Minimal customer registration (ADR-0002 Decisions 8–9, Proposed)
 
 The user enters a basic name (`DisplayName`), a password, and a mobile
 number **or** an email address. Identity sends a one-time code to the chosen
@@ -63,7 +68,7 @@ RegistrationApplicationService
 This is the limited Application Service exception for initial multi-aggregate registration coordination.
 
 Credential and Session creation occur after the atomic identity/ownership core
-has been established according to ADR-0002 v1.5 (Proposed). A durable
+has been established according to ADR-0002 Decisions 8–9 (Proposed). A durable
 registration workflow starts PendingCredential with an internal Outbox work item
 in the same ownership commit. Credential provisioning is idempotent by
 registrationId, retried with bounded backoff, and can be completed through a
@@ -99,7 +104,7 @@ For the current MVP:
 - Person starts Active; registration workflow readiness is separate and initially PendingCredential.
 - Organization starts Active.
 - Membership starts Active.
-- Credential starts Active when provisioning succeeds; it does not exist as an active Credential while the workflow is PendingCredential.
+- Credential starts Active when provisioning succeeds and MAY coexist with PendingCredential until Ready reconciliation commits. Authentication requires both Ready and a current active Credential.
 - Organization suspend/archive is out of scope.
 - Membership revoke is out of scope.
 - Role expansion beyond Owner is out of scope.
@@ -164,7 +169,7 @@ SmartCoreIdentity does not own:
 
 ## Current Status
 
-**Status:** Existing Identity Blueprint / Kimia MVP Integration
+**Status:** Registration-first documentation reconciliation / DRAFT — no implementation or generation readiness
 
 The Kimia implementation must remain consistent with the existing SCI documents and governing ADRs.
 
