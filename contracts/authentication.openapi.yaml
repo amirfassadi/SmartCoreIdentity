@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.3.1
+  version: 0.4.0
   description: Development BFF adapter. Authenticated BFF supplies a stable opaque
     X-Bff-Subject for separate distributed admission budgets. Password change is separately
     opt-in. Operator recovery HTTP is available only over a private Unix domain socket,
-    never on the application TCP listener. No reset endpoint.
+    never on the application TCP listener. No reset endpoint. Recovery enrollment
+    and reset initiation are separately opt-in. Reset completion is not implemented.
 paths:
   /auth/login:
     post:
@@ -37,7 +38,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its
+            two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
           content:
             application/json:
               schema:
@@ -243,7 +245,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its
+            two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
           content:
             application/json:
               schema:
@@ -342,6 +345,123 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
     x-transport: private-unix-domain-socket
+  /auth/recovery/enroll:
+    post:
+      security:
+      - bffKey: []
+        bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollRecoveryCode'
+      responses:
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Bound operation conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its
+            two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '200':
+          description: Code is shown once on new enrollment; initiation is uniformly
+            accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryEnrollmentResult'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
+  /auth/password/reset:
+    post:
+      security:
+      - bffKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartPasswordReset'
+      responses:
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Bound operation conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its
+            two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '202':
+          description: Code is shown once on new enrollment; initiation is uniformly
+            accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPending'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
 components:
   schemas:
     Login:
@@ -399,10 +519,15 @@ components:
         mobile: *id001
         status:
           const: Active
+        recoveryEnrollmentRequired:
+          type: boolean
+          description: BFF must require one-time recovery enrollment before completing
+            real-user onboarding; consumed-code enforcement follows reset completion.
       required:
       - personId
       - displayName
       - status
+      - recoveryEnrollmentRequired
     Tokens:
       type: object
       additionalProperties: false
@@ -493,6 +618,102 @@ components:
           enum:
           - Retry
           - ResolveNotApplied
+    EnrollRecoveryCode:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - currentPassword
+      - acceptLossRisk
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        acceptLossRisk:
+          const: true
+    RecoveryEnrollmentResult:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - version
+      - status
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        status:
+          enum:
+          - Issued
+          - AlreadyIssued
+        recoveryCode:
+          type: string
+          pattern: ^[A-F0-9]{32}$
+      oneOf:
+      - properties:
+          status:
+            const: Issued
+        required:
+        - recoveryCode
+      - properties:
+          status:
+            const: AlreadyIssued
+        not:
+          required:
+          - recoveryCode
+    StartPasswordReset:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - bindingSecret
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          maxLength: 254
+        mobile:
+          type: string
+          pattern: ^\+[1-9][0-9]{1,14}$
+        bindingSecret:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+      oneOf:
+      - required:
+        - email
+        not:
+          required:
+          - mobile
+      - required:
+        - mobile
+        not:
+          required:
+          - email
+    ResetPending:
+      type: object
+      additionalProperties: false
+      required:
+      - challengeId
+      - expiresAt
+      - status
+      properties:
+        challengeId:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        expiresAt:
+          type: string
+          format: date-time
+        status:
+          const: Accepted
   securitySchemes:
     bffKey:
       type: apiKey

@@ -7,7 +7,7 @@ namespace SmartCore.Identity;
 
 public sealed record LoginRequest(string? Email,string? Mobile,string Password);
 public sealed record RefreshRequest([property:JsonRequired] string RefreshToken,[property:JsonRequired] bool Foreground);
-public sealed record SelfPerson(Guid PersonId,string DisplayName,string? Email,string? Mobile,string Status);
+public sealed record SelfPerson(Guid PersonId,string DisplayName,string? Email,string? Mobile,string Status,bool RecoveryEnrollmentRequired);
 public sealed record LoginResult(SelfPerson Person,SessionTokens Session);
 
 public sealed class AuthenticationService(Database db,Secrets secrets,TimeProvider clock,IAuthenticationIssuanceGate gate,AccessTokens access)
@@ -18,10 +18,10 @@ public sealed class AuthenticationService(Database db,Secrets secrets,TimeProvid
     private static ApiError Denied()=>new(401,"UNAUTHORIZED");
     private static SelfPerson Person(Row row)=>new(row.Get<Guid>("id"),row.Get<string>("display_name"),
         row.Get<string>("contact_kind")=="email"?row.Get<string>("contact"):null,
-        row.Get<string>("contact_kind")=="mobile"?row.Get<string>("contact"):null,row.Get<string>("status"));
+        row.Get<string>("contact_kind")=="mobile"?row.Get<string>("contact"):null,row.Get<string>("status"),row.Get<bool>("recovery_required"));
     private static Task<Row?> Evidence(NpgsqlConnection c,Guid person)=>c.One("""
-        SELECT p.*,r.status AS registration_status,c.id AS credential_id,c.status AS credential_status,c.password_hash
-        FROM persons p LEFT JOIN registrations r ON r.person_id=p.id LEFT JOIN credentials c ON c.person_id=p.id WHERE p.id=@id
+        SELECT p.*,r.status AS registration_status,c.id AS credential_id,c.status AS credential_status,c.password_hash,(rc.person_id IS NULL) AS recovery_required
+        FROM persons p LEFT JOIN registrations r ON r.person_id=p.id LEFT JOIN credentials c ON c.person_id=p.id LEFT JOIN auth_recovery_codes rc ON rc.person_id=p.id WHERE p.id=@id
         """,("id",person));
     private static string? Failure(Row? row)=>row is null ? "PersonNotFound" : row.Get<string>("status")!="Active" ? "PersonInactive"
         : !row.Has("registration_status") || row.Get<string>("registration_status")!="Ready" ? "RegistrationNotReady"
@@ -42,7 +42,7 @@ public sealed class AuthenticationService(Database db,Secrets secrets,TimeProvid
     {
         // Reuse contact canonicalization, with login's 1..128 password input contract.
         Input.Require(request.Password is {Length:>=1 and <=128});
-        var (kind,contact)=Input.Validate(new(request.Email,request.Mobile,"fixed validation password","Login",Secrets.Token()),Secrets.Token());
+        var (kind,contact)=Input.Contact(request.Email,request.Mobile);
         await using var c=await db.Source.OpenConnectionAsync();
         var match=await c.One("SELECT id FROM persons WHERE contact_kind=@kind AND contact=@contact",("kind",kind),("contact",contact));
         var evidence=match is null ? null : await Evidence(c,match.Get<Guid>("id"));

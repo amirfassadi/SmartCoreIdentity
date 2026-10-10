@@ -7,7 +7,7 @@ Migrations 006/007 preserve 001–005 and adds shared PostgreSQL caller windows 
 | Category | Per BFF subject / minute | Per authenticated BFF / minute |
 |---|---|---|
 | Login | 12 | 600 |
-| Password change, including replay | 6 | 120 |
+| Password change/replay, recovery enrollment and reset initiation | 6 | 120 |
 | Self, refresh and logout together | 120 | 6000 |
 
 These are development presets, not measured production capacity. PostgreSQL upserts serialize each client's and subject's window across host instances. Client reservation precedes source allocation, so rotating subjects after client exhaustion cannot allocate unbounded partitions. The stored keys are purpose-bound HMACs of client/category/subject; contacts are not partition keys. Counters saturate, windows last one minute and request-driven bounded cleanup removes partitions older than two minutes after releasing admission locks. Dormant rows remain until traffic resumes, but allocation is capped by the finite client budgets. Session traffic no longer shares registration's 30/minute IP bucket. Registration retains that policy. A separate high 12000/minute process/IP transport ceiling bounds malformed/unauthenticated authentication traffic; it is not the end-user budget behind a BFF.

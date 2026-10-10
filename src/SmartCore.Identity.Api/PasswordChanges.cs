@@ -277,6 +277,7 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
             UPDATE auth_credential_change_intents SET stage='FailedClosed',resolved_at=@now,last_classification='OutcomeUnknown'
             WHERE stage IN ('Fenced','AwaitingCredential') AND attempts>=8 AND next_attempt_at<=@now
             """,("now",Timestamps.Now(clock)));
+        await c.Execute("UPDATE auth_reset_delivery SET sealed_code=NULL WHERE expires_at<=@now AND sealed_code IS NOT NULL",("now",Timestamps.Now(clock)));
         await c.Execute("UPDATE auth_change_material SET sealed_hash=NULL WHERE expires_at<=@now AND sealed_hash IS NOT NULL",("now",Timestamps.Now(clock)));
         await c.Execute("UPDATE auth_change_material SET sealed_replay_hash=NULL WHERE replay_until<=@now AND sealed_replay_hash IS NOT NULL",("now",Timestamps.Now(clock)));
     }

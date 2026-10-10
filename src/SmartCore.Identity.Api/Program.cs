@@ -25,6 +25,8 @@ builder.Services.AddSingleton<Provisioning>();
 builder.Services.AddSingleton<RegistrationSetupService>();
 var authenticationEnabled=builder.Configuration.GetValue("Identity:AuthenticationEnabled",false);
 var passwordChangeEnabled=builder.Configuration.GetValue("Identity:PasswordChangeEnabled",false);
+var recoveryEnrollmentEnabled=builder.Configuration.GetValue("Identity:RecoveryEnrollmentEnabled",false);
+if(recoveryEnrollmentEnabled && !passwordChangeEnabled) throw new InvalidOperationException("Recovery enrollment requires password-change recovery.");
 if(passwordChangeEnabled && !authenticationEnabled) throw new InvalidOperationException("Password change requires authentication.");
 string? bffKey=null;
 var bffClient="development-bff";
@@ -48,6 +50,7 @@ if(authenticationEnabled)
         if(operatorKey is not {Length:>=32} || operatorKey==bffKey) throw new InvalidOperationException("A separate development operator key is required.");
         builder.Services.AddSingleton<CredentialChanges>();
         builder.Services.AddSingleton<PasswordChanges>();
+        if(recoveryEnrollmentEnabled) {builder.Services.AddSingleton<RecoveryEnrollment>();builder.Services.AddSingleton<PasswordResetInitiation>();}
         builder.Services.AddSingleton<IPasswordChangeRunner>(c=>c.GetRequiredService<PasswordChanges>());
         var socket=builder.Configuration["Identity:AuthOperatorSocket"];
         var applicationPort=builder.Configuration.GetValue<int>("Identity:ApplicationPort");
@@ -94,7 +97,7 @@ app.Use(async(context,next)=>
         if(!privateConnection) throw new ApiError(404,"NOT_FOUND");
     }
     else if(privateConnection && passwordChangeEnabled) throw new ApiError(404,"NOT_FOUND");
-    var category=path switch {"/auth/login"=>"login","/auth/password/change"=>"change","/auth/refresh" or "/auth/logout" or "/me"=>"session",_=>null};
+    var category=path switch {"/auth/login"=>"login","/auth/password/change" or "/auth/recovery/enroll" or "/auth/password/reset"=>"change","/auth/refresh" or "/auth/logout" or "/me"=>"session",_=>null};
     if(authenticationEnabled && category is not null)
     {
         var secrets=context.RequestServices.GetRequiredService<Secrets>();
@@ -107,7 +110,7 @@ app.MapGet("/health/live",()=>Results.Ok(new {status="live"}));
 app.MapGet("/health/ready",async(Database db)=>
 {
     await using var c=await db.Source.OpenConnectionAsync();
-    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",authenticationEnabled?7:2));
+    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",authenticationEnabled?8:2));
     return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope=authenticationEnabled?"internal-authentication":"internal-registration"});
 });
 app.MapPost("/auth/register",async(HttpRequest http,RegistrationService service)=>
@@ -175,6 +178,20 @@ if(authenticationEnabled)
             return Results.Json(await changes.Accept(request.Headers.Authorization.ToString()[7..],bffClient,
                 await Read<ChangePasswordRequest>(request)),statusCode:202);
         }).RequireRateLimiting("authentication-transport");
+        if(recoveryEnrollmentEnabled)
+        {
+            app.MapPost("/auth/password/reset",async(HttpRequest request,Secrets secrets,PasswordResetInitiation initiation)=>
+            {
+                Bff(request,secrets);
+                return Results.Json(await initiation.Start(bffClient,await Read<StartPasswordReset>(request)),statusCode:202);
+            }).RequireRateLimiting("authentication-transport");
+            app.MapPost("/auth/recovery/enroll",async(HttpRequest request,Secrets secrets,AccessTokens access,RecoveryEnrollment enrollment)=>
+            {
+                _=Proof(request,secrets,access);
+                return Results.Ok(await enrollment.Enroll(request.Headers.Authorization.ToString()[7..],bffClient,
+                    await Read<EnrollRecoveryCodeRequest>(request)));
+            }).RequireRateLimiting("authentication-transport");
+        }
         void Operator(HttpContext context,Secrets secrets)
         {
             if(context.Connection.LocalPort!=0 || context.Connection.LocalIpAddress is not null || context.Connection.RemoteIpAddress is not null
@@ -205,6 +222,18 @@ if(builder.Environment.IsDevelopment() && builder.Configuration["Identity:DevInb
         var row=await c.One("SELECT * FROM delivery_outbox WHERE verification_id=@id AND sealed_code IS NOT NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1",("id",id));
         return row is null ? Results.NotFound() : Results.Ok(new {code=secrets.Open(row.Get<byte[]>("sealed_code"),"delivery:"+row.Get<Guid>("id"))});
     });
+    if(recoveryEnrollmentEnabled)
+    {
+        app.MapGet("/dev/reset-inbox/{id}",async(string id,HttpContext context,Database db,Secrets secrets)=>
+        {
+            var remote=context.Connection.RemoteIpAddress;
+            if(remote is null || !System.Net.IPAddress.IsLoopback(remote)
+                || !Secrets.Equal(secrets.Mac("dev",inboxKey),secrets.Mac("dev",context.Request.Headers["X-Dev-Inbox-Key"].ToString()))) return Results.NotFound();
+            await using var c=await db.Source.OpenConnectionAsync();
+            var row=await c.One("SELECT * FROM auth_reset_delivery WHERE challenge_id=@id AND sealed_code IS NOT NULL AND expires_at>now()",("id",id));
+            return row is null ? Results.NotFound() : Results.Ok(new {code=secrets.Open(row.Get<byte[]>("sealed_code"),"reset-delivery:"+row.Get<Guid>("id"))});
+        });
+    }
     app.MapGet("/dev/setup-inbox/{id}",async(string id,HttpContext context,Database db,Secrets secrets)=>
     {
         var remote=context.Connection.RemoteIpAddress;
