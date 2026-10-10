@@ -145,6 +145,21 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   assert max(v['p50_ms'] for v in summaries.values())-min(v['p50_ms'] for v in summaries.values())<35,summaries
   assert max(v['p90_ms'] for v in summaries.values())-min(v['p90_ms'] for v in summaries.values())<60,summaries
   print('RESET TIMING HTTP COMPLETION PASS (12/group, controlled CI, not load certification): '+json.dumps(summaries))
+  initiation_timings={'real_replay':[],'decoy_new':[],'suppressed_new':[]}
+  for _ in range(12):
+   for label,body in [('real_replay',reset),
+    ('decoy_new',{**reset,'operationId':str(uuid.uuid4()),'email':secrets.token_hex(10)+'@example.test'}),
+    ('suppressed_new',{**reset,'operationId':str(uuid.uuid4())})]:
+    before=time.perf_counter()
+    headers={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
+    assert call('/auth/password/reset',body,headers)[0]==202
+    initiation_timings[label].append((time.perf_counter()-before)*1000)
+  start_summaries={label:{'n':len(values),'p50_ms':round(percentile(values,.5),2),'p90_ms':round(percentile(values,.9),2),'max_ms':round(max(values),2)}
+   for label,values in initiation_timings.items()}
+  assert all(min(values)>=190 and max(values)<350 for values in initiation_timings.values()),start_summaries
+  assert max(v['p50_ms'] for v in start_summaries.values())-min(v['p50_ms'] for v in start_summaries.values())<35,start_summaries
+  assert max(v['p90_ms'] for v in start_summaries.values())-min(v['p90_ms'] for v in start_summaries.values())<60,start_summaries
+  print('RESET TIMING HTTP INITIATION PASS (12/group; fresh eligible path additionally checked in service acceptance): '+json.dumps(start_summaries))
   print('HTTP RECOVERY PASS: one-time enrollment, uniform initiation, two-factor reset, receipt recovery, old Session denial, bounded replay, fresh-login replacement and pinned response schemas')
  finally:
   process.terminate()
