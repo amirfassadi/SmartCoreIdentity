@@ -554,6 +554,9 @@ components:
           maxLength: 180
         foreground:
           type: boolean
+          description: Trusted BFF assertion for an allowlisted user-action route. Polling,
+            scheduled refresh and other background work must use false. The browser cannot
+            set this Identity field directly; see docs/implementation/BFF_REFRESH_DESIGN.md.
       required:
       - refreshToken
       - foreground

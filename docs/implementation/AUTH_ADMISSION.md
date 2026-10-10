@@ -46,7 +46,7 @@ Never configure a reverse proxy upstream to the operator socket. A proxy must ru
 
 Only after its own accepted change may a BFF briefly retry fresh login using the new password (for example, three attempts with bounded jittered delays around 250/500/1000 ms). Show a short pending message and stop after the budget; a generic 401 alone does not authorize indefinite retry or prove recovery is running. Respect caller limits and keep this distinct from refresh single-flight: zero-grace refresh predecessors must never be automatically retried after an uncertain result. Real BFF behavior is a remaining deliverable, not implemented by these backend changes.
 
-Actual CI results are recorded in [verification](VERIFICATION.md). Reset, irreversible eligibility transitions, browser/BFF flows and production release remain separate work.
+Actual CI results are recorded in [verification](VERIFICATION.md). Reset completion is implemented in PASSWORD_RESET.md. Eligibility transitions remain deferred under the owner-selected Active-only MVP. Browser/BFF flows and production release remain separate work; the concrete refresh and foreground protocol is in [BFF_REFRESH_DESIGN.md](BFF_REFRESH_DESIGN.md).
 
 ## Reset timing and abuse-control candidate, 2026-10-10
 
