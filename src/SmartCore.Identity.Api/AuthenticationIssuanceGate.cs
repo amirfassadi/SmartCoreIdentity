@@ -22,6 +22,8 @@ public sealed class PostgresAuthenticationIssuanceGate : IAuthenticationIssuance
     {
         var connection=sessionTransaction.Connection ?? throw new InvalidOperationException("Active Session transaction required.");
         // Always before Session/family/generation rows. A future multi-Person writer must sort Person IDs.
+        // Never acquire credential:* while holding auth-person:* or vice versa.
+        // Credential evidence is read without Credential locks and revalidated under this gate.
         // Creating this unfenced epoch-zero row is not proof admission or a password-change fence.
         await connection.Execute("SELECT pg_advisory_xact_lock(hashtextextended(@id,0))",("id","auth-person:"+personId));
         await connection.Execute("INSERT INTO auth_issuance_state(person_id) VALUES(@person) ON CONFLICT DO NOTHING",("person",personId));

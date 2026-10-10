@@ -1,6 +1,6 @@
 # Authentication storage and transaction ownership — A
 
-Date: 2026-10-10. Owner: Amir (@amirfassadi), project/architecture owner under 051 §7. [Explicit A disposition](AUTH_TRANSACTION_DECISION.md). Source inputs: Platform `724ff849a9ddd6741fc5d84d6b54c366dcb774be`; Identity `968b918858345927a3624c3b8b8688cab88d9501`. This revision adds storage/gate foundations, not login, reset, Credential replacement or a production BFF.
+Date: 2026-10-10. Owner: Amir (@amirfassadi), project/architecture owner under 051 §7. [Explicit A disposition](AUTH_TRANSACTION_DECISION.md). Source inputs: Platform `724ff849a9ddd6741fc5d84d6b54c366dcb774be`; Identity `968b918858345927a3624c3b8b8688cab88d9501`. The prior revision added storage/gate foundations. The current development-only login/self/refresh/logout adapter is described in [authentication runtime](AUTH_RUNTIME.md); reset, Credential replacement and a production BFF remain absent.
 
 ## Transaction owners and write authority
 
@@ -53,3 +53,15 @@ At/after the absolute deadline no generation is usable. Recognition records may 
 ## Evidence scope
 
 Executable storage tests cover migration replay, one Current generation, matching family/Session deadlines, consumed-token immutability, immutable Session deadline, terminal closure, monotonic epoch, unresolved-fence release rejection, recovery metadata and per-Person gate serialization. These are storage/gate checks; they do not prove login/refresh token issuance, proof admission, background reconciliation, abuse limits, BFF secrecy or sensitive endpoint enforcement. Those remain the next authentication slice's tests.
+
+## Review follow-up — 2026-10-10
+
+Migration 003 has run in disposable validation databases, so migration 004 preserves its history and makes committed `closed_at`/`close_reason`, `revoked_at` and `consumed_at` immutable. It adds separate reuse latency observations without widening the internal refresh event schema.
+
+**Global namespace rule: never acquire `auth-person:*` while holding `credential:*`, or the inverse.** Session transactions use only Person issuance and Session-owned locks. Read Credential evidence with an ordinary MVCC query, without advisory or row locks. Login observes epoch before password verification, then compares epoch and Credential identity/hash again under the Person gate. The separate Credential mutation phase begins only after the Session fencing transaction has committed and disposed all its locks. Outcome reconciliation then opens a new Session transaction; no remote Credential call or Credential lock is held across that transaction.
+
+`FailedClosed` is operator attention, not a time-based unlock. The future authenticated operator path must obtain authoritative committed/rejected Credential evidence and record a bound resolution before transitioning to Reconciled and releasing the matching fence. Unknown outcomes stay blocked and require diagnosis/recovery, never direct SQL override. **No public reset until both scheduled reconciliation and that operator path are delivered and accepted.** Neither is implemented by login/refresh.
+
+Before accepting any password-changing intent or closing Sessions, validate the selected password policy (15–128 characters in this phase), proof/authorization, expected Credential/version and current admission epoch. A newly stricter authoritative Credential policy or dependency may still reject later; previous Sessions stay closed and no success is claimed. Policy rejection should normally happen before fencing, not after revocation.
+
+For strict zero grace, reuse records store only event ID and nonnegative milliseconds since the immutable consumed timestamp. Aggregate into <=1s, (1s,5s], (5s,30s] and >30s buckets, with total rotations and total reuse incidents as denominators. This supplies a future measured baseline; no observed production rate, loss/theft classification, grace threshold or automatic policy change is asserted. High short-delay counts can motivate a reviewed BFF/network investigation.

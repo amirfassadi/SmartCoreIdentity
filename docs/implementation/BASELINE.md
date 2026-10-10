@@ -1,6 +1,6 @@
-# Registration backend — implementation baseline 0.2.0
+# Registration backend — implementation baseline 0.3.0
 
-Date: 2026-10-10 (registration + setup revision). Owner: Amir (@amirfassadi), project/technical owner.
+Date: 2026-10-10 (registration, setup and development authentication revision). Owner: Amir (@amirfassadi), project/technical owner.
 
 ## Authority and delivery boundary
 
@@ -43,7 +43,7 @@ These values resolve the archived conflicting values for this phase only. Passwo
 ## Boundaries deliberately left for the next deliveries
 
 1. The formal audited administrative recovery path. `CONTACT_UNAVAILABLE` does not replace the original password. Self-service setup is now implemented under the distinct proof contract below. Current failures remain visible in `workflow_jobs`; no direct-SQL repair is an approved support procedure.
-2. Login, refresh, logout, `/me`, change password, BFF and Session issuance/revocation fences, followed by verified-contact reset **before public registration**. Password reset must address reassigned mobile numbers and revoke all Sessions/families.
+2. Development login, refresh, logout and `/me` now use the Person issuance gate: [runtime](AUTH_RUNTIME.md). Still pending: change-password/reset coordinator, Credential outcome protocol, reconciliation worker and authenticated operator resolution, actual BFF, verified-contact reset **before public registration**. Reset must address reassigned mobile numbers and revoke all Sessions/families.
 3. Real SMS/email provider with authenticated delivery, retry/TTL behavior and existence-independent responses; current encrypted delivery outbox is a test adapter, not real delivery.
 4. Event dispatcher, T16 transport/wrapper and consumer conformance. Never mark an event published without actual durable transport acknowledgment.
 5. Restricted operator recovery, MFA/step-up, append-only external audit, service trust, alert ownership, backup/restore reconciliation and retention.
@@ -62,3 +62,9 @@ The owner explicitly selected A on 2026-10-10: [authentication transaction decis
 Setup proof is absolute 10 minutes with five shared attempts (including replay); accepted material is separately bounded to 15 minutes from acceptance. A committed candidate may finish after proof expires; expiry never authorizes a new acceptance or public replay. Changed key/password is a conflict, not another candidate. Challenge replay returns the same ID/expiry without redelivery. Setup proof/material use distinct HMAC/AES purposes. Losing material is erased after a winner commits; expired proof/delivery material is erased by the worker. Existing database/WAL/backup erasure limitations remain.
 
 Forward migration 002 adds supporting setup records and bounded conflict mapping. The migration runner skips already-installed versions; 001 was not edited. Development fake setup inbox has the same loopback/opt-in-key restriction as the registration inbox. Formal operator recovery and production delivery remain unimplemented. See [setup/completion](SETUP_COMPLETION.md).
+
+## Authentication adapter — revision 0.3.0
+
+Migration 004 fixes immutable closure/consumption evidence without modifying deployed-in-tests 003. Opt-in development BFF routes now implement Ready-only login, online self, S2 refresh with zero grace and foreground idle, and bound logout replay. Access JWT TTL is at most 900 seconds, Session lifetime is 86400 seconds and foreground idle is 1800 seconds. Unknown/wrong-client refresh does not revoke a family. Session transaction locks never overlap Credential namespace locks. Separate reuse latency observations support later measurement; they do not change policy or internal event schema. Public authentication facts remain unpublished in their own Outbox. See AUTH_RUNTIME.md and VERIFICATION.md for scope and actual evidence.
+
+Password policy must pass before future mutation intent/fence admission. FailedClosed has no timer escape: authoritative operator reconciliation is required. No public reset until both worker and authenticated operator resolution are delivered. Current test fixtures do not implement those paths. Production and real-user onboarding remain disabled.

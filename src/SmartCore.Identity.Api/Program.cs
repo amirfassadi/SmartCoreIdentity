@@ -23,6 +23,22 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<RegistrationService>();
 builder.Services.AddSingleton<Provisioning>();
 builder.Services.AddSingleton<RegistrationSetupService>();
+var authenticationEnabled=builder.Configuration.GetValue("Identity:AuthenticationEnabled",false);
+string? bffKey=null;
+var bffClient="development-bff";
+if(authenticationEnabled)
+{
+    bffKey=builder.Configuration["Identity:BffClientKey"];
+    if(bffKey is not {Length:>=32}) throw new InvalidOperationException("An authenticated development BFF client key is required.");
+    var signingKey=builder.Configuration["Identity:AccessSigningKey"] ?? "";
+    var bytes=Convert.FromBase64String(signingKey);
+    if(bytes.SequenceEqual(Convert.FromBase64String(builder.Configuration["Identity:MacKey"] ?? ""))
+        || bytes.SequenceEqual(Convert.FromBase64String(builder.Configuration["Identity:MaterialKey"] ?? "")))
+        throw new InvalidOperationException("Access signing key must be distinct from MAC/material keys.");
+    builder.Services.AddSingleton<IAuthenticationIssuanceGate,PostgresAuthenticationIssuanceGate>();
+    builder.Services.AddSingleton(c=>new AccessTokens(signingKey,c.GetRequiredService<TimeProvider>()));
+    builder.Services.AddSingleton<AuthenticationService>();
+}
 if(builder.Configuration.GetValue("Identity:WorkerEnabled",true)) builder.Services.AddHostedService<ProvisioningWorker>();
 builder.Services.ConfigureHttpJsonOptions(o=>o.SerializerOptions.DefaultIgnoreCondition=JsonIgnoreCondition.WhenWritingNull);
 builder.Services.AddRateLimiter(options=>
@@ -49,8 +65,8 @@ app.MapGet("/health/live",()=>Results.Ok(new {status="live"}));
 app.MapGet("/health/ready",async(Database db)=>
 {
     await using var c=await db.Source.OpenConnectionAsync();
-    var row=await c.One("SELECT version FROM schema_versions WHERE version=2");
-    return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope="internal-registration"});
+    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",authenticationEnabled?4:2));
+    return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope=authenticationEnabled?"internal-authentication":"internal-registration"});
 });
 app.MapPost("/auth/register",async(HttpRequest http,RegistrationService service)=>
 {
@@ -75,6 +91,41 @@ app.MapPost("/auth/register/resend",async(HttpRequest http,RegistrationService s
     await service.Resend(await Read<ResendVerification>(http));
     return Results.Json(new {status="Accepted"},statusCode:202);
 }).RequireRateLimiting("registration");
+if(authenticationEnabled)
+{
+    void Bff(HttpRequest request,Secrets secrets)
+    {
+        if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",request.Headers["X-Bff-Client-Key"].ToString())))
+            throw new ApiError(401,"UNAUTHORIZED");
+    }
+    AccessProof Proof(HttpRequest request,Secrets secrets,AccessTokens access)
+    {
+        Bff(request,secrets);
+        var header=request.Headers.Authorization.ToString();
+        if(!header.StartsWith("Bearer ",StringComparison.Ordinal) || header.Length>4103) throw new ApiError(401,"UNAUTHORIZED");
+        return access.Read(header[7..],bffClient);
+    }
+    app.MapPost("/auth/login",async(HttpRequest request,Secrets secrets,AuthenticationService service)=>
+    {
+        Bff(request,secrets);
+        return Results.Ok(await service.Login(await Read<LoginRequest>(request),bffClient));
+    }).RequireRateLimiting("registration");
+    app.MapPost("/auth/refresh",async(HttpRequest request,Secrets secrets,AuthenticationService service)=>
+    {
+        Bff(request,secrets);
+        return Results.Ok(await service.Refresh(await Read<RefreshRequest>(request),bffClient));
+    }).RequireRateLimiting("registration");
+    app.MapGet("/me",async(HttpRequest request,Secrets secrets,AccessTokens access,AuthenticationService service)=>
+        Results.Ok(await service.Self(Proof(request,secrets,access)))).RequireRateLimiting("registration");
+    app.MapPost("/auth/logout",async(HttpRequest request,Secrets secrets,AccessTokens access,AuthenticationService service)=>
+    {
+        var proof=Proof(request,secrets,access);
+        var body=await Read<LogoutRequest>(request);
+        Input.Require(body.SessionId==proof.SessionId);
+        await service.Logout(proof);
+        return Results.NoContent();
+    }).RequireRateLimiting("registration");
+}
 // Fake inbox is opt-in, loopback-only, authenticated and unavailable outside Development.
 if(builder.Environment.IsDevelopment() && builder.Configuration["Identity:DevInboxKey"] is {Length: >= 32} inboxKey)
 {
@@ -118,3 +169,4 @@ static async Task<T> Read<T>(HttpRequest request)
 }
 
 public partial class Program { }
+public sealed record LogoutRequest(Guid SessionId);

@@ -109,6 +109,14 @@ internal static class AuthenticationStorageChecks
         await Rejected("UPDATE auth_sessions SET status='Active',closed_at=NULL,close_reason=NULL WHERE id=@id","23514",("id",session));
         await Rejected("UPDATE auth_refresh_families SET status='Active',revoked_at=NULL WHERE id=@id","23514",("id",family));
         Check(true,"closed Session and revoked family cannot be resurrected");
+        await Rejected("UPDATE auth_sessions SET closed_at=closed_at+interval '1 second' WHERE id=@id","23514",("id",session));
+        Check(true,"Session closure time is immutable after terminal state");
+        await Rejected("UPDATE auth_sessions SET close_reason='Logout' WHERE id=@id","23514",("id",session));
+        Check(true,"Session closure reason is immutable after terminal state");
+        await Rejected("UPDATE auth_refresh_families SET revoked_at=revoked_at+interval '1 second' WHERE id=@id","23514",("id",family));
+        Check(true,"family revocation time is immutable after revocation");
+        await Rejected("UPDATE auth_refresh_generations SET consumed_at=consumed_at+interval '1 second' WHERE family_id=@id AND generation=0","23514",("id",family));
+        Check(true,"generation consumption time is immutable after consumption");
         await using(var c=await db.Source.OpenConnectionAsync())
         await using(var tx=await c.BeginTransactionAsync())
         {

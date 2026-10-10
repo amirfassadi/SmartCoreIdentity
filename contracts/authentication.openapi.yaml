@@ -1,0 +1,279 @@
+openapi: 3.1.0
+info:
+  title: SmartCore development authentication subset
+  version: 0.1.0
+  description: Opt-in server-side BFF test adapter. Zero refresh grace; foreground
+    must be asserted by authenticated BFF. expiresAt is immutable Session deadline;
+    accessExpiresAt is bounded JWT expiry. No reset/change endpoint.
+paths:
+  /auth/login:
+    post:
+      security:
+      - bffKey: []
+      responses:
+        '200':
+          description: Committed response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResult'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+  /auth/refresh:
+    post:
+      security:
+      - bffKey: []
+      responses:
+        '200':
+          description: Committed response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tokens'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Refresh'
+  /auth/logout:
+    post:
+      security:
+      - bffKey: []
+        bearer: []
+      responses:
+        '204':
+          description: Closed or bound terminal replay
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Logout'
+  /me:
+    get:
+      security:
+      - bffKey: []
+        bearer: []
+      responses:
+        '200':
+          description: Committed response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Login:
+      type: object
+      additionalProperties: false
+      properties:
+        email: &id001
+          type: string
+        mobile: *id001
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - password
+      oneOf:
+      - required:
+        - email
+        not:
+          required:
+          - mobile
+      - required:
+        - mobile
+        not:
+          required:
+          - email
+    Refresh:
+      type: object
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+          maxLength: 180
+        foreground:
+          type: boolean
+      required:
+      - refreshToken
+      - foreground
+    Logout:
+      type: object
+      additionalProperties: false
+      properties:
+        sessionId: &id002
+          type: string
+          format: uuid
+      required:
+      - sessionId
+    Person:
+      type: object
+      additionalProperties: false
+      properties:
+        personId: *id002
+        displayName: *id001
+        email: *id001
+        mobile: *id001
+        status:
+          const: Active
+      required:
+      - personId
+      - displayName
+      - status
+    Tokens:
+      type: object
+      additionalProperties: false
+      properties:
+        sessionId: *id002
+        accessToken: *id001
+        refreshToken: *id001
+        expiresAt: &id003
+          type: string
+          format: date-time
+        accessExpiresAt: *id003
+      required:
+      - sessionId
+      - accessToken
+      - refreshToken
+      - expiresAt
+      - accessExpiresAt
+    LoginResult:
+      type: object
+      additionalProperties: false
+      properties:
+        person:
+          $ref: '#/components/schemas/Person'
+        session:
+          $ref: '#/components/schemas/Tokens'
+      required:
+      - person
+      - session
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          properties:
+            code: *id001
+            message: *id001
+          required:
+          - code
+          - message
+        traceId: *id001
+      required:
+      - error
+      - traceId
+  securitySchemes:
+    bffKey:
+      type: apiKey
+      in: header
+      name: X-Bff-Client-Key
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

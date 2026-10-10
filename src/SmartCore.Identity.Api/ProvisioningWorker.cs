@@ -10,6 +10,7 @@ public sealed class Provisioning(Database db, Secrets secrets, TimeProvider cloc
     {
         await using var connection=await db.Source.OpenConnectionAsync();
         await using var tx=await connection.BeginTransactionAsync();
+        // No auth-person:* acquisition while this Credential transaction is alive (or inverse).
         await connection.Execute("SELECT pg_advisory_xact_lock(hashtextextended(@id,0))",("id","credential:"+id));
         var winner=await connection.One("SELECT * FROM initial_credential_winners WHERE registration_id=@id",("id",id));
         if(winner is not null) return;
