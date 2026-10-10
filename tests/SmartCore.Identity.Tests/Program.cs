@@ -216,6 +216,7 @@ passed+=await PasswordChangeChecks.Run(db,secrets,clock,clock.Advance,request.Em
 passed+=await AuthenticationAdmissionChecks.Run(db,secrets,clock,clock.Advance);
 passed+=await RecoveryEnrollmentChecks.Run(db,secrets,clock,clock.Advance);
 passed+=await PasswordResetChecks.Run(db,secrets,clock,clock.Advance);
+passed+=await BffRefreshChecks.Run(db,secrets,clock,clock.Advance,connection);
 var events=await sql.Rows("SELECT payload::text AS payload FROM event_outbox UNION ALL SELECT payload::text AS payload FROM auth_domain_event_outbox UNION ALL SELECT payload::text AS payload FROM credential_change_outbox");
 var eventFile=Environment.GetEnvironmentVariable("SMARTCORE_EVENT_FIXTURES");
 if(eventFile is not null) await File.WriteAllTextAsync(eventFile,"["+string.Join(',',events.Select(x=>x.Get<string>("payload")))+"]");
