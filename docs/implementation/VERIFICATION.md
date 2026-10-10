@@ -109,3 +109,7 @@ Both reset service paths were measured against real PostgreSQL with 12 samples p
 | Initiation, bound real replay / fresh other paths | 209.75 / 221.85 / 309.30 | 213.15 / 222.14 / 222.41 | 216.70 / 228.91 / 312.45 |
 
 All measured groups passed the declared floor, maximum and median/tail-spread thresholds. Transport/scheduling maxima exceed the chosen service deadline in some samples; the table preserves those outliers. Twelve samples do not establish statistical indistinguishability or adversarial-load acceptance. A contended/database-slow request can exceed its deadline and expose its processing path; the overrun instrument must be exported and failure overruns monitored before real-user release. Stronger cooldown also increases the accepted denial-of-recovery window when an attacker knows the contact. Alerts here are atomically queued tasks, not delivered messages. This follow-up changes documentation only; the verified runtime is the SHA above. Platform merge must precede Identity merge/release.
+
+## One-hour cooldown follow-up (verification pending)
+
+Migration 011 and the matching runtime cap shorten reset stops to 15/30/60 minutes; tests cover repeated capped windows, upgrading an existing six-hour stop without extending shorter stops, migration replay, and separate success/failure overrun tags. Native CI for this follow-up is pending. The 195/188 counts above describe the preceding runtime, not this revision.

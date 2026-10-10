@@ -58,7 +58,7 @@ public sealed class PasswordResetCompletion(Database db,Secrets secrets,TimeProv
         if(!valid && next==5)
         {
             streak=Math.Min(streak+1,6);
-            blocked=now.AddMinutes(Math.Min(15*(1<<(streak-1)),360));
+            blocked=now.AddMinutes(Math.Min(15*(1<<(streak-1)),60));
             var notice=new Guid(secrets.Mac("reset-proof-limit-notice",person.ToString(),window.ToString("O")).AsSpan(0,16));
             await c.Execute("""
                 INSERT INTO auth_account_notifications(id,person_id,operation_id,kind,created_at)

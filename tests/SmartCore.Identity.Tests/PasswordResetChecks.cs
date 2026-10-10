@@ -163,10 +163,10 @@ internal static class PasswordResetChecks
             Check(bad.Code.Length==8,"new reset OTP is eight digits (window "+cycle+")");
             for(var i=0;i<5;i++) await Denied(async()=>{await complete.Accept(client,bad with {RecoveryCode=new string('0',32)});});
             var limit=(await sql.One("SELECT * FROM auth_reset_failures WHERE person_id=@id",("id",escalation.Person)))!;
-            var expected=Math.Min(15*(1<<(Math.Min(cycle,6)-1)),360);
+            var expected=Math.Min(15*(1<<(Math.Min(cycle,6)-1)),60);
             Check(limit.Get<int>("saturated_windows")==Math.Min(cycle,6)
                 && limit.Time("blocked_until")==Timestamps.Now(clock).AddMinutes(expected),
-                "exhausted Person windows escalate to "+expected+" minutes without exceeding six hours");
+                "exhausted Person windows escalate to "+expected+" minutes without exceeding one hour");
             await Denied(async()=>{await complete.Accept(client,bad);});
             var unchanged=(await sql.One("SELECT * FROM auth_reset_failures WHERE person_id=@id",("id",escalation.Person)))!;
             Check(unchanged.Time("blocked_until")==limit.Time("blocked_until") && unchanged.Time("last_failure_at")==limit.Time("last_failure_at")
@@ -188,6 +188,18 @@ internal static class PasswordResetChecks
         Check((await sql.One("SELECT saturated_windows FROM auth_reset_failures WHERE person_id=@id",("id",parallel.Person)))!.Get<int>("saturated_windows")==1
             && (await sql.One("SELECT count(*) AS n FROM auth_account_notifications WHERE person_id=@id AND kind='ResetProofFailuresLimited'",("id",parallel.Person)))!.Get<long>("n")==1,
             "concurrent cap-crossing attempts atomically record one escalation and one alert");
+        // Upgrade a persisted six-hour stop from migration 010, preserving a shorter stop.
+        var upgradeNow=Timestamps.Now(clock);
+        await sql.Execute("UPDATE auth_reset_failures SET blocked_until=@stop,last_failure_at=@now WHERE person_id=@id",
+            ("stop",upgradeNow.AddHours(6)),("now",upgradeNow),("id",escalation.Person));
+        await sql.Execute("DELETE FROM schema_versions WHERE version=11");
+        await db.Migrate();
+        Check((await sql.One("SELECT blocked_until FROM auth_reset_failures WHERE person_id=@id",("id",escalation.Person)))!.Time("blocked_until")==upgradeNow.AddHours(1)
+            && (await sql.One("SELECT blocked_until FROM auth_reset_failures WHERE person_id=@id",("id",parallel.Person)))!.Time("blocked_until")==upgradeNow.AddMinutes(15),
+            "forward migration shortens persisted six-hour stops without extending shorter stops");
+        await db.Migrate();
+        Check((await sql.One("SELECT count(*) AS n FROM schema_versions WHERE version=11"))!.Get<long>("n")==1,
+            "one-hour cooldown migration replays safely");
         var timingFixture=await Ready();
         var timings=new Dictionary<string,List<double>>();
         async Task<T> Measure<T>(string label,Func<Task<T>> work)
@@ -215,17 +227,22 @@ internal static class PasswordResetChecks
                 endpoint+" real/decoy/suppressed timing acceptance meets common deadline and distribution bounds");
         }
         Console.WriteLine("RESET TIMING SERVICE: "+JsonSerializer.Serialize(timings.ToDictionary(p=>p.Key,p=>new {n=p.Value.Count,p50=Quantile(p.Value,.5),p90=Quantile(p.Value,.9),max=p.Value.Max()})));
-        var overruns=0;
+        var failureOverruns=0;var successOverruns=0;
         using(var listener=new MeterListener())
         {
             listener.InstrumentPublished=(instrument,active)=>{if(instrument.Name=="reset.response_deadline_overruns")active.EnableMeasurementEvents(instrument);};
             listener.SetMeasurementEventCallback<long>((_,measurement,tags,_)=>
-            {foreach(var tag in tags)if(tag.Key=="endpoint" && Equals(tag.Value,"overrun-test"))overruns+=(int)measurement;});
+            {
+                string? endpoint=null;string? outcome=null;
+                foreach(var tag in tags){if(tag.Key=="endpoint")endpoint=tag.Value as string;if(tag.Key=="outcome")outcome=tag.Value as string;}
+                if(endpoint=="overrun-test"){if(outcome=="failure")failureOverruns+=(int)measurement;if(outcome=="success")successOverruns+=(int)measurement;}
+            });
             listener.Start();
             try {await ResetResponseTiming.Run<int>("overrun-test",async()=>{await Task.Delay(300);throw new ApiError(401,"UNAUTHORIZED");});}
             catch(ApiError e) when(e.Code=="UNAUTHORIZED") { }
+            await ResetResponseTiming.Run("overrun-test",async()=>{await Task.Delay(300);return true;});
         }
-        Check(overruns==1,"response deadline overrun on a failed request emits a privacy-safe metric rather than a constant-time claim");
+        Check(failureOverruns==1 && successOverruns==1,"response deadline overruns separate failed and successful requests for failure-only enumeration monitoring");
         return count;
     }
     private sealed class PausedGate:IAuthenticationIssuanceGate
