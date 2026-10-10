@@ -1,6 +1,6 @@
 # Development dual-factor password reset
 
-Migration 009 and OpenAPI 0.5.0 complete the selected primary-contact OTP plus pre-enrolled 128-bit recovery-code policy for email and telephone accounts. The existing RecoveryEnrollmentEnabled opt-in controls enrollment, initiation and completion. Development-only, real-user release remains blocked.
+Migration 009 and OpenAPI 0.5.0 complete the selected primary-contact OTP plus pre-enrolled 128-bit recovery-code policy for email and telephone accounts. The existing RecoveryEnrollmentEnabled opt-in controls enrollment, initiation and completion. Development-only, real-user release remains blocked. Stop older application instances before applying migration 009; older enrollment/initiation writers are not compatible with the new reservation/decoy schema.
 
 POST /auth/password/reset/complete requires the authenticated BFF/subject and operationId, challengeId, bindingSecret, six-digit code, uppercase 32-hex recoveryCode, and a 15–128-character newPassword. No Bearer Session or caller-supplied verified flag is accepted. Both proof comparisons are constant-time; failure is the same UNAUTHORIZED response. Five failed presentations per Person per fixed fifteen-minute window are shared across challenges and replay; creating a fresh challenge does not reset that counter. Each fresh challenge permits five presentations. Invalid password policy is rejected before any fence. Counter transactions finish before the Person gate; Argon2 runs without locks.
 
