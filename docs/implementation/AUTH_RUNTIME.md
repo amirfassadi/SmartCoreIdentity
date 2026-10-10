@@ -30,7 +30,7 @@ Refresh security facts retain exactly the existing internal schema; they are sep
 
 ## Remaining password lifecycle (delivery gate)
 
-The additional `Identity__PasswordChangeEnabled=true` development slice implements authenticated password change, a scheduled reconciliation worker and a separately keyed loopback operator adapter. See [password-change protocol](PASSWORD_CHANGE.md). It is disabled by default and requires authentication plus a distinct `Identity__AuthOperatorKey`. Reset proof/delivery/completion is still absent; password-change recovery tests do not establish reset safety or resolve reassigned-number recovery. Real-user onboarding stays closed until reset is delivered/accepted and release conditions above pass.
+The additional `Identity__PasswordChangeEnabled=true` development slice implements authenticated password change, a scheduled reconciliation worker and a separately keyed private Unix-socket operator adapter. See [password-change protocol](PASSWORD_CHANGE.md). It is disabled by default and requires authentication plus a distinct `Identity__AuthOperatorKey`. Reset proof/delivery/completion is still absent; password-change recovery tests do not establish reset safety or resolve reassigned-number recovery. Real-user onboarding stays closed until reset is delivered/accepted and release conditions above pass.
 
 ## Verification
 

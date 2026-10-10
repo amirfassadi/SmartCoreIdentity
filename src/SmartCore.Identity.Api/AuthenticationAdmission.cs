@@ -29,17 +29,35 @@ public sealed class PasswordFailures(Database db,TimeProvider clock)
     }
 }
 
-// Bounded process-wide KDF concurrency supplements distributed caller admission.
+// A bounded, short queue absorbs bursts without holding any database transaction.
+public sealed class PasswordWorkQueue(int concurrency,int queueLimit,TimeSpan waitLimit)
+{
+    private readonly SemaphoreSlim slots=new(concurrency,concurrency);
+    private int waiting;
+    public int Waiting=>Volatile.Read(ref waiting);
+    private static ApiError Busy()=>new(503,"AUTHENTICATION_BUSY");
+    public async Task<T> Run<T>(Func<Task<T>> work,CancellationToken cancellation=default)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        if(!slots.Wait(0))
+        {
+            if(Interlocked.Increment(ref waiting)>queueLimit)
+            {
+                Interlocked.Decrement(ref waiting);throw Busy();
+            }
+            try {if(!await slots.WaitAsync(waitLimit,cancellation)) throw Busy();}
+            finally {Interlocked.Decrement(ref waiting);}
+        }
+        try {cancellation.ThrowIfCancellationRequested();return await work();}
+        finally {slots.Release();}
+    }
+}
+
 public static class PasswordWork
 {
-    private static readonly SemaphoreSlim Slots=new(4,4);
-    private static async Task<T> Run<T>(Func<Task<T>> work)
-    {
-        if(!Slots.Wait(0)) throw new ApiError(429,"RATE_LIMITED");
-        try {return await work();} finally {Slots.Release();}
-    }
-    public static Task<bool> Verify(string password,string hash)=>Run(()=>Secrets.VerifyPassword(password,hash));
-    public static Task<string> Hash(string password)=>Run(()=>Secrets.HashPassword(password));
+    private static readonly PasswordWorkQueue Queue=new(4,16,TimeSpan.FromSeconds(2));
+    public static Task<bool> Verify(string password,string hash)=>Queue.Run(()=>Secrets.VerifyPassword(password,hash));
+    public static Task<string> Hash(string password)=>Queue.Run(()=>Secrets.HashPassword(password));
 }
 
 // Only an authenticated BFF may supply the opaque, stable subject assertion.

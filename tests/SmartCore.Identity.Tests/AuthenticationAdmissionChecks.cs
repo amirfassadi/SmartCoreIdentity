@@ -90,9 +90,10 @@ internal static class AuthenticationAdmissionChecks
         await worker.StartAsync(CancellationToken.None);await runner.Continued.Task.WaitAsync(TimeSpan.FromSeconds(10));await worker.StopAsync(CancellationToken.None);
         Check(runner.Calls>=2,"background worker catches unexpected Tick exceptions and continues until explicit cancellation");
         advance(TimeSpan.FromSeconds(900));await changes.Tick();
-        Check(!(await sql.One("SELECT replay_password_hash FROM auth_change_material WHERE intent_id=@id",("id",request.OperationId)))!.Has("replay_password_hash"),
+        Check(!(await sql.One("SELECT sealed_replay_hash FROM auth_change_material WHERE intent_id=@id",("id",request.OperationId)))!.Has("sealed_replay_hash"),
             "bounded Argon2 replay verifier is erased independently of Credential recovery material");
         await LegacyMigration(secrets,clock,Check);
+        await QueueChecks(Check);
         return count;
     }
     private static async Task<int> LegacyMigration(Secrets secrets,TimeProvider clock,Action<bool,string> check)
@@ -116,7 +117,17 @@ internal static class AuthenticationAdmissionChecks
                 """,("id",intent),("person",person),("mac",old),("now",now),("op",operation),("credential",credential));
             await c.Execute("INSERT INTO credential_change_receipts VALUES(@op,@person,@credential,@mac,@mac,@mac,'Applied',@now)",
                 ("op",operation),("person",person),("credential",credential),("mac",old),("now",now));
+            await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"database","006_authentication_admission.sql")));
+            var session=Guid.NewGuid();var recovery=secrets.Seal("legacy-test-encoding","password-change:"+intent);
+            await c.Execute("INSERT INTO auth_sessions(id,person_id,issuance_epoch,client_id,created_at,expires_at,last_foreground_refresh_at,status) VALUES(@id,@person,0,'legacy-test',@now,@expires,@now,'Active')",
+                ("id",session),("person",person),("now",now),("expires",now.AddSeconds(86400)));
+            await c.Execute("INSERT INTO auth_change_material VALUES(@id,@session,'legacy-test',@mac,@mac,@sealed,@expiry,'plaintext-legacy-verifier',@replay)",
+                ("id",intent),("session",session),("mac",old),("sealed",recovery),("expiry",now.AddHours(24)),("replay",now.AddSeconds(900)));
             await legacy.Migrate();
+            var material=(await c.One("SELECT sealed_hash,sealed_replay_hash,replay_until FROM auth_change_material WHERE intent_id=@id",("id",intent)))!;
+            check(!material.Has("sealed_replay_hash") && Secrets.Equal(material.Get<byte[]>("sealed_hash"),recovery)
+                && (await c.One("SELECT count(*) AS n FROM pg_attribute WHERE attrelid='auth_change_material'::regclass AND attname='replay_password_hash' AND NOT attisdropped"))!.Get<long>("n")==0,
+                "migration 007 drops the old clear replay verifier without changing independently sealed Credential recovery material");
             var changed=(await c.One("SELECT request_mac,request_version FROM auth_credential_change_intents WHERE id=@id",("id",intent)))!;
             var receipt=(await c.One("SELECT request_mac,outcome FROM credential_change_receipts WHERE operation_id=@id",("id",operation)))!;
             check(!Secrets.Equal(old,changed.Get<byte[]>("request_mac")) && Secrets.Equal(changed.Get<byte[]>("request_mac"),receipt.Get<byte[]>("request_mac"))
@@ -128,6 +139,33 @@ internal static class AuthenticationAdmissionChecks
         }
         finally {await admin.Execute("DROP SCHEMA "+schema+" CASCADE");}
         return 0; // The supplied check already increments the caller's count.
+    }
+    private static async Task QueueChecks(Action<bool,string> check)
+    {
+        var queue=new PasswordWorkQueue(1,2,TimeSpan.FromSeconds(2));
+        var release=new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var running=queue.Run(()=>release.Task);
+        using var cancellation=new CancellationTokenSource();
+        var cancelled=queue.Run(()=>Task.FromResult(2),cancellation.Token);
+        var waiting=queue.Run(()=>Task.FromResult(3));
+        check(queue.Waiting==2 && !waiting.IsCompleted,"KDF burst queues within the bounded capacity instead of immediately rejecting allowed work");
+        try {await queue.Run(()=>Task.FromResult(4));throw new Exception("Expected queue rejection");}
+        catch(ApiError error) when(error.Status==503 && error.Code=="AUTHENTICATION_BUSY") { }
+        check(queue.Waiting==2,"full KDF queue reports server busy separately from caller RATE_LIMITED without allocating more waiters");
+        cancellation.Cancel();
+        try {await cancelled;throw new Exception("Expected cancellation");}catch(OperationCanceledException) { }
+        check(queue.Waiting==1,"cancelled queued KDF work releases its waiting reservation");
+        release.SetResult(1);
+        check(await running==1 && await waiting==3 && queue.Waiting==0,"short KDF queue drains after capacity becomes available without losing a slot");
+        var timeoutQueue=new PasswordWorkQueue(1,1,TimeSpan.FromMilliseconds(50));
+        var hold=new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var active=timeoutQueue.Run(()=>hold.Task);
+        try {await timeoutQueue.Run(()=>Task.FromResult(2));throw new Exception("Expected queue timeout");}
+        catch(ApiError error) when(error.Status==503 && error.Code=="AUTHENTICATION_BUSY") { }
+        check(timeoutQueue.Waiting==0,"KDF queue deadline reports AUTHENTICATION_BUSY and removes the waiter");
+        hold.SetResult(1);await active;
+        try {await timeoutQueue.Run<int>(()=>throw new InvalidOperationException("synthetic"));}catch(InvalidOperationException) { }
+        check(await timeoutQueue.Run(()=>Task.FromResult(7))==7,"KDF work exception releases acquired capacity for the next request");
     }
     private sealed class FaultGate : IAuthenticationIssuanceGate
     {

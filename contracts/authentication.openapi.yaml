@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.3.0
+  version: 0.3.1
   description: Development BFF adapter. Authenticated BFF supplies a stable opaque
     X-Bff-Subject for separate distributed admission budgets. Password change is separately
     opt-in. Operator recovery HTTP is available only over a private Unix domain socket,
@@ -31,13 +31,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Uniform failure
+          description: RATE_LIMITED caller or transport budget exhausted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Uniform failure
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
           content:
             application/json:
               schema:
@@ -81,7 +81,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Uniform failure
+          description: RATE_LIMITED caller or transport budget exhausted
           content:
             application/json:
               schema:
@@ -128,7 +128,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Uniform failure
+          description: RATE_LIMITED caller or transport budget exhausted
           content:
             application/json:
               schema:
@@ -179,7 +179,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Uniform failure
+          description: RATE_LIMITED caller or transport budget exhausted
           content:
             application/json:
               schema:
@@ -237,13 +237,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Uniform failure
+          description: RATE_LIMITED caller or transport budget exhausted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Uniform failure
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
           content:
             application/json:
               schema:
@@ -283,7 +283,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Uniform failure
+          description: RATE_LIMITED caller or transport budget exhausted
           content:
             application/json:
               schema:
@@ -330,7 +330,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Uniform failure
+          description: RATE_LIMITED caller or transport budget exhausted
           content:
             application/json:
               schema:

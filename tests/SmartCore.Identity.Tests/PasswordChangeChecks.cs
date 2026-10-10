@@ -50,6 +50,15 @@ internal static class PasswordChangeChecks
         await pausedGate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
         var acceptRace=await Task.WhenAll(changes.Accept(session.AccessToken,client,request),changes.Accept(session.AccessToken,client,request));
         var accepted=acceptRace[0];
+        var replayMaterial=(await sql.One("SELECT sealed_replay_hash FROM auth_change_material WHERE intent_id=@id",("id",request.OperationId)))!.Get<byte[]>("sealed_replay_hash");
+        var replayEncoding=secrets.Open(replayMaterial,"password-change-replay:"+request.OperationId);
+        Check(await Secrets.VerifyPassword(request.NewPassword,replayEncoding),"Session replay stores a sealed Argon2 verifier that opens only for the admitted operation");
+        try {secrets.Open(replayMaterial,"password-change-replay:"+Guid.NewGuid());throw new Exception("Expected purpose rejection");}
+        catch(CryptographicException) { }
+        Check(true,"sealed replay material cannot be transplanted to another operation purpose");
+        try {await sql.Execute("UPDATE auth_change_material SET sealed_replay_hash=@value WHERE intent_id=@id",("value",secrets.Seal(replayEncoding,"password-change-replay:"+request.OperationId)),("id",request.OperationId));throw new Exception("Expected immutable material");}
+        catch(PostgresException error) when(error.SqlState=="23514") { }
+        Check(true,"database rejects sealed replay verifier replacement while allowing eventual erasure");
         var replay=await changes.Accept(session.AccessToken,client,request);
         await Error(async()=>{await changes.Accept(session.AccessToken,client,request with {NewPassword="different password for collision"});},"IDEMPOTENCY_CONFLICT");
         Check(accepted==replay && acceptRace[0]==acceptRace[1] && (await sql.One("SELECT epoch FROM auth_issuance_state WHERE person_id=@id",("id",person)))!.Get<long>("epoch")==epoch+1,

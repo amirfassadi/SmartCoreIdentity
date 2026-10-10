@@ -111,7 +111,7 @@ await worker.Tick();
 // Pending-registration setup uses a fresh verified conflict, distinct purpose-bound code,
 // and a durable candidate. None of these paths resets a Ready password.
 await db.Migrate();
-Check((await sql.Rows("SELECT version FROM schema_versions ORDER BY version")).Select(x=>x.Get<int>("version")).SequenceEqual(new[]{1,2,3,4,5,6}),"forward migrations apply once and replay safely");
+Check((await sql.Rows("SELECT version FROM schema_versions ORDER BY version")).Select(x=>x.Get<int>("version")).SequenceEqual(new[]{1,2,3,4,5,6,7}),"forward migrations apply once and replay safely");
 async Task<(RegistrationResult Original, VerifyRegistration Proof, SetupPending Challenge)> PendingSetup()
 {
     var originalRequest=Request();
