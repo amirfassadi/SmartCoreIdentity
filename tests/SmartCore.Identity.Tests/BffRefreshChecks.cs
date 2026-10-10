@@ -1,5 +1,12 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
+using System.Net;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using Npgsql;
 using SmartCore.Identity;
@@ -139,7 +146,7 @@ internal static class BffRefreshChecks
         advance(TimeSpan.FromMinutes(13));await activityA.RefreshIfDue(activity.Cookie,BffActivity.Background);
         advance(TimeSpan.FromMinutes(13));await activityB.RefreshIfDue(activity.Cookie,BffActivity.Background);
         advance(TimeSpan.FromMinutes(4));await Reauth(async()=>{await activityA.GetAccess(activity.Cookie);});
-        Check((await State(activity.Tokens)).Time("last_foreground_at").AddMinutes(30)==clock.GetUtcNow(),
+        Check((await State(activity.Tokens)).Time("last_foreground_at").AddMinutes(30)==Timestamps.Now(clock),
             "polling beyond thirty minutes cannot keep the foreground idle deadline alive");
         var revokedFixture=await Fixture();advance(TimeSpan.FromMinutes(13));
         await auth.Logout(signer.Read(revokedFixture.Tokens.AccessToken,client));
@@ -147,6 +154,49 @@ internal static class BffRefreshChecks
         await Reauth(async()=>{await Core(storeA,revokedTransport).RefreshIfDue(revokedFixture.Cookie,BffActivity.UserAction);});
         Check(revokedTransport.Calls==1 && !(await State(revokedFixture.Tokens)).Has("uncertain_at"),
             "definitive Identity revocation requires login but is excluded from uncertain-outcome ratio");
+        // Exercise the concrete non-redirecting HTTP adapter through a loopback Identity bridge.
+        // This is not the complete Identity middleware/BFF browser host.
+        var httpCalls=0;var trapCalls=0;var httpMode="normal";var httpKey=Secrets.Token();var httpSubject=Secrets.Token();
+        var httpBuilder=WebApplication.CreateSlimBuilder(new WebApplicationOptions {EnvironmentName="Development"});
+        httpBuilder.Logging.ClearProviders();httpBuilder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
+        await using(var host=httpBuilder.Build())
+        {
+            host.MapPost("/auth/refresh",async(HttpContext context)=>
+            {
+                Interlocked.Increment(ref httpCalls);
+                if(context.Request.Headers["X-Bff-Client-Key"]!=httpKey || context.Request.Headers["X-Bff-Subject"]!=httpSubject)
+                {context.Response.StatusCode=401;return;}
+                if(httpMode=="redirect"){context.Response.StatusCode=307;context.Response.Headers.Location="/trap";return;}
+                var req=await context.Request.ReadFromJsonAsync<RefreshRequest>(cancellationToken:context.RequestAborted);
+                if(req is null){context.Response.StatusCode=400;return;}
+                try
+                {
+                    var rotated=await auth.Refresh(req,client);
+                    if(httpMode=="lost"){context.Abort();return;}
+                    await context.Response.WriteAsJsonAsync(rotated,cancellationToken:context.RequestAborted);
+                }
+                catch(ApiError error){context.Response.StatusCode=error.Status;}
+            });
+            host.MapPost("/trap",()=>{Interlocked.Increment(ref trapCalls);return Results.NoContent();});
+            await host.StartAsync();
+            var address=host.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var http=new IdentityRefreshHttp(new Uri(address+"/"),httpKey,httpSubject,developmentLoopback:true);
+            var network=await Fixture();advance(TimeSpan.FromMinutes(13));
+            var networkA=new BffRefresh(storeA,secrets,clock,http);var networkB=new BffRefresh(storeB,secrets,clock,http);
+            var networkResults=await Task.WhenAll(Enumerable.Range(0,20).Select(i=>(i%2==0?networkA:networkB).RefreshIfDue(network.Cookie,BffActivity.UserAction)));
+            Check(httpCalls==1 && networkResults.All(r=>r.Version==1) && await Generation(network.Tokens)==1,
+                "concrete HTTP adapter and two BFF instances coalesce twenty requests to exactly one authenticated Identity HTTP rotation");
+            httpMode="lost";var lostHttp=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeLost=httpCalls;
+            await Reauth(async()=>{await networkA.RefreshIfDue(lostHttp.Cookie,BffActivity.UserAction);});
+            await Reauth(async()=>{await networkB.RefreshIfDue(lostHttp.Cookie,BffActivity.UserAction);});
+            Check(httpCalls==beforeLost+1 && await Generation(lostHttp.Tokens)==1,
+                "actual HTTP connection abort after Identity commit causes reauthentication with no replay");
+            httpMode="redirect";var redirected=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeRedirect=httpCalls;
+            await Reauth(async()=>{await networkA.RefreshIfDue(redirected.Cookie,BffActivity.UserAction);});
+            Check(httpCalls==beforeRedirect+1 && trapCalls==0 && await Generation(redirected.Tokens)==0,
+                "HTTP redirect is not followed and never forwards refresh secrets to another route");
+            await host.StopAsync();
+        }
         var closeFixture=await Fixture();var closeCore=Core(storeA,new Transport(auth,client));await closeCore.Close(closeFixture.Cookie);
         await Reauth(async()=>{await Core(storeB,new Transport(auth,client)).GetAccess(closeFixture.Cookie);});
         Check((await State(closeFixture.Tokens)).Has("sealed_tokens")==false,"local cookie closure erases tokens and denies subsequent cached reads");

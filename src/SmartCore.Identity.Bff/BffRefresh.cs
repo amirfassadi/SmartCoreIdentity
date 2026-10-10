@@ -60,7 +60,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     private static readonly Counter<long> Unknown=Meter.CreateCounter<long>("bff.refresh.uncertain_sessions");
     private static readonly Counter<long> Coalesced=Meter.CreateCounter<long>("bff.refresh.coalesced");
     private static readonly Counter<long> Busy=Meter.CreateCounter<long>("bff.refresh.lock_timeout");
-    private DateTimeOffset Now=>clock.GetUtcNow();
+    private DateTimeOffset Now=>Timestamps.Now(clock);
     private byte[] Cookie(string value)
     {if(!Input.Secret(value))throw new BffError("REAUTHENTICATION_REQUIRED");return secrets.Mac("bff-cookie-v1",value);}
     private static string Purpose(Guid id,long version)=>"bff-tokens:"+id+":"+version.ToString(System.Globalization.CultureInfo.InvariantCulture);
