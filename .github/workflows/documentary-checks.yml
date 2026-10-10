@@ -1,0 +1,17 @@
+name: Documentary candidate checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  candidate-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install jsonschema==4.23.0 rfc3339-validator==0.1.4
+      - run: python tools/check_registration_docs.py
+      - run: python tools/check_backend_preparation.py
