@@ -65,3 +65,11 @@ Evaluate the fraction of **distinct BFF sessions with at least one refresh dispa
 Initial review thresholds: warning at >0.1% over 24 hours with at least 100 dispatched sessions; mandatory zero-grace/availability review at >0.5% over 7 days with at least 1000 dispatched sessions, or a correlated uncertainty incident regardless of sample size. These are engineering review triggers, not automatic authentication-policy changes or evidence that theft is absent. First investigate transport, cancellation, DB durability and timeout/lock budgets. A short BFF cache of an already committed successor may improve availability, but cannot recover an uncommitted/lost successor or authorize replay of a spent predecessor. Any Identity grace/replay change requires a separately reviewed decision and security tests; never silently enable retries. Before launch, the operator must install aggregate collection and alerting and accept/revise these initial thresholds with representative traffic evidence.
 
 The core uncertainty aggregate reports persisted, reconciled outcomes. An unmatched marker left by a crashed instance must not be interpreted as zero uncertainty merely because no caller has reconciled it yet. Production collection must separately count/alert on unresolved markers, complete serialized reconciliation or retain an explicit pending category before evaluating the ratio, and preserve window aggregates before purge. Marker age can trigger observation/reconciliation but never grants ownership, clears the marker or authorizes predecessor retry. This collector/alert installation is not provided by the scaffold.
+
+### Non-consumption receipts
+
+A signed, nonce-bound pre-invocation admission rejection is a known non-consumed
+outcome, distinct from definitive revocation and uncertainty. See `BFF_CORE.md`
+and authentication subset 0.7.0 for receipt validation and durable shared retry
+backoff. Generic overload/proxy status is insufficient. Retrying an uncertain
+predecessor remains forbidden. Startup requires PostgreSQL 17 or newer.

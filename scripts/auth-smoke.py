@@ -1,5 +1,5 @@
 """Opt-in authenticated BFF adapter HTTP checks against disposable test accounts."""
-import base64,json,os,secrets,subprocess,time,urllib.request,urllib.error
+import hashlib,hmac,uuid,base64,json,os,secrets,subprocess,time,urllib.request,urllib.error
 from pathlib import Path
 import yaml
 from jsonschema import Draft202012Validator,FormatChecker
@@ -74,6 +74,16 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   assert call('/auth/logout',{'sessionId':session['sessionId']},auth)[0]==204
   assert call('/auth/logout',{'sessionId':session['sessionId']},auth)[0]==204
   assert call('/me',headers=auth)[0]==401
+  status,result=call('/auth/login',login,bff);assert status==200
+  session=result['session'];limited={**bff,'X-Bff-Subject':secrets.token_urlsafe(32),'Authorization':'Bearer '+session['accessToken']}
+  for _ in range(120):assert call('/me',headers=limited)[0]==200
+  reference=str(uuid.uuid4())
+  status,receipt=call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True},{**limited,'X-Refresh-Request':reference})
+  assert status==429 and receipt['disposition']=='NotProcessed' and receipt['requestReference']==reference
+  message=f"identity-refresh-not-processed-v1\n429\nRATE_LIMITED\n{reference}\n{receipt['retryAfterSeconds']}".encode()
+  assert hmac.compare_digest(base64.b64decode(receipt['proof']),hmac.digest(env['Identity__BffClientKey'].encode(),message,'sha256'))
+  status,retry=call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True},{**bff,'X-Bff-Subject':secrets.token_urlsafe(32)})
+  assert status==200 and retry['refreshToken']!=session['refreshToken']
   print('HTTP AUTH PASS: BFF admission, strict input, Ready login/self, rotation, zero-grace reuse and bound logout replay')
  finally:
   process.terminate()

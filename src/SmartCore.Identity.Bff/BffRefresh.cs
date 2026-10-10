@@ -26,15 +26,29 @@ public sealed class IdentityRefreshHttp:IIdentityRefresh,IDisposable
     public async Task<SessionTokens> Refresh(string token,bool foreground,CancellationToken cancellation)
     {
         using var request=new HttpRequestMessage(HttpMethod.Post,"auth/refresh");
+        var reference=Guid.NewGuid();request.Headers.Add("X-Refresh-Request",reference.ToString("D"));
         request.Headers.Add("X-Bff-Client-Key",bffKey);request.Headers.Add("X-Bff-Subject",trustedSubject);
         request.Content=JsonContent.Create(new RefreshRequest(token,foreground));
         using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancellation);
-        if(!response.IsSuccessStatusCode)throw new HttpRequestException("Identity refresh rejected",null,response.StatusCode);
         await using var stream=await response.Content.ReadAsStreamAsync(cancellation);
         var bytes=new byte[32769];var used=0;
         while(used<bytes.Length)
         {var n=await stream.ReadAsync(bytes.AsMemory(used),cancellation);if(n==0)break;used+=n;}
         if(used>32768)throw new InvalidOperationException("Oversized successor");
+        if(!response.IsSuccessStatusCode)
+        {
+            if(response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.ServiceUnavailable)
+            {
+                try
+                {
+                    var rejection=JsonSerializer.Deserialize<RefreshRejection>(bytes.AsSpan(0,used),new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                        {UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow});
+                    if(rejection is not null && rejection.Verify(bffKey,(int)response.StatusCode,reference))throw new RefreshNotProcessed(rejection.RetryAfterSeconds);
+                }
+                catch(JsonException) { /* Generic proxy/malformed response has no admission proof. */ }
+            }
+            throw new HttpRequestException("Identity refresh rejected",null,response.StatusCode);
+        }
         return JsonSerializer.Deserialize<SessionTokens>(bytes.AsSpan(0,used),new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow})??throw new InvalidOperationException("Missing successor");
     }
@@ -48,7 +62,11 @@ public sealed record BffBudgets(TimeSpan Http,TimeSpan Owner,TimeSpan LockWait)
 }
 // Server-to-server value. Browser routes must never serialize it.
 public sealed record BffAccess(string AccessToken,Guid SessionId,long Version,bool RefreshDue);
-public sealed class BffError(string code):Exception(code) {public string Code {get;}=code;}
+// Trusted adapters only: HTTP creates this after verifying the nonce-bound receipt.
+public sealed class RefreshNotProcessed(int retryAfterSeconds):Exception("Refresh not processed")
+{public int RetryAfterSeconds {get;}=Math.Clamp(retryAfterSeconds,1,60);}
+public sealed class BffError(string code,int? retryAfterSeconds=null):Exception(code)
+{public string Code {get;}=code;public int? RetryAfterSeconds {get;}=retryAfterSeconds;}
 
 public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock,IIdentityRefresh identity,BffBudgets? budgets=null,IRefreshProbe? probe=null)
 {
@@ -103,12 +121,13 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     {
         using var waiting=CancellationTokenSource.CreateLinkedTokenSource(cancellation);waiting.CancelAfter(limits.LockWait);
         await using var c=await store.Source.OpenConnectionAsync(waiting.Token);await using var tx=await c.BeginTransactionAsync(waiting.Token);
+        BffStore.RequireServerVersion(c.PostgreSqlVersion);
         await BffStore.Execute(c,"SELECT set_config('lock_timeout',@wait,true),set_config('transaction_timeout',@total,true)",waiting.Token,
             ("wait",((long)limits.LockWait.TotalMilliseconds).ToString()+"ms"),("total",((long)(limits.LockWait+limits.Owner).TotalMilliseconds).ToString()+"ms"));
         Row? row;
         try {row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",waiting.Token,("cookie",Cookie(cookie)));}
         catch(Exception e) when(e is PostgresException {SqlState:"55P03"} || e is OperationCanceledException && !cancellation.IsCancellationRequested)
-        {Busy.Add(1);throw new BffError("BFF_BUSY");}
+        {Busy.Add(1);throw new BffError("BFF_BUSY",1);}
         var cleanupBudget=TimeSpan.FromTicks(limits.Owner.Ticks/5);
         using var owner=CancellationTokenSource.CreateLinkedTokenSource(cancellation);owner.CancelAfter(limits.Owner-cleanupBudget);
         var ct=owner.Token;
@@ -128,6 +147,8 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             }
         }
         if(!Due(row,activity)){Coalesced.Add(1);await tx.CommitAsync(ct);return Access(row);}
+        if(journal.Has("retry_not_before") && journal.Time("retry_not_before")>Now)
+            throw new BffError("BFF_BUSY",Math.Max(1,(int)Math.Ceiling((journal.Time("retry_not_before")-Now).TotalSeconds)));
         var operation=Guid.NewGuid();var dispatched=false;var commitAttempted=false;
         try
         {
@@ -162,6 +183,21 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             await Clear(id,operation,version,ct);
             return new(successor.AccessToken,successor.SessionId,version+1,false);
         }
+        catch(RefreshNotProcessed rejection) when(dispatched && !commitAttempted)
+        {
+            // B holds the durable retry deadline and CAS-clears ONLY this dispatch.
+            // A still holds the session lock. Tokens/version/foreground remain unchanged.
+            using var cleanup=new CancellationTokenSource(cleanupBudget);
+            await using var marker=await store.Source.OpenConnectionAsync(cleanup.Token);
+            var streak=Math.Min(6,journal.Get<int>("admission_rejections")+1);
+            var retry=Math.Max(rejection.RetryAfterSeconds,Math.Min(30,1<<(streak-1)));
+            var cleared=await BffStore.Execute(marker,"""
+                UPDATE bff_refresh_journal SET attempt_id=NULL,source_version=NULL,retry_not_before=@retry,admission_rejections=@streak
+                WHERE session_id=@id AND attempt_id=@op AND source_version=@version
+                """,cleanup.Token,("retry",Now.AddSeconds(retry)),("streak",streak),("id",id),("op",operation),("version",version));
+            if(cleared!=1)throw new BffError("REAUTHENTICATION_REQUIRED");
+            throw new BffError("BFF_BUSY",retry);
+        }
         catch(Exception failure) when(dispatched)
         {
             // Never overwrite a possibly committed successor after losing its commit acknowledgment.
@@ -186,7 +222,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     private async Task Clear(Guid id,Guid attempt,long version,CancellationToken cancellation)
     {
         await using var c=await store.Source.OpenConnectionAsync(cancellation);
-        await BffStore.Execute(c,"UPDATE bff_refresh_journal SET attempt_id=NULL,source_version=NULL WHERE session_id=@id AND attempt_id=@op AND source_version=@version",cancellation,("id",id),("op",attempt),("version",version));
+        await BffStore.Execute(c,"UPDATE bff_refresh_journal SET attempt_id=NULL,source_version=NULL,retry_not_before=NULL,admission_rejections=0 WHERE session_id=@id AND attempt_id=@op AND source_version=@version",cancellation,("id",id),("op",attempt),("version",version));
     }
     // Local cookie closure only; Identity logout orchestration is a later browser slice.
     public async Task Close(string cookie,CancellationToken cancellation=default)

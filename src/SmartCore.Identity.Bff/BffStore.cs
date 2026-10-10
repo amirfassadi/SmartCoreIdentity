@@ -9,14 +9,19 @@ public sealed class BffStore(string connectionString):IAsyncDisposable
     public async Task Migrate(CancellationToken cancellation=default)
     {
         await using var c=await Source.OpenConnectionAsync(cancellation);
+        RequireServerVersion(c.PostgreSqlVersion);
         await c.Execute("SELECT pg_advisory_lock(640902)");
         try
         {
             var present=(await c.One("SELECT to_regclass('bff_schema_versions') IS NOT NULL AS present"))!.Get<bool>("present");
             if(!present) await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","001_bff_sessions.sql"),cancellation));
+            var updated=(await c.One("SELECT EXISTS(SELECT 1 FROM bff_schema_versions WHERE version=2) AS present"))!.Get<bool>("present");
+            if(!updated)await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","002_refresh_admission.sql"),cancellation));
         }
         finally {await c.Execute("SELECT pg_advisory_unlock(640902)");}
     }
+    public static void RequireServerVersion(Version version)
+    {if(version.Major<17)throw new InvalidOperationException("BFF requires PostgreSQL 17 or later for transaction_timeout; run startup migration before accepting requests.");}
     internal static async Task<Row?> One(NpgsqlConnection c,string query,CancellationToken cancellation,params (string,object?)[] args)
     {
         await using var command=new NpgsqlCommand(query,c);

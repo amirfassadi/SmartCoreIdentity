@@ -158,7 +158,9 @@ if(authenticationEnabled)
     app.MapPost("/auth/refresh",async(HttpRequest request,Secrets secrets,AuthenticationService service)=>
     {
         Bff(request,secrets);
-        return Results.Ok(await service.Refresh(await Read<RefreshRequest>(request),bffClient));
+        var body=await Read<RefreshRequest>(request);
+        request.HttpContext.Items["refresh-invoked"]=true;
+        return Results.Ok(await service.Refresh(body,bffClient));
     }).RequireRateLimiting("authentication-transport");
     app.MapGet("/me",async(HttpRequest request,Secrets secrets,AccessTokens access,AuthenticationService service)=>
         Results.Ok(await service.Self(Proof(request,secrets,access)))).RequireRateLimiting("authentication-transport");
@@ -254,8 +256,22 @@ app.Run();
 static Task WriteError(HttpContext context,int status,string code,string? nextAction=null)
 {
     context.Response.StatusCode=status;
+    var key=context.RequestServices.GetRequiredService<IConfiguration>()["Identity:BffClientKey"];
+    if(context.Request.Path=="/auth/refresh" && !context.Items.ContainsKey("refresh-invoked")
+        && RefreshRejection.Allowed(status,code) && key is {Length:>=32}
+        && CryptographicKeyMatches(key,context.Request.Headers["X-Bff-Client-Key"].ToString())
+        && Guid.TryParseExact(context.Request.Headers["X-Refresh-Request"].ToString(),"D",out var reference) && reference!=Guid.Empty)
+    {
+        var retry=status==429?60:2;
+        context.Response.Headers.RetryAfter=retry.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return context.Response.WriteAsJsonAsync(RefreshRejection.Create(key,status,code,reference,retry));
+    }
     return context.Response.WriteAsJsonAsync(new {error=new {code,message="Request could not be completed.",nextAction},traceId=context.TraceIdentifier});
 }
+
+static bool CryptographicKeyMatches(string expected,string supplied)=>System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+    System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(expected)),
+    System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(supplied)));
 
 static async Task<T> Read<T>(HttpRequest request)
 {

@@ -17,3 +17,45 @@ BffActivity is a trusted server enum, never a raw browser assertion. Background 
 BffRefreshChecks is part of the native PostgreSQL C# harness. It uses two independent BffStore data sources/pools, actual Identity authentication/refresh transactions and a transport fault seam. It checks 20 parallel foreground decisions for exactly one rotation and no reuse, valid-access reads while rotation is paused, expired-access waiting longer than two seconds, five owner-loss stages, server-side PostgreSQL termination of the owning BFF connection, lost/malformed/timed-out responses, cancellation after dispatch, foreground after fresh background rotation, thirty-minute polling expiry, token erasure, definitive revocation excluded from uncertainty, and distinct-session uncertainty aggregation.
 
 The transport seam calls the actual Identity service directly. Additional controlled loopback HTTP bridge checks exercise the concrete adapter: twenty parallel decisions on two instances send one authenticated HTTP refresh, an HTTP abort after the real Identity commit is never retried, and a redirect never forwards secrets. This bridge is not the complete Identity middleware pipeline. These tests do not prove browser cookie/CSRF endpoints, process-kill behavior, database failover durability, pool exhaustion or production load. Those remain the ordered acceptance work before adjacent browser features and real users. The core has no autonomous purge or production retention decision. Runtime 779c6ab passed native PostgreSQL CI with 25 BFF checks within 224 total C# checks, 230 emitted-event validations and five existing API HTTP smokes. Exact SHA/run/job evidence and limits are in [VERIFICATION.md](VERIFICATION.md).
+
+## Admission rejection contract (authentication subset 0.7.0)
+
+Identity issues a `NotProcessed` receipt only for authenticated refresh requests
+rejected before invoking `AuthenticationService.Refresh`: `429 RATE_LIMITED`, or
+reserved pre-invocation `503 AUTHENTICATION_BUSY`. Refresh presently performs no
+KDF, so its current overload rejection is the admission/rate boundary. Dependency
+`TEMPORARILY_UNAVAILABLE` is never a receipt. A fresh `X-Refresh-Request` UUID,
+status/code pair and retry delay are bound with domain-separated HMAC-SHA256 using
+the BFF client key. The adapter validates the bounded body and exact nonce. This
+assumes a trusted Identity origin/TLS termination and confidential client key; it
+is not protection from a proxy that holds that key. Unsigned proxy 502/503/504,
+wrong nonce, invalid proof, redirect, lost response and malformed body remain
+uncertain. HTTP status alone never authorizes predecessor retry.
+
+After a valid receipt the owner CAS-clears only its journal attempt/source version
+using connection B, preserving the session token bundle, version and foreground
+evidence. B also durably stores the next retry deadline and rejection streak;
+all instances enforce it under the session row lock. Return `BFF_BUSY` with the
+core's `RetryAfterSeconds` (future browser host must emit `Retry-After`). Backoff
+is 1/2/4/8/16/30 seconds, at least the signed 1–60 second Identity delay; a
+successful successor clears this streak. There is no in-call retry loop. Cleanup
+failure leaves durable dispatch evidence for conservative recovery.
+
+Run `BffStore.Migrate` before serving requests: startup rejects PostgreSQL below
+17 with an explicit `transaction_timeout` requirement. Separate BFF migration
+002 adds admission retry evidence; Identity migrations remain unchanged. The
+refresh path also checks the server version before setting transaction timeout.
+
+Test-only peers run the built test executable in separate OS processes, with
+credentials sent over redirected stdin rather than arguments/output. Each owns
+its own pools and HTTP client. Twenty requests across two processes must make
+one real Identity HTTP rotation. At each of the five fault boundaries the parent
+forcibly kills the paused owner, then starts an independent recovery process.
+This exercises OS death/connection release, not a thrown simulated crash. It
+still uses one PostgreSQL server and a controlled Identity HTTP bridge: replicated
+failover, browser host, production load and pool saturation remain release gates.
+
+Browser orchestration must invoke idempotent Identity logout before erasing the
+access token locally. Identity 401 on a cached access resource call must close the
+BFF session; neither upstream logout nor that resource-call handler exists in
+this core-only slice. They must precede exposing browser routes.

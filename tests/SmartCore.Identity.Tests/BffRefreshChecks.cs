@@ -20,13 +20,18 @@ internal static class BffRefreshChecks
         void Check(bool value,string label){if(!value)throw new Exception("FAIL: "+label);Console.WriteLine("PASS: BFF "+label);count++;}
         async Task Reauth(Func<Task> work)
         {try{await work();}catch(BffError e)when(e.Code=="REAUTHENTICATION_REQUIRED"){return;}throw new Exception("Expected BFF reauthentication");}
+        try{BffStore.RequireServerVersion(new Version(16,9));throw new Exception("Accepted PostgreSQL 16");}
+        catch(InvalidOperationException e)when(e.Message.Contains("PostgreSQL 17",StringComparison.Ordinal)){}
+        BffStore.RequireServerVersion(new Version(17,0));
+        Check(true,"PostgreSQL 16 is rejected with an explicit startup error and 17 is accepted");
         var aConfig=new NpgsqlConnectionStringBuilder(connection){ApplicationName="bff-a-test"};
         var bConfig=new NpgsqlConnectionStringBuilder(connection){ApplicationName="bff-b-test"};
         await using var storeA=new BffStore(aConfig.ConnectionString);await using var storeB=new BffStore(bConfig.ConnectionString);
         await storeA.Migrate();await storeB.Migrate();
         await using var sql=await db.Source.OpenConnectionAsync();
         await sql.Execute("TRUNCATE bff_sessions CASCADE");
-        var secrets=new Secrets(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+        var macKey=Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));var materialKey=Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var secrets=new Secrets(macKey,materialKey);
         var signer=new AccessTokens(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),clock);
         var auth=new AuthenticationService(db,identitySecrets,clock,new PostgresAuthenticationIssuanceGate(),signer);
         const string client="bff-core-tests",password="bff native fixture password";
@@ -167,6 +172,17 @@ internal static class BffRefreshChecks
                 if(context.Request.Headers["X-Bff-Client-Key"]!=httpKey || context.Request.Headers["X-Bff-Subject"]!=httpSubject)
                 {context.Response.StatusCode=401;return;}
                 if(httpMode=="redirect"){context.Response.StatusCode=307;context.Response.Headers.Location="/trap";return;}
+                if(httpMode is "rate" or "busy" or "unsigned" or "wrong-nonce" or "bad-proof" or "proxy502" or "proxy504")
+                {
+                    var status=httpMode=="rate"?429:httpMode=="proxy502"?502:httpMode=="proxy504"?504:503;
+                    context.Response.StatusCode=status;
+                    if(httpMode is "unsigned" or "proxy502" or "proxy504")
+                    {await context.Response.WriteAsJsonAsync(new {code="AUTHENTICATION_BUSY"});return;}
+                    var reference=Guid.Parse(context.Request.Headers["X-Refresh-Request"].ToString());
+                    var receipt=RefreshRejection.Create(httpKey,status,status==429?"RATE_LIMITED":"AUTHENTICATION_BUSY",httpMode=="wrong-nonce"?Guid.NewGuid():reference,2);
+                    if(httpMode=="bad-proof")receipt=receipt with {Proof=Convert.ToBase64String(new byte[32])};
+                    await context.Response.WriteAsJsonAsync(receipt);return;
+                }
                 var req=await context.Request.ReadFromJsonAsync<RefreshRequest>(cancellationToken:context.RequestAborted);
                 if(req is null){context.Response.StatusCode=400;return;}
                 try
@@ -195,6 +211,62 @@ internal static class BffRefreshChecks
             await Reauth(async()=>{await networkA.RefreshIfDue(redirected.Cookie,BffActivity.UserAction);});
             Check(httpCalls==beforeRedirect+1 && trapCalls==0 && await Generation(redirected.Tokens)==0,
                 "HTTP redirect is not followed and never forwards refresh secrets to another route");
+            foreach(var mode in new[]{"rate","busy"})
+            {
+                httpMode=mode;var limited=await Fixture();advance(TimeSpan.FromMinutes(13));var before=httpCalls;
+                async Task Busy(BffRefresh core)
+                {
+                    try{await core.RefreshIfDue(limited.Cookie,BffActivity.UserAction);}
+                    catch(BffError e)when(e.Code=="BFF_BUSY" && e.RetryAfterSeconds>=2){return;}
+                    throw new Exception("Expected retryable admission response");
+                }
+                await Busy(networkA);var preserved=await State(limited.Tokens);
+                Check(preserved.Get<string>("status")=="Active" && preserved.Get<long>("version")==0 && preserved.Has("sealed_tokens")
+                    && await Generation(limited.Tokens)==0 && (await sql.One("SELECT attempt_id FROM bff_refresh_journal WHERE session_id=@id",("id",preserved.Get<Guid>("id"))))!.Has("attempt_id")==false,
+                    mode+" verified NotProcessed CAS clears dispatch without erasing or consuming tokens");
+                await Task.WhenAll(Enumerable.Range(0,20).Select(i=>Busy(i%2==0?networkA:networkB)));
+                Check(httpCalls==before+1,"shared admission retry deadline prevents a twenty-request cross-instance hot loop");
+                advance(TimeSpan.FromSeconds(3));await Busy(networkB);
+                advance(TimeSpan.FromSeconds(3));httpMode="normal";
+                var retry=await networkA.RefreshIfDue(limited.Cookie,BffActivity.UserAction);
+                Check(retry.Version==1 && await Generation(limited.Tokens)==1,"bounded later retry after "+mode+" rotates the unconsumed predecessor exactly once");
+            }
+            foreach(var mode in new[]{"unsigned","wrong-nonce","bad-proof","proxy502","proxy504"})
+            {
+                httpMode=mode;var untrusted=await Fixture();advance(TimeSpan.FromMinutes(13));var before=httpCalls;
+                await Reauth(async()=>{await networkA.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);});
+                await Reauth(async()=>{await networkB.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);});
+                Check(httpCalls==before+1 && (await State(untrusted.Tokens)).Has("uncertain_at"),mode+" rejection remains uncertain and is never retried");
+            }
+            httpMode="normal";
+            BffPeerConfig Config(string cookie,RefreshStage? stage=null)=>new(connection,macKey,materialKey,address+"/",httpKey,httpSubject,Timestamps.Now(clock),cookie,stage);
+            var processes=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeProcesses=httpCalls;
+            await using(var peerA=await BffProcessPeer.Peer.Start(Config(processes.Cookie)))
+            await using(var peerB=await BffProcessPeer.Peer.Start(Config(processes.Cookie)))
+            {
+                await Task.WhenAll(peerA.Go(),peerB.Go());
+                var output=await Task.WhenAll(peerA.Line(),peerB.Line());
+                Check(output.All(x=>x=="DONE:"+string.Join(',',Enumerable.Repeat(1,10))) && httpCalls==beforeProcesses+1 && await Generation(processes.Tokens)==1,
+                    "twenty requests in two independent OS processes make exactly one Identity HTTP rotation");
+            }
+            foreach(var stage in Enum.GetValues<RefreshStage>())
+            {
+                var killed=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeKill=httpCalls;
+                await using(var victim=await BffProcessPeer.Peer.Start(Config(killed.Cookie,stage)))
+                {
+                    await victim.Go();
+                    if(await victim.Line()!="PAUSED:"+stage)throw new Exception("Peer missed requested crash boundary");
+                    await victim.Kill();
+                }
+                await using var survivor=await BffProcessPeer.Peer.Start(Config(killed.Cookie));await survivor.Go();var outcome=await survivor.Line();
+                if(stage is RefreshStage.BeforeDispatch or RefreshStage.SuccessorCommitted)
+                    Check(outcome=="DONE:"+string.Join(',',Enumerable.Repeat(1,10)) && httpCalls==beforeKill+1 && await Generation(killed.Tokens)==1,
+                        "actual process kill at "+stage+" recovers one successor without replay");
+                else
+                    Check(outcome=="ERROR:REAUTHENTICATION_REQUIRED" && httpCalls==beforeKill+(stage==RefreshStage.DispatchCommitted?0:1)
+                        && !(await State(killed.Tokens)).Has("sealed_tokens"),
+                        "actual process kill at "+stage+" releases row lock but retains durable marker; survivor never resends");
+            }
             await host.StopAsync();
         }
         var closeFixture=await Fixture();var closeCore=Core(storeA,new Transport(auth,client));await closeCore.Close(closeFixture.Cookie);
