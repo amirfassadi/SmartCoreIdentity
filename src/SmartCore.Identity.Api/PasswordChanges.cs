@@ -129,6 +129,8 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
                 throw new ApiError(409,"IDEMPOTENCY_CONFLICT");
             return new(request.OperationId,prior.Get<string>("stage"));
         }
+        // KDF or lock wait can cross access expiry; admission requires a currently valid proof.
+        _=access.Read(bearer,client);
         var current=await Evidence(c,proof.PersonId); var now=Timestamps.Now(clock);
         var session=await c.One("SELECT * FROM auth_sessions WHERE id=@id FOR UPDATE",("id",proof.SessionId));
         var family=await c.One("SELECT status FROM auth_refresh_families WHERE session_id=@id",("id",proof.SessionId));

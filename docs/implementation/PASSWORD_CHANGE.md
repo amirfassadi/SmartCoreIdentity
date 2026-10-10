@@ -4,7 +4,7 @@ Architecture A remains selected. Migration 005 adds immutable request/material b
 
 ## Admission and transaction owners
 
-`Identity__PasswordChangeEnabled=true` additionally enables POST `/auth/password/change` with the authenticated test BFF key and signed access proof. See [authentication OpenAPI 0.2.0](../../contracts/authentication.openapi.yaml). The request is `{operationId,currentPassword,newPassword}`; the nonempty UUID is the stable idempotency identity. Policy is the existing 15–128 character development policy. Validate policy, verify the old password and derive the new Argon2 encoding before taking any issuance lock. Under the Person gate, recheck Credential identity/hash, Ready/ack, signed epoch, Session ownership/client/status, idle/absolute deadline and active family.
+`Identity__PasswordChangeEnabled=true` additionally enables POST `/auth/password/change` with the authenticated test BFF key and signed access proof. See [authentication OpenAPI 0.2.0](../../contracts/authentication.openapi.yaml). The request is `{operationId,currentPassword,newPassword}`; the nonempty UUID is the stable idempotency identity. Policy is the existing 15–128 character development policy. Validate policy, verify the old password and derive the new Argon2 encoding before taking any issuance lock. Under the Person gate, revalidate JWT lifetime after KDF/lock wait and recheck Credential identity/hash, Ready/ack, signed epoch, Session ownership/client/status, idle/absolute deadline and active family.
 
 | Durable boundary | Owner and locks | Evidence |
 |---|---|---|

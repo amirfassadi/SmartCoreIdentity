@@ -32,6 +32,17 @@ internal static class PasswordChangeChecks
         Check((await sql.One("SELECT epoch FROM auth_issuance_state WHERE person_id=@id",("id",person)))!.Get<long>("epoch")==epoch
             && (await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",session.SessionId)))!.Get<string>("status")=="Active",
             "password policy and invalid proof reject before fencing or Session closure");
+        var expiryGate=new PausedGate();
+        var delayedChanges=new PasswordChanges(db,secrets,clock,expiryGate,access,credential);
+        var expiryRequest=new ChangePasswordRequest(Guid.NewGuid(),password,"valid delayed password admission");
+        var delayed=delayedChanges.Accept(session.AccessToken,client,expiryRequest);
+        await expiryGate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        advance(TimeSpan.FromSeconds(900));expiryGate.Resume.TrySetResult();
+        await Error(async()=>{await delayed;},"UNAUTHORIZED");
+        Check(await sql.One("SELECT id FROM auth_credential_change_intents WHERE id=@id",("id",expiryRequest.OperationId)) is null
+            && (await sql.One("SELECT epoch FROM auth_issuance_state WHERE person_id=@id",("id",person)))!.Get<long>("epoch")==epoch,
+            "access proof expiring during KDF or gate wait cannot admit a mutation or advance epoch");
+        session=(await Login()).Session;
         var other=(await Login()).Session;
         var request=new ChangePasswordRequest(Guid.NewGuid(),password,"first changed password for tests");
         var pausedGate=new PausedGate();var racingAuth=new AuthenticationService(db,secrets,clock,pausedGate,access);
