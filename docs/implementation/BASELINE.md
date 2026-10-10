@@ -51,6 +51,8 @@ These values resolve the archived conflicting values for this phase only. Passwo
 
 The request authorizes forward progress on these items. It does not turn unchecked items into completed work. See [execution guide](RUNBOOK.md) and [verification evidence](VERIFICATION.md).
 
+The next authentication slice's transaction alternatives and preserved owner policies are prepared in [authentication transaction decision](AUTH_TRANSACTION_DECISION.md). A shared Credential/Session mutation transaction has not been selected by general implementation authorization.
+
 ## Registration setup/completion — revision 0.2.0
 
 `POST /auth/register/setup` accepts the original code and binding from a freshly verified conflicting attempt. It only admits a separate setup challenge for the existing PendingCredential registration, with a newly delivered code different from the registration code. Delivery uses the stored registration/Person association, never a caller-supplied destination. Verified conflict now returns RequestSetup or SignIn; the conflicting attempt's password is always discarded.
