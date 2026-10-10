@@ -48,7 +48,13 @@ public sealed class AuthenticationService(Database db,Secrets secrets,TimeProvid
         var evidence=match is null ? null : await Evidence(c,match.Get<Guid>("id"));
         var observed=evidence is null ? null : await c.One("SELECT epoch FROM auth_issuance_state WHERE person_id=@id",("id",evidence.Get<Guid>("id")));
         var observedEpoch=observed?.Get<long>("epoch") ?? 0;
-        var valid=await Secrets.VerifyPassword(request.Password,evidence?.Optional<string>("password_hash") ?? Dummy);
+        var failures=new PasswordFailures(db,clock);
+        var admitted=evidence is null || await failures.Allowed(evidence.Get<Guid>("id"));
+        // Throttled and unknown contacts perform dummy work: no contact-enumeration timing shortcut.
+        var verified=await PasswordWork.Verify(request.Password,admitted?evidence?.Optional<string>("password_hash") ?? Dummy:Dummy);
+        if(!admitted) throw Denied(); // Admission refusal is not evidence of an invalid password.
+        var valid=admitted && verified;
+        if(evidence is not null && admitted) await failures.Record(evidence.Get<Guid>("id"),valid);
         var reason=Failure(evidence) ?? (!valid?"InvalidPassword":null);
         if(reason is not null)
         {

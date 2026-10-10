@@ -78,8 +78,9 @@ public sealed class CredentialChanges(Database db,Secrets secrets,TimeProvider c
 }
 
 // Session-owned admission/fencing and reconciliation, separated from Credential commits.
+public interface IPasswordChangeRunner {Task Tick();}
 public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clock,IAuthenticationIssuanceGate gate,
-    AccessTokens access,CredentialChanges credentials)
+    AccessTokens access,CredentialChanges credentials) : IPasswordChangeRunner
 {
     private static ApiError Denied()=>new(401,"UNAUTHORIZED");
     private static Task<Row?> Evidence(NpgsqlConnection c,Guid person)=>c.One("""
@@ -91,7 +92,7 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
         && row.Get<string>("person_status")=="Active" && row.Get<string>("registration_status")=="Ready"
         && row.Get<string>("phase")=="ReadyAcknowledged";
     private static Task<Row?> Load(NpgsqlConnection c,Guid id)=>c.One("""
-        SELECT i.*,m.session_id,m.client_id,m.expected_hash_mac,m.replacement_hash_mac,m.sealed_hash,m.expires_at
+        SELECT i.*,m.session_id,m.client_id,m.expected_hash_mac,m.replacement_hash_mac,m.sealed_hash,m.expires_at,m.replay_password_hash,m.replay_until
         FROM auth_credential_change_intents i JOIN auth_change_material m ON m.intent_id=i.id WHERE i.id=@id
         """,("id",id));
     public async Task<ChangeStatus> Status(Guid id)
@@ -106,28 +107,31 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
         Input.Require(request.OperationId!=Guid.Empty && request.CurrentPassword is {Length:>=1 and <=128}
             && request.NewPassword is {Length:>=15 and <=128});
         var proof=access.Read(bearer,client);
-        var requestMac=secrets.Mac("password-change-request",proof.PersonId.ToString(),proof.SessionId.ToString(),client,
-            request.OperationId.ToString(),request.CurrentPassword,request.NewPassword);
+        // Metadata only: never create a fast offline oracle over either raw password.
+        var requestMac=secrets.Mac("password-change-request-v2",proof.PersonId.ToString(),proof.SessionId.ToString(),client,request.OperationId.ToString());
         await using var c=await db.Source.OpenConnectionAsync();
         var prior=await Load(c,request.OperationId);
         if(prior is not null)
         {
-            if(prior.Get<Guid>("person_id")!=proof.PersonId || prior.Get<Guid>("session_id")!=proof.SessionId
-                || prior.Get<string>("client_id")!=client || !Secrets.Equal(prior.Get<byte[]>("request_mac"),requestMac)) throw new ApiError(409,"IDEMPOTENCY_CONFLICT");
-            return new(request.OperationId,prior.Get<string>("stage"));
+            return await Replay(prior,proof,request,requestMac);
         }
         var evidence=await Evidence(c,proof.PersonId) ?? throw Denied();
-        if(!Ready(evidence) || !await Secrets.VerifyPassword(request.CurrentPassword,evidence.Get<string>("password_hash"))) throw Denied();
-        var replacement=await Secrets.HashPassword(request.NewPassword);
+        if(!Ready(evidence)) throw Denied();
+        var failures=new PasswordFailures(db,clock);
+        if(!await failures.Allowed(proof.PersonId)) throw Denied();
+        var verified=await PasswordWork.Verify(request.CurrentPassword,evidence.Get<string>("password_hash"));
+        await failures.Record(proof.PersonId,verified);
+        if(!verified) throw Denied();
+        var replacement=await PasswordWork.Hash(request.NewPassword);
         await using var tx=await c.BeginTransactionAsync();
         var state=await gate.Acquire(tx,proof.PersonId);
         // A concurrent identical admission must replay instead of advancing epoch twice.
         prior=await Load(c,request.OperationId);
         if(prior is not null)
         {
-            if(prior.Get<Guid>("person_id")!=proof.PersonId || !Secrets.Equal(prior.Get<byte[]>("request_mac"),requestMac))
-                throw new ApiError(409,"IDEMPOTENCY_CONFLICT");
-            return new(request.OperationId,prior.Get<string>("stage"));
+            // Release all Session locks before replay's Argon2 comparison.
+            await tx.RollbackAsync();
+            return await Replay(prior,proof,request,requestMac);
         }
         // KDF or lock wait can cross access expiry; admission requires a currently valid proof.
         _=access.Read(bearer,client);
@@ -143,15 +147,15 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
         var operation=Guid.NewGuid();
         await c.Execute("""
             INSERT INTO auth_credential_change_intents(id,person_id,kind,request_mac,verified_at,created_at,target_epoch,
-              credential_operation_id,expected_credential_id,protected_material_reference,stage,next_attempt_at)
-            VALUES(@id,@person,'ChangePassword',@mac,@now,@now,@epoch,@op,@credential,@reference,'Fenced',@now)
+              credential_operation_id,expected_credential_id,protected_material_reference,stage,next_attempt_at,request_version)
+            VALUES(@id,@person,'ChangePassword',@mac,@now,@now,@epoch,@op,@credential,@reference,'Fenced',@now,2)
             """,("id",request.OperationId),("person",proof.PersonId),("mac",requestMac),("now",now),("epoch",state.Epoch+1),
             ("op",operation),("credential",current.Get<Guid>("id")),("reference","auth-change-material:"+request.OperationId));
-        await c.Execute("INSERT INTO auth_change_material VALUES(@id,@session,@client,@expected,@replacement,@sealed,@expiry)",
+        await c.Execute("INSERT INTO auth_change_material VALUES(@id,@session,@client,@expected,@replacement,@sealed,@expiry,@hash,@replay)",
             ("id",request.OperationId),("session",proof.SessionId),("client",client),
             ("expected",secrets.Mac("credential-evidence",current.Get<string>("password_hash"))),
             ("replacement",secrets.Mac("credential-evidence",replacement)),
-            ("sealed",secrets.Seal(replacement,"password-change:"+request.OperationId)),("expiry",now.AddHours(24)));
+            ("sealed",secrets.Seal(replacement,"password-change:"+request.OperationId)),("expiry",now.AddHours(24)),("hash",replacement),("replay",now.AddSeconds(900)));
         await c.Execute("UPDATE auth_issuance_state SET epoch=epoch+1,pending_operation_id=@op WHERE person_id=@person",("op",request.OperationId),("person",proof.PersonId));
         // Gate serializes all Session writers. Lock Session IDs in stable order before families.
         await c.Rows("SELECT id FROM auth_sessions WHERE person_id=@person AND status='Active' ORDER BY id FOR UPDATE",("person",proof.PersonId));
@@ -162,6 +166,18 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
             """,("now",now),("person",proof.PersonId));
         await tx.CommitAsync();
         return new(request.OperationId,"Fenced");
+    }
+    private async Task<ChangeStatus> Replay(Row prior,AccessProof proof,ChangePasswordRequest request,byte[] requestMac)
+    {
+        if(prior.Get<short>("request_version")!=2 || prior.Get<Guid>("person_id")!=proof.PersonId || prior.Get<Guid>("session_id")!=proof.SessionId
+            || prior.Get<string>("client_id")!=proof.ClientId || !Secrets.Equal(prior.Get<byte[]>("request_mac"),requestMac)) throw new ApiError(409,"IDEMPOTENCY_CONFLICT");
+        if(!prior.Has("replay_password_hash") || prior.Time("replay_until")<=Timestamps.Now(clock)) throw Denied();
+        var failures=new PasswordFailures(db,clock);
+        if(!await failures.Allowed(proof.PersonId)) throw Denied();
+        var verified=await PasswordWork.Verify(request.NewPassword,prior.Get<string>("replay_password_hash"));
+        await failures.Record(proof.PersonId,verified);
+        if(!verified) throw new ApiError(409,"IDEMPOTENCY_CONFLICT");
+        return new(request.OperationId,prior.Get<string>("stage"));
     }
     public async Task Process(Guid id)
     {
@@ -187,16 +203,20 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
         await using var c=await db.Source.OpenConnectionAsync(); await using var tx=await c.BeginTransactionAsync();
         var state=await gate.Acquire(tx,intent.Get<Guid>("person_id"));
         var id=intent.Get<Guid>("id"); var current=await Load(c,id);
-        if(current?.Get<string>("stage")=="Reconciled") return;
+        if(current?.Get<string>("stage")=="Reconciled")
+        {
+            if(operatorAction is not null) {await Audit(c,id,operatorAction,receipt.Get<string>("outcome"));await tx.CommitAsync();}
+            return;
+        }
         if(state.PendingOperationId!=id || state.Epoch!=intent.Get<long>("target_epoch")) throw new InvalidOperationException("IntegrityConflict");
         await c.Execute("UPDATE auth_credential_change_intents SET stage='Reconciled',resolved_at=@now,last_classification=NULL WHERE id=@id",("now",Timestamps.Now(clock)),("id",id));
         await c.Execute("UPDATE auth_issuance_state SET pending_operation_id=NULL WHERE person_id=@person",("person",intent.Get<Guid>("person_id")));
         await c.Execute("UPDATE auth_change_material SET sealed_hash=NULL WHERE intent_id=@id",("id",id));
-        if(operatorAction is not null) await Audit(c,id,operatorAction);
+        if(operatorAction is not null) await Audit(c,id,operatorAction,receipt.Get<string>("outcome"));
         await tx.CommitAsync();
     }
-    private Task<int> Audit(NpgsqlConnection c,Guid id,string action)=>c.Execute("INSERT INTO auth_change_operator_audit VALUES(@audit,@intent,@action,@now)",
-        ("audit",Guid.NewGuid()),("intent",id),("action",action),("now",Timestamps.Now(clock)));
+    private Task<int> Audit(NpgsqlConnection c,Guid id,string action,string outcome)=>c.Execute("INSERT INTO auth_change_operator_audit VALUES(@audit,@intent,@action,@now,@outcome)",
+        ("audit",Guid.NewGuid()),("intent",id),("action",action),("now",Timestamps.Now(clock)),("outcome",outcome));
     // Called only by a separately authenticated, loopback-only development operator adapter.
     // ResolveNotApplied obtains a Credential lock and durable terminal receipt. It is never a force unlock.
     public async Task<ChangeStatus> Recover(Guid id,string action)
@@ -204,7 +224,11 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
         Input.Require(action is "Retry" or "ResolveNotApplied");
         Row intent;
         await using(var c=await db.Source.OpenConnectionAsync()) intent=await Load(c,id) ?? throw new ApiError(404,"NOT_FOUND");
-        if(intent.Get<string>("stage")=="Reconciled") return new(id,"Reconciled");
+        if(intent.Get<string>("stage")=="Reconciled")
+        {
+            var outcome=await credentials.Outcome(intent.Get<Guid>("credential_operation_id")) ?? throw new InvalidOperationException("IntegrityConflict");
+            await Reconcile(intent,outcome,action);return new(id,"Reconciled");
+        }
         if(action=="ResolveNotApplied")
         {
             var receipt=await credentials.Apply(intent,rejectWithoutApplying:true);
@@ -217,7 +241,7 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
             var state=await gate.Acquire(tx,intent.Get<Guid>("person_id"));
             if(state.PendingOperationId!=id || state.Epoch!=intent.Get<long>("target_epoch")) throw new ApiError(409,"RECOVERY_CONFLICT");
             await c.Execute("UPDATE auth_credential_change_intents SET stage='AwaitingCredential',resolved_at=NULL,attempts=0,next_attempt_at=@now,last_classification=NULL WHERE id=@id AND stage<>'Reconciled'",("now",Timestamps.Now(clock)),("id",id));
-            await Audit(c,id,action);
+            await Audit(c,id,action,"Requeued");
             await tx.CommitAsync();
         }
         return await Status(id);
@@ -236,7 +260,7 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
                 """,("now",Timestamps.Now(clock)),("id",id));
             if(claim is null) continue;
             try {await Process(id);}
-            catch(Exception error) when(error is NpgsqlException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
+            catch(Exception error) when(error is not OperationCanceledException)
             {
                 var classification=error is InvalidOperationException && error.Message is "IntegrityConflict" or "DefinitivelyRejected"?error.Message:"OutcomeUnknown";
                 await c.Execute("""
@@ -252,18 +276,19 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
             WHERE stage IN ('Fenced','AwaitingCredential') AND attempts>=8 AND next_attempt_at<=@now
             """,("now",Timestamps.Now(clock)));
         await c.Execute("UPDATE auth_change_material SET sealed_hash=NULL WHERE expires_at<=@now AND sealed_hash IS NOT NULL",("now",Timestamps.Now(clock)));
+        await c.Execute("UPDATE auth_change_material SET replay_password_hash=NULL WHERE replay_until<=@now AND replay_password_hash IS NOT NULL",("now",Timestamps.Now(clock)));
     }
 }
 
-public sealed class PasswordChangeWorker(PasswordChanges changes,ILogger<PasswordChangeWorker> logger) : BackgroundService
+public sealed class PasswordChangeWorker(IPasswordChangeRunner changes,ILogger<PasswordChangeWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while(!stoppingToken.IsCancellationRequested)
         {
             try {await changes.Tick();}
-            catch(Exception error) when(error is NpgsqlException or InvalidOperationException)
-            {logger.LogWarning("Password reconciliation unavailable ({ErrorType})",error.GetType().Name);}
+            catch(Exception error) when(error is not OperationCanceledException)
+            {logger.LogWarning("Password reconciliation OutcomeUnknown ({ErrorType})",error.GetType().Name);}
             await Task.Delay(TimeSpan.FromSeconds(1),stoppingToken);
         }
     }

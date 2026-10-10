@@ -111,7 +111,7 @@ await worker.Tick();
 // Pending-registration setup uses a fresh verified conflict, distinct purpose-bound code,
 // and a durable candidate. None of these paths resets a Ready password.
 await db.Migrate();
-Check((await sql.Rows("SELECT version FROM schema_versions ORDER BY version")).Select(x=>x.Get<int>("version")).SequenceEqual(new[]{1,2,3,4,5}),"forward migrations apply once and replay safely");
+Check((await sql.Rows("SELECT version FROM schema_versions ORDER BY version")).Select(x=>x.Get<int>("version")).SequenceEqual(new[]{1,2,3,4,5,6}),"forward migrations apply once and replay safely");
 async Task<(RegistrationResult Original, VerifyRegistration Proof, SetupPending Challenge)> PendingSetup()
 {
     var originalRequest=Request();
@@ -213,6 +213,7 @@ Check(true,"consumed setup proof cannot replay after its absolute expiry");
 passed+=await AuthenticationStorageChecks.Run(db,clock,(await sql.One("SELECT person_id FROM registrations WHERE id=@id",("id",result.Result.RegistrationId)))!.Get<Guid>("person_id"));
 passed+=await AuthenticationChecks.Run(db,secrets,clock,clock.Advance,request.Email!,request.Password);
 passed+=await PasswordChangeChecks.Run(db,secrets,clock,clock.Advance,request.Email!,request.Password);
+passed+=await AuthenticationAdmissionChecks.Run(db,secrets,clock,clock.Advance);
 var events=await sql.Rows("SELECT payload::text AS payload FROM event_outbox UNION ALL SELECT payload::text AS payload FROM auth_domain_event_outbox UNION ALL SELECT payload::text AS payload FROM credential_change_outbox");
 var eventFile=Environment.GetEnvironmentVariable("SMARTCORE_EVENT_FIXTURES");
 if(eventFile is not null) await File.WriteAllTextAsync(eventFile,"["+string.Join(',',events.Select(x=>x.Get<string>("payload")))+"]");

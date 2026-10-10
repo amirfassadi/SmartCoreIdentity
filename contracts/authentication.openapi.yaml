@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.2.0
-  description: Opt-in development BFF adapter; zero refresh grace and immutable Session
-    expiry. Password change additionally requires PasswordChangeEnabled. No reset
-    endpoint. Operator recovery is a separately keyed, loopback-only Development adapter.
+  version: 0.3.0
+  description: Development BFF adapter. Authenticated BFF supplies a stable opaque
+    X-Bff-Subject for separate distributed admission budgets. Password change is separately
+    opt-in. Operator recovery HTTP is available only over a private Unix domain socket,
+    never on the application TCP listener. No reset endpoint.
 paths:
   /auth/login:
     post:
@@ -47,6 +48,15 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Login'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
   /auth/refresh:
     post:
       security:
@@ -88,6 +98,15 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Refresh'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
   /auth/logout:
     post:
       security:
@@ -126,6 +145,15 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Logout'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
   /me:
     get:
       security:
@@ -162,6 +190,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
   /auth/password/change:
     post:
       security:
@@ -211,6 +248,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
   /dev/auth/recovery/{id}:
     parameters:
     - name: id
@@ -295,6 +341,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    x-transport: private-unix-domain-socket
 components:
   schemas:
     Login:

@@ -16,7 +16,7 @@ dotnet=env.get('SMARTCORE_DOTNET','dotnet');project=str(root/'src/SmartCore.Iden
 subprocess.run([dotnet,'run','--project',project,'--no-build','--','--migrate'],env=env,check=True)
 opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 contract=yaml.safe_load((root/'contracts/authentication.openapi.yaml').read_text())
-bff={'X-Bff-Client-Key':env['Identity__BffClientKey']}
+bff={'X-Bff-Client-Key':env['Identity__BffClientKey'],'X-Bff-Subject':secrets.token_urlsafe(32)}
 def call(path,body=None,headers=None):
  method='get' if body is None else 'post'
  request=urllib.request.Request('http://127.0.0.1:5157'+path,
@@ -59,6 +59,8 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   status,result=call('/auth/login',login,bff);assert status==200
   session=result['session'];auth={**bff,'Authorization':'Bearer '+session['accessToken']}
   assert call('/me',headers=auth)[0]==200
+  assert call('/me',headers={'X-Bff-Client-Key':env['Identity__BffClientKey'],'Authorization':auth['Authorization']})[0]==400
+  for _ in range(35):assert call('/me',headers=auth)[0]==200 # Independent Session budget exceeds the former shared 30/min ceiling.
   assert call('/me',headers=bff)[0]==401
   assert call('/auth/refresh',{'refreshToken':session['refreshToken']},bff)[0]==400
   assert call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True}, {'X-Bff-Client-Key':'wrong-client'})[0]==401
