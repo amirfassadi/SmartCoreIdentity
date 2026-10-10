@@ -113,7 +113,44 @@ internal static class PasswordResetChecks
         await Denied(async()=>{await complete.Accept(client,staleProof);});
         Check(await sql.One("SELECT id FROM auth_credential_change_intents WHERE id=@id",("id",staleProof.OperationId)) is null,
             "recovery version replacement invalidates previously issued reset challenges before fencing");
+        var competition=await Ready();var competitionProof=await Proof(competition.Contact,competition.Recovery);
+        var paused=new PausedGate();var racing=new PasswordResetCompletion(db,secrets,clock,paused,changes);
+        var pendingReset=racing.Accept(client,competitionProof);
+        await paused.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var competingChange=await changes.Accept(competition.Token,client,new(Guid.NewGuid(),password,replacement));
+        paused.Resume.SetResult();await Denied(async()=>{await pendingReset;});
+        Check(await sql.One("SELECT id FROM auth_credential_change_intents WHERE id=@id",("id",competitionProof.OperationId)) is null,
+            "reset proof verified before a password-change fence is rejected when admission resumes");
+        await changes.Process(competingChange.OperationId);
+        var expiredFixture=await Ready();var expiredProof=await Proof(expiredFixture.Contact,expiredFixture.Recovery);
+        var expiryGate=new PausedGate();var expiringReset=new PasswordResetCompletion(db,secrets,clock,expiryGate,changes).Accept(client,expiredProof);
+        await expiryGate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));advance(TimeSpan.FromMinutes(10));expiryGate.Resume.SetResult();
+        await Denied(async()=>{await expiringReset;});
+        Check(await sql.One("SELECT id FROM auth_credential_change_intents WHERE id=@id",("id",expiredProof.OperationId)) is null,
+            "proof expiry during Argon2 or gate wait creates no reset fence");
+        var competing=await Ready();var sharedProof=await Proof(competing.Contact,competing.Recovery);
+        async Task<Guid?> Compete(CompletePasswordReset proof)
+        {try {return (await complete.Accept(client,proof)).OperationId;}catch(ApiError e) when(e.Code=="UNAUTHORIZED"){return null;}}
+        var winners=await Task.WhenAll(Compete(sharedProof),Compete(sharedProof with {OperationId=Guid.NewGuid()}));
+        var winner=winners.Single(id=>id is not null)!.Value;
+        Check(winners.Count(id=>id is not null)==1 && (await sql.One("SELECT epoch FROM auth_issuance_state WHERE person_id=@id",("id",competing.Person)))!.Get<long>("epoch")==1,
+            "competing operations using one dual proof cannot reserve the code or advance epoch twice");
+        await sql.Execute("UPDATE auth_credential_change_intents SET stage='FailedClosed',resolved_at=@now,last_classification='OutcomeUnknown' WHERE id=@id",
+            ("now",Timestamps.Now(clock)),("id",winner));
+        advance(TimeSpan.FromMinutes(11));await changes.Tick();
+        Check((await sql.One("SELECT pending_operation_id FROM auth_issuance_state WHERE person_id=@id",("id",competing.Person)))!.Get<Guid>("pending_operation_id")==winner
+            && (await sql.One("SELECT reserved_intent_id FROM auth_recovery_codes WHERE person_id=@id",("id",competing.Person)))!.Get<Guid>("reserved_intent_id")==winner,
+            "FailedClosed and expired proof never release a reset fence or its reserved code on a timer");
+        await changes.Recover(winner,"ResolveNotApplied");
+        Check((await changes.Status(winner)).Stage=="Reconciled","private receipt-backed operator recovery resolves the failed-closed reset after proof expiry");
         return count;
+    }
+    private sealed class PausedGate:IAuthenticationIssuanceGate
+    {
+        public TaskCompletionSource Entered {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Resume {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task<IssuanceGateState> Acquire(NpgsqlTransaction transaction,Guid person)
+        {Entered.SetResult();await Resume.Task;return await new PostgresAuthenticationIssuanceGate().Acquire(transaction,person);}
     }
     private sealed class ForbiddenGate:IAuthenticationIssuanceGate
     {public Task<IssuanceGateState> Acquire(NpgsqlTransaction transaction,Guid person)=>throw new Exception("Denied initiation acquired Person gate");}
