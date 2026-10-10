@@ -18,3 +18,13 @@ The harness simulates interruption by stopping between committed stages and resu
 `contracts/events.input.schema.json` is a byte-preserved test input from Platform `240151e25c5d9f67a58a6f4eea729a667934cc2b`; it is not a new approval of every event. The implemented public subset is `contracts/registration.openapi.yaml`. The broader upstream proposals and archived uploaded Blueprint are preserved separately.
 
 Public deployment remains disabled. See [baseline](BASELINE.md) for exact remaining capabilities and review gates.
+
+## Recovered baseline and setup revision — 2026-10-10
+
+The recovered baseline was published unchanged in GitHub commit b4e1407 (source 770486d). [Native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38049944311) completed successfully, including the original C# harness, event checks and HTTP smoke. This is new native evidence for that baseline, not for changes after it.
+
+Setup/completion revision local evidence: .NET SDK 10.0.401, Release and Debug builds with zero warnings/errors; **37 C# checks passed** against PGlite 0.5.8 / pglite-socket 0.2.11. **33 emitted events** passed the pinned Platform schema. Existing registration HTTP smoke and new setup HTTP smoke passed with OpenAPI response validation; OpenAPI 0.2.0 passed the spec validator.
+
+New cases cover separate setup-code purpose, protected binding, challenge replay without delivery/expiry extension, existing automatic winner, automatic/setup concurrency, identical completion concurrency, exhausted attempts, changed candidate replay, expired proof disposal, injected Credential transaction failure and worker completion of accepted material after proof expiry. HTTP cases explicitly reject null/unknown fields and missing idempotency headers. Runtime rejection of malformed input is verified, separately from resolving the compiler's nullable-input error.
+
+Native PostgreSQL CI for this revision is pending publication; PGlite multiplexing remains preliminary concurrency evidence. Formal administrative recovery, OS-kill/network partition/restore tests, provider delivery, login/Session/password reset and production release remain outside this revision's PASS claims.

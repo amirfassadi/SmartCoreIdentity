@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartCore Identity internal registration API
-  version: 0.1.0
+  version: 0.2.0
   description: Implemented development-only phase; not a full Identity MVP or public
     deployment contract. See docs/implementation/BASELINE.md.
 paths:
@@ -212,6 +212,150 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ResendVerification'
+  /auth/register/setup:
+    post:
+      operationId: RequestRegistrationSetup
+      x-business-operation: RegisterPerson
+      summary: RequestRegistrationSetup
+      security: []
+      responses:
+        '202':
+          description: Successful phase result.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupPending'
+        '400':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '409':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '429':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '503':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRegistration'
+  /auth/register/complete:
+    post:
+      operationId: CompleteRegistration
+      x-business-operation: RegisterPerson
+      summary: CompleteRegistration
+      security: []
+      responses:
+        '200':
+          description: Successful phase result.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResult'
+        '202':
+          description: Successful phase result.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResult'
+        '400':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '409':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '429':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '503':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteRegistration'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 32
+          maxLength: 128
 components:
   schemas:
     StartRegistration:
@@ -351,5 +495,91 @@ components:
       - error
       - traceId
       additionalProperties: false
-x-internal-administration: "Not exposed here; see services.schema.json and 07_Contracts\
-  \ \xA77."
+    SetupPending:
+      type: object
+      properties:
+        setupChallengeId:
+          type: string
+          minLength: 32
+          maxLength: 128
+        expiresAt:
+          type: string
+          format: date-time
+        status:
+          const: Accepted
+      required:
+      - setupChallengeId
+      - expiresAt
+      - status
+      additionalProperties: false
+    CompleteRegistration:
+      type: object
+      properties:
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          writeOnly: true
+        bindingSecret:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          writeOnly: true
+          description: Base64url unpadded encoding of 32 random bytes.
+        setupChallengeId:
+          type: string
+          minLength: 32
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+      required:
+      - setupChallengeId
+      - code
+      - bindingSecret
+      - newPassword
+      additionalProperties: false
+    CompletionResult:
+      type: object
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        status:
+          enum:
+          - PendingCredential
+          - Ready
+        ownershipCommittedAt: &id005
+          type: string
+          format: date-time
+        readyAt: *id005
+        credentialOutcome:
+          enum:
+          - CandidateSelected
+          - ExistingWinner
+          - Undetermined
+      required:
+      - registrationId
+      - status
+      - ownershipCommittedAt
+      - credentialOutcome
+      additionalProperties: false
+      allOf:
+      - if:
+          properties:
+            status:
+              const: Ready
+        then:
+          required:
+          - readyAt
+          properties:
+            credentialOutcome:
+              enum:
+              - CandidateSelected
+              - ExistingWinner
+        else:
+          not:
+            required:
+            - readyAt
+x-internal-administration: Not exposed here; see services.schema.json and 07_Contracts
+  §7.

@@ -48,7 +48,7 @@ public sealed class RegistrationService(Database db, Secrets secrets, TimeProvid
         var row = await connection.One("SELECT * FROM verification_sessions WHERE id=@id FOR UPDATE",("id",request.VerificationSessionId));
         var now = Timestamps.Now(clock);
         // Generic Accepted on all ineligible cases. Never disclose account existence.
-        if (row is null || row.Get<bool>("invalidated") || row.Has("registration_id") || row.Time("expires_at") <= now
+        if (row is null || row.Get<bool>("invalidated") || row.Has("registration_id") || row.Has("setup_registration_id") || row.Time("expires_at") <= now
             || row.Get<int>("attempts") >= 5 || row.Get<int>("resends") >= 3
             || row.Time("last_sent_at").AddSeconds(60) > now
             || !Secrets.Equal(row.Optional<byte[]>("binding_mac"),secrets.Mac("binding",request.VerificationSessionId,request.BindingSecret))) return;
@@ -87,14 +87,15 @@ public sealed class RegistrationService(Database db, Secrets secrets, TimeProvid
         await connection.Execute("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",("key","ownership:" + contact));
         now = Timestamps.Now(clock);
         Input.Require(row.Time("expires_at") > now,"VERIFICATION_FAILED",400);
-        var person = await connection.One("SELECT id FROM persons WHERE contact=@contact",("contact",contact));
+        var person = await connection.One("SELECT p.id,r.id AS registration_id,r.status FROM persons p JOIN registrations r ON r.person_id=p.id WHERE p.contact=@contact",("contact",contact));
         if (person is not null)
         {
             // A newly verified attempt NEVER substitutes its password into an existing registration.
-            await connection.Execute("UPDATE verification_sessions SET invalidated=true,sealed_password=NULL,request_mac=NULL,code_mac=NULL,binding_mac=NULL WHERE id=@id",("id",request.VerificationSessionId));
+            // Keep bounded proof only for the distinct setup request; never transfer the losing password.
+            await connection.Execute("UPDATE verification_sessions SET setup_registration_id=@target,sealed_password=NULL,request_mac=NULL WHERE id=@id",("target",person.Get<Guid>("registration_id")),("id",request.VerificationSessionId));
             await connection.Execute("UPDATE delivery_outbox SET sealed_code=NULL WHERE verification_id=@id",("id",request.VerificationSessionId));
             await transaction.CommitAsync();
-            throw new ApiError(409,"CONTACT_UNAVAILABLE");
+            throw new ApiError(409,"CONTACT_UNAVAILABLE") {NextAction=person.Get<string>("status")=="PendingCredential"?"RequestSetup":"SignIn"};
         }
         var registrationId=Guid.NewGuid(); var personId=Guid.NewGuid(); var organizationId=Guid.NewGuid(); var membershipId=Guid.NewGuid();
         var name=row.Get<string>("display_name");

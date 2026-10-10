@@ -22,6 +22,7 @@ builder.Services.AddSingleton(new Secrets(builder.Configuration["Identity:MacKey
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<RegistrationService>();
 builder.Services.AddSingleton<Provisioning>();
+builder.Services.AddSingleton<RegistrationSetupService>();
 if(builder.Configuration.GetValue("Identity:WorkerEnabled",true)) builder.Services.AddHostedService<ProvisioningWorker>();
 builder.Services.ConfigureHttpJsonOptions(o=>o.SerializerOptions.DefaultIgnoreCondition=JsonIgnoreCondition.WhenWritingNull);
 builder.Services.AddRateLimiter(options=>
@@ -37,7 +38,7 @@ app.Use(async(context,next)=>
     context.Response.Headers.CacheControl="no-store";
     context.Response.Headers["X-Content-Type-Options"]="nosniff";
     try { await next(); }
-    catch(ApiError error) { await WriteError(context,error.Status,error.Code); }
+    catch(ApiError error) { await WriteError(context,error.Status,error.Code,error.NextAction); }
     catch(Exception error) when(error is JsonException or BadHttpRequestException)
     { await WriteError(context,400,"VALIDATION_FAILED"); }
     catch(NpgsqlException)
@@ -48,7 +49,7 @@ app.MapGet("/health/live",()=>Results.Ok(new {status="live"}));
 app.MapGet("/health/ready",async(Database db)=>
 {
     await using var c=await db.Source.OpenConnectionAsync();
-    var row=await c.One("SELECT version FROM schema_versions WHERE version=1");
+    var row=await c.One("SELECT version FROM schema_versions WHERE version=2");
     return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope="internal-registration"});
 });
 app.MapPost("/auth/register",async(HttpRequest http,RegistrationService service)=>
@@ -56,6 +57,13 @@ app.MapPost("/auth/register",async(HttpRequest http,RegistrationService service)
     var body=await Read<StartRegistration>(http);
     var result=await service.Start(body,http.Headers["Idempotency-Key"].ToString());
     return Results.Json(result,statusCode:202);
+}).RequireRateLimiting("registration");
+app.MapPost("/auth/register/setup",async(HttpRequest http,RegistrationSetupService service)=>
+    Results.Json(await service.Request(await Read<VerifyRegistration>(http)),statusCode:202)).RequireRateLimiting("registration");
+app.MapPost("/auth/register/complete",async(HttpRequest http,RegistrationSetupService service)=>
+{
+    var result=await service.Complete(await Read<CompleteRegistration>(http),http.Headers["Idempotency-Key"].ToString());
+    return Results.Json(result,statusCode:result.Status=="Ready"?200:202);
 }).RequireRateLimiting("registration");
 app.MapPost("/auth/register/verify",async(HttpRequest http,RegistrationService service)=>
 {
@@ -79,13 +87,22 @@ if(builder.Environment.IsDevelopment() && builder.Configuration["Identity:DevInb
         var row=await c.One("SELECT * FROM delivery_outbox WHERE verification_id=@id AND sealed_code IS NOT NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1",("id",id));
         return row is null ? Results.NotFound() : Results.Ok(new {code=secrets.Open(row.Get<byte[]>("sealed_code"),"delivery:"+row.Get<Guid>("id"))});
     });
+    app.MapGet("/dev/setup-inbox/{id}",async(string id,HttpContext context,Database db,Secrets secrets)=>
+    {
+        var remote=context.Connection.RemoteIpAddress;
+        if(remote is null || !System.Net.IPAddress.IsLoopback(remote)
+            || !Secrets.Equal(secrets.Mac("dev",inboxKey),secrets.Mac("dev",context.Request.Headers["X-Dev-Inbox-Key"].ToString()))) return Results.NotFound();
+        await using var c=await db.Source.OpenConnectionAsync();
+        var row=await c.One("SELECT * FROM setup_delivery_outbox WHERE setup_id=@id AND sealed_code IS NOT NULL AND expires_at>now()",("id",id));
+        return row is null ? Results.NotFound() : Results.Ok(new {code=secrets.Open(row.Get<byte[]>("sealed_code"),"setup-delivery:"+row.Get<Guid>("id"))});
+    });
 }
 app.Run();
 
-static Task WriteError(HttpContext context,int status,string code)
+static Task WriteError(HttpContext context,int status,string code,string? nextAction=null)
 {
     context.Response.StatusCode=status;
-    return context.Response.WriteAsJsonAsync(new {error=new {code,message="Request could not be completed."},traceId=context.TraceIdentifier});
+    return context.Response.WriteAsJsonAsync(new {error=new {code,message="Request could not be completed.",nextAction},traceId=context.TraceIdentifier});
 }
 
 static async Task<T> Read<T>(HttpRequest request)

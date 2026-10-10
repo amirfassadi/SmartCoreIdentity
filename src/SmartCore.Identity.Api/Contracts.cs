@@ -6,12 +6,17 @@ namespace SmartCore.Identity;
 public sealed record StartRegistration(string? Email, string? Mobile, string Password, string DisplayName, string BindingSecret);
 public sealed record VerifyRegistration(string VerificationSessionId, string Code, string BindingSecret);
 public sealed record ResendVerification(string VerificationSessionId, string BindingSecret);
+public sealed record CompleteRegistration(string SetupChallengeId, string Code, string BindingSecret, string NewPassword);
+public sealed record SetupPending(string SetupChallengeId, DateTimeOffset ExpiresAt, string Status = "Accepted");
+public sealed record CompletionResult(Guid RegistrationId, string Status, DateTimeOffset OwnershipCommittedAt,
+    DateTimeOffset? ReadyAt, string CredentialOutcome);
 public sealed record VerificationPending(string VerificationSessionId, DateTimeOffset ExpiresAt, string Status = "AwaitingVerification");
 public sealed record RegistrationResult(Guid RegistrationId, string Status, DateTimeOffset OwnershipCommittedAt, DateTimeOffset? ReadyAt);
 public sealed class ApiError(int status, string code) : Exception(code)
 {
     public int Status { get; } = status;
     public string Code { get; } = code;
+    public string? NextAction { get; init; }
 }
 
 public static class Input
