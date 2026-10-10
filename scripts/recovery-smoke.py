@@ -86,7 +86,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   assert call('/auth/password/reset',reset,reset_bff)==(202,pending)
   assert call('/dev/reset-inbox/'+pending['challengeId'],headers=bff)[0]==404
   status,otp=call('/dev/reset-inbox/'+pending['challengeId'],headers={'X-Dev-Inbox-Key':env['Identity__DevInboxKey']})
-  assert status==200 and len(otp['code'])==6
+  assert status==200 and len(otp['code'])==8
   status,unknown=call('/auth/password/reset',{**reset,'operationId':str(uuid.uuid4()),'email':secrets.token_hex(10)+'@example.test'},reset_bff)
   assert status==202 and set(unknown)==set(pending) and unknown['status']==pending['status']
   assert call('/dev/reset-inbox/'+unknown['challengeId'],headers={'X-Dev-Inbox-Key':env['Identity__DevInboxKey']})[0]==404
@@ -98,7 +98,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
    return value
   for _ in range(2):measured({**reset,'operationId':str(uuid.uuid4())},'known')
   for _ in range(3):
-   measured({**reset,'operationId':str(uuid.uuid4())},'suppressed')
+   suppressed=measured({**reset,'operationId':str(uuid.uuid4())},'suppressed')
    measured({**reset,'operationId':str(uuid.uuid4()),'email':secrets.token_hex(10)+'@example.test'},'unknown')
   print('RESET TIMING OBSERVATION (small CI sample, not constant-time certification): '+json.dumps({
    label:{'n':len(values),'median_ms':round(__import__('statistics').median(values),2),'max_ms':round(max(values),2)}
@@ -107,7 +107,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   complete_bff={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
   new_password='new password dual factor HTTP fixture'
   complete=dict(operationId=str(uuid.uuid4()),challengeId=pending['challengeId'],bindingSecret=reset['bindingSecret'],
-   code=otp['code'],recoveryCode=replacement['recoveryCode'],newPassword=new_password)
+   code=otp['code'],recoveryCode='  '+replacement['recoveryCode'].lower()+'  ',newPassword=new_password)
   assert call('/auth/password/reset/complete',complete)[0]==401
   wrong={**complete,'recoveryCode':'0'*32}
   assert call('/auth/password/reset/complete',wrong,complete_bff)[0]==401
@@ -130,6 +130,21 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   status,new_factor=call('/auth/recovery/enroll',dict(operationId=str(uuid.uuid4()),currentPassword=new_password,acceptLossRisk=True),new_auth)
   assert status==200 and new_factor['version']==3 and len(new_factor['recoveryCode'])==32
   assert call('/me',headers=new_auth)[1]['recoveryEnrollmentRequired'] is False
+  failure_timings={'real':[],'decoy':[],'suppressed':[]}
+  for _ in range(12):
+   for label,ch in [('real',pending),('decoy',unknown),('suppressed',suppressed)]:
+    before=time.perf_counter()
+    payload={**complete,'challengeId':ch['challengeId'],'recoveryCode':'0'*32}
+    headers={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
+    assert call('/auth/password/reset/complete',payload,headers)[0]==401
+    failure_timings[label].append((time.perf_counter()-before)*1000)
+  def percentile(values,fraction):return sorted(values)[__import__('math').ceil(len(values)*fraction)-1]
+  summaries={label:{'n':len(values),'p50_ms':round(percentile(values,.5),2),'p90_ms':round(percentile(values,.9),2),'max_ms':round(max(values),2)}
+   for label,values in failure_timings.items()}
+  assert all(min(values)>=190 and max(values)<350 for values in failure_timings.values()),summaries
+  assert max(v['p50_ms'] for v in summaries.values())-min(v['p50_ms'] for v in summaries.values())<35,summaries
+  assert max(v['p90_ms'] for v in summaries.values())-min(v['p90_ms'] for v in summaries.values())<60,summaries
+  print('RESET TIMING HTTP COMPLETION PASS (12/group, controlled CI, not load certification): '+json.dumps(summaries))
   print('HTTP RECOVERY PASS: one-time enrollment, uniform initiation, two-factor reset, receipt recovery, old Session denial, bounded replay, fresh-login replacement and pinned response schemas')
  finally:
   process.terminate()

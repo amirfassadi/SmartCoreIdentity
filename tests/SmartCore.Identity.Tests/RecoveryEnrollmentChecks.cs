@@ -83,7 +83,7 @@ internal static class RecoveryEnrollmentChecks
             "eligible reset challenge captures enrollment version and epoch while unknown accounts queue no delivery");
         var otp=(await sql.One("SELECT * FROM auth_reset_delivery WHERE challenge_id=@id",("id",known.ChallengeId)))!;
         var clear=secrets.Open(otp.Get<byte[]>("sealed_code"),"reset-delivery:"+otp.Get<Guid>("id"));
-        Check(clear.Length==6 && Secrets.Equal(otp.Get<byte[]>("verifier"),secrets.Mac("reset-otp-v1",known.ChallengeId,clear)),
+        Check(clear.Length==8 && Secrets.Equal(otp.Get<byte[]>("verifier"),secrets.Mac("reset-otp-v1",known.ChallengeId,clear)),
             "reset OTP has distinct verification and encrypted-delivery purposes");
         await initiation.Start(client,begin with {OperationId=Guid.NewGuid()});await initiation.Start(client,begin with {OperationId=Guid.NewGuid()});
         var suppressed=await initiation.Start(client,begin with {OperationId=Guid.NewGuid()});

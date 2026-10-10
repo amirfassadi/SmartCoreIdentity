@@ -24,7 +24,8 @@ public sealed class PasswordResetInitiation(Database db,Secrets secrets,TimeProv
         WHERE p.id=@id AND p.status='Active' AND c.status='Active' AND r.status='Ready'
           AND w.phase='ReadyAcknowledged' AND rc.verifier IS NOT NULL AND rc.reserved_intent_id IS NULL
         """,("id",person));
-    public async Task<ResetPending> Start(string client,StartPasswordReset request)
+    public Task<ResetPending> Start(string client,StartPasswordReset request)=>ResetResponseTiming.Run("initiation",()=>StartCore(client,request));
+    private async Task<ResetPending> StartCore(string client,StartPasswordReset request)
     {
         Input.Require(request.OperationId!=Guid.Empty && Input.Secret(request.BindingSecret));
         var (kind,contact)=Input.Contact(request.Email,request.Mobile);
@@ -60,7 +61,7 @@ public sealed class PasswordResetInitiation(Database db,Secrets secrets,TimeProv
             }
         }
         // Equal cryptographic work for both shapes does not claim constant-time database paths.
-        var challenge=Secrets.Token();var delivery=Guid.NewGuid();var code=Secrets.Code();
+        var challenge=Secrets.Token();var delivery=Guid.NewGuid();var code=System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000000).ToString("D8",System.Globalization.CultureInfo.InvariantCulture);
         var sealedCode=secrets.Seal(code,"reset-delivery:"+delivery);var verifier=secrets.Mac("reset-otp-v1",challenge,code);
         await using var tx=await c.BeginTransactionAsync();
         await c.Execute("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",("key","reset-initiation:"+request.OperationId));
@@ -82,7 +83,7 @@ public sealed class PasswordResetInitiation(Database db,Secrets secrets,TimeProv
             await c.Execute("INSERT INTO auth_reset_challenges VALUES(@id,@op,@person,@client,@mac,@binding,@epoch,@version,@now,@expiry)",
                 ("id",challenge),("op",request.OperationId),("person",candidate),("client",client),("mac",mac),("binding",binding),
                 ("epoch",epoch),("version",version),("now",created),("expiry",expiry));
-            await c.Execute("INSERT INTO auth_reset_delivery VALUES(@id,@challenge,@person,@sealed,@verifier,@now,@expiry)",
+            await c.Execute("INSERT INTO auth_reset_delivery(id,challenge_id,person_id,sealed_code,verifier,created_at,expires_at) VALUES(@id,@challenge,@person,@sealed,@verifier,@now,@expiry)",
                 ("id",delivery),("challenge",challenge),("person",candidate),("sealed",sealedCode),("verifier",verifier),("now",created),("expiry",expiry));
         }
         await tx.CommitAsync();return new(challenge,expiry);

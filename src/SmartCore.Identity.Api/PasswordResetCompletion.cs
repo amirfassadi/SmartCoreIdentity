@@ -15,7 +15,7 @@ public sealed class PasswordResetCompletion(Database db,Secrets secrets,TimeProv
         && Secrets.Equal(ch.Get<byte[]>("binding_mac"),secrets.Mac("reset-binding-v1",client,r.BindingSecret));
     private async Task<bool> Factors(NpgsqlConnection c,Row ch,CompletePasswordReset r)
     {
-        var delivery=await c.One("SELECT verifier FROM auth_reset_delivery WHERE challenge_id=@id",("id",r.ChallengeId));
+        var delivery=await c.One("SELECT verifier,otp_digits FROM auth_reset_delivery WHERE challenge_id=@id",("id",r.ChallengeId));
         var rc=await c.One("SELECT * FROM auth_recovery_codes WHERE person_id=@id",("id",ch.Get<Guid>("person_id")));
         var otp=secrets.Mac("reset-otp-v1",r.ChallengeId,r.Code);
         var recovery=secrets.Mac("recovery-code-v1",ch.Get<Guid>("person_id").ToString("N"),
@@ -23,18 +23,22 @@ public sealed class PasswordResetCompletion(Database db,Secrets secrets,TimeProv
         // Evaluate both constant-time comparisons; never report which proof failed.
         var correctOtp=Secrets.Equal(delivery is null?new byte[32]:delivery.Get<byte[]>("verifier"),otp);
         var correctCode=Secrets.Equal(rc is not null && rc.Has("verifier")?rc.Get<byte[]>("verifier"):new byte[32],recovery);
-        return correctOtp & correctCode & (rc is not null && !rc.Has("reserved_intent_id") && rc.Get<long>("version")==ch.Get<long>("recovery_version"));
+        return correctOtp & correctCode & (delivery is not null && delivery.Get<int>("otp_digits")==r.Code.Length) & (rc is not null && !rc.Has("reserved_intent_id") && rc.Get<long>("version")==ch.Get<long>("recovery_version"));
     }
     // This independent transaction never acquires the Person or Credential gate.
-    // Five failed presentations per Person per 15 minutes, shared by all challenges and replays.
+    // Five failures per Person window, escalating cooldown on each exhausted window.
+    // No Person/Credential gate overlaps the counter transaction.
     private async Task<bool> VerifyBudgeted(Row ch,string client,CompletePasswordReset r,Row? accepted)
     {
         await using var c=await db.Source.OpenConnectionAsync();await using var tx=await c.BeginTransactionAsync();
         var person=ch.Get<Guid>("person_id");var now=Timestamps.Now(clock);
-        await c.Execute("INSERT INTO auth_reset_failures VALUES(@id,@now,0) ON CONFLICT DO NOTHING",("id",person),("now",now));
+        await c.Execute("INSERT INTO auth_reset_failures(person_id,window_start,failures) VALUES(@id,@now,0) ON CONFLICT DO NOTHING",("id",person),("now",now));
         var budget=(await c.One("SELECT * FROM auth_reset_failures WHERE person_id=@id FOR UPDATE",("id",person)))!;
-        var failures=budget.Time("window_start").AddMinutes(15)<=now?0:budget.Get<int>("failures");
-        var window=failures==0 && budget.Time("window_start").AddMinutes(15)<=now?now:budget.Time("window_start");
+        var quiet=budget.Has("last_failure_at") && budget.Time("last_failure_at").AddHours(24)<=now;
+        var streak=quiet?0:budget.Get<int>("saturated_windows");
+        if(!quiet && budget.Has("blocked_until") && budget.Time("blocked_until")>now) return false;
+        var reset=quiet || budget.Time("window_start").AddMinutes(15)<=now;
+        var failures=reset?0:budget.Get<int>("failures");var window=reset?now:budget.Time("window_start");
         if(failures>=5) return false;
         var current=await Challenge(c,r.ChallengeId);
         if(current is null) return false;
@@ -49,8 +53,23 @@ public sealed class PasswordResetCompletion(Database db,Secrets secrets,TimeProv
         }
         var valid=Bound(current,client,r) && (accepted is null?await Factors(c,current,r):
             accepted.Get<string>("challenge_id")==r.ChallengeId && Secrets.Equal(accepted.Get<byte[]>("proof_mac"),ProofMac(client,r)));
-        await c.Execute("UPDATE auth_reset_failures SET failures=@n,window_start=@window WHERE person_id=@id",
-            ("n",valid?failures:failures+1),("window",window),("id",person));
+        var next=valid?failures:failures+1;
+        DateTimeOffset? blocked=null;
+        if(!valid && next==5)
+        {
+            streak=Math.Min(streak+1,6);
+            blocked=now.AddMinutes(Math.Min(15*(1<<(streak-1)),360));
+            var notice=new Guid(secrets.Mac("reset-proof-limit-notice",person.ToString(),window.ToString("O")).AsSpan(0,16));
+            await c.Execute("""
+                INSERT INTO auth_account_notifications(id,person_id,operation_id,kind,created_at)
+                VALUES(@id,@person,@op,'ResetProofFailuresLimited',@now) ON CONFLICT(operation_id,kind) DO NOTHING
+                """,("id",Guid.NewGuid()),("person",person),("op",notice),("now",now));
+        }
+        await c.Execute("""
+            UPDATE auth_reset_failures SET failures=@n,window_start=@window,saturated_windows=@streak,
+              blocked_until=@blocked,last_failure_at=CASE WHEN @valid THEN last_failure_at ELSE @now END
+            WHERE person_id=@id
+            """,("n",next),("window",window),("streak",streak),("blocked",blocked),("valid",valid),("now",now),("id",person));
         await tx.CommitAsync();return valid;
     }
     private async Task<ChangeStatus> Replay(NpgsqlConnection c,Row ch,Row accepted,string client,CompletePasswordReset r)
@@ -64,11 +83,14 @@ public sealed class PasswordResetCompletion(Database db,Secrets secrets,TimeProv
         if(!Bound(ch,client,r) || prior.Time("replay_until")<=Timestamps.Now(clock)) throw Denied();
         return new(r.OperationId,prior.Get<string>("stage"));
     }
-    public async Task<ChangeStatus> Accept(string client,CompletePasswordReset request)
+    public Task<ChangeStatus> Accept(string client,CompletePasswordReset request)=>ResetResponseTiming.Run("completion",()=>AcceptCore(client,request));
+    private async Task<ChangeStatus> AcceptCore(string client,CompletePasswordReset request)
     {
+        Input.Require(request.RecoveryCode is {Length:>=1 and <=64});
+        request=request with {RecoveryCode=request.RecoveryCode.Trim().ToUpperInvariant()};
         Input.Require(request.OperationId!=Guid.Empty && Input.Secret(request.ChallengeId) && Input.Secret(request.BindingSecret)
-            && request.Code is {Length:6} && request.Code.All(char.IsAsciiDigit)
-            && request.RecoveryCode is {Length:32} && request.RecoveryCode.All(c=>char.IsAsciiHexDigit(c) && !char.IsAsciiLetterLower(c))
+            && request.Code is {Length:6 or 8} && request.Code.All(char.IsAsciiDigit)
+            && request.RecoveryCode is {Length:32} && request.RecoveryCode.All(char.IsAsciiHexDigit)
             && request.NewPassword is {Length:>=15 and <=128});
         await using var c=await db.Source.OpenConnectionAsync();
         var ch=await Challenge(c,request.ChallengeId);

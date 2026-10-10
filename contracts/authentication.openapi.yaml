@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.5.0
+  version: 0.6.0
   description: Development authenticated BFF adapter. Recovery enrollment and dual-factor
     reset are opt-in. Reset requires primary-contact OTP plus a pre-enrolled recovery
     code. The accepted reset operation closes Sessions and uses receipt-backed recovery;
@@ -793,10 +793,17 @@ components:
           pattern: ^[A-Za-z0-9_-]{43}$
         code:
           type: string
-          pattern: ^[0-9]{6}$
+          pattern: ^([0-9]{6}|[0-9]{8})$
+          description: New reset OTPs have eight digits. Six digits are accepted only
+            against legacy six-digit deliveries or their bounded accepted receipt
+            replay.
         recoveryCode:
           type: string
-          pattern: ^[0-9A-F]{32}$
+          pattern: ^\s*[0-9A-Fa-f]{32}\s*$
+          maxLength: 64
+          description: API trims surrounding whitespace and normalizes ASCII hex case
+            before proof binding. Displayed enrollment codes remain uppercase. BFF
+            should provide equivalent normalization without modifying passwords.
         newPassword:
           type: string
           minLength: 15

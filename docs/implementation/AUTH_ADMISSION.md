@@ -47,3 +47,7 @@ Never configure a reverse proxy upstream to the operator socket. A proxy must ru
 Only after its own accepted change may a BFF briefly retry fresh login using the new password (for example, three attempts with bounded jittered delays around 250/500/1000 ms). Show a short pending message and stop after the budget; a generic 401 alone does not authorize indefinite retry or prove recovery is running. Respect caller limits and keep this distinct from refresh single-flight: zero-grace refresh predecessors must never be automatically retried after an uncertain result. Real BFF behavior is a remaining deliverable, not implemented by these backend changes.
 
 Actual CI results are recorded in [verification](VERIFICATION.md). Reset, irreversible eligibility transitions, browser/BFF flows and production release remain separate work.
+
+## Reset timing and abuse-control candidate, 2026-10-10
+
+Migration 010 / OpenAPI 0.6.0 add eight-digit fresh reset OTP, escalating Person cooldown and bounded proof-limit alerts. Both reset endpoints use a common response deadline after disposing locks/connections; service/HTTP timing acceptance covers real/decoy/suppressed branches, with privacy-safe overrun telemetry and explicit load limits. Recovery-code ASCII case and surrounding whitespace are normalized by the API before verifier/receipt binding; passwords are never normalized. Platform merge precedes Identity merge/release. See [PASSWORD_RESET.md](PASSWORD_RESET.md). This candidate awaits its own native CI; previous counts refer to recorded revisions.

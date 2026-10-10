@@ -90,3 +90,7 @@ Opt-in reset initiation returns uniform accepted challenges, binds epoch/code ve
 ## Dual-factor reset candidate, 2026-10-10
 
 Platform schema 1.2.2 is pinned from `49ea40a50854c447b18afbdd7c2f3116dbee3136` with source provenance. Migration 009 adds deletable decoys, shared Person proof limits, immutable reset acceptance and receipt-backed recovery-code reservation/consumption. The worker and private recovery operator are reused; no synthetic Session is created. See [PASSWORD_RESET.md](PASSWORD_RESET.md). Native runtime commit `b51c6b9155ac6fa016d5fee67dce8c2bec4a0306` passed 168 C# checks, 171 emitted-event schema checks and five HTTP smokes. Exact evidence and timing limits are in VERIFICATION.md. Previous test counts apply only to their recorded commits.
+
+## Reset timing and abuse-control candidate, 2026-10-10
+
+Migration 010 / OpenAPI 0.6.0 add eight-digit fresh reset OTP, escalating Person cooldown and bounded proof-limit alerts. Both reset endpoints use a common response deadline after disposing locks/connections; service/HTTP timing acceptance covers real/decoy/suppressed branches, with privacy-safe overrun telemetry and explicit load limits. Recovery-code ASCII case and surrounding whitespace are normalized by the API before verifier/receipt binding; passwords are never normalized. Platform merge precedes Identity merge/release. See [PASSWORD_RESET.md](PASSWORD_RESET.md). This candidate awaits its own native CI; previous counts refer to recorded revisions.
