@@ -6,12 +6,17 @@ namespace SmartCore.Identity;
 public sealed record StartRegistration(string? Email, string? Mobile, string Password, string DisplayName, string BindingSecret);
 public sealed record VerifyRegistration(string VerificationSessionId, string Code, string BindingSecret);
 public sealed record ResendVerification(string VerificationSessionId, string BindingSecret);
+public sealed record CompleteRegistration(string SetupChallengeId, string Code, string BindingSecret, string NewPassword);
+public sealed record SetupPending(string SetupChallengeId, DateTimeOffset ExpiresAt, string Status = "Accepted");
+public sealed record CompletionResult(Guid RegistrationId, string Status, DateTimeOffset OwnershipCommittedAt,
+    DateTimeOffset? ReadyAt, string CredentialOutcome);
 public sealed record VerificationPending(string VerificationSessionId, DateTimeOffset ExpiresAt, string Status = "AwaitingVerification");
 public sealed record RegistrationResult(Guid RegistrationId, string Status, DateTimeOffset OwnershipCommittedAt, DateTimeOffset? ReadyAt);
 public sealed class ApiError(int status, string code) : Exception(code)
 {
     public int Status { get; } = status;
     public string Code { get; } = code;
+    public string? NextAction { get; init; }
 }
 
 public static class Input
@@ -25,16 +30,20 @@ public static class Input
         Require(Id(idempotencyKey) && Secret(request.BindingSecret));
         Require(request.Password is { Length: >= 15 and <= 128 });
         Require(!string.IsNullOrWhiteSpace(request.DisplayName) && request.DisplayName.Length <= 100);
-        Require((request.Email is null) != (request.Mobile is null));
-        if (request.Email is not null)
+        return Contact(request.Email,request.Mobile);
+    }
+    public static (string Kind,string Contact) Contact(string? emailInput,string? mobileInput)
+    {
+        Require((emailInput is null) != (mobileInput is null));
+        if (emailInput is not null)
         {
-            var email = request.Email.Trim().ToLowerInvariant();
+            var email = emailInput.Trim().ToLowerInvariant();
             Require(email.Length <= 254 && MailAddress.TryCreate(email, out var parsed)
                 && parsed.Address == email && email.Contains('@') && !email.Any(char.IsWhiteSpace));
             return ("email", email);
         }
-        Require(Regex.IsMatch(request.Mobile!, @"\A\+[1-9][0-9]{1,14}\z"));
-        return ("mobile", request.Mobile!);
+        Require(Regex.IsMatch(mobileInput!, @"\A\+[1-9][0-9]{1,14}\z"));
+        return ("mobile", mobileInput!);
     }
     public static void Validate(VerifyRegistration request)
     {

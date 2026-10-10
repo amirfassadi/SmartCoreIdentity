@@ -33,7 +33,7 @@ dotnet run --project src/SmartCore.Identity.Api
 
 Migration is explicit and repeatable, serialized by an advisory lock. This initial migration bootstraps a new database; do not edit it after deployment. Add forward migrations for future schema changes. HTTP startup never runs DDL.
 
-For a test OTP inbox, additionally set a random `Identity__DevInboxKey` of at least 32 characters, then read `/dev/inbox/{verificationSessionId}` with header `X-Dev-Inbox-Key`. This route requires Development, opt-in key and a loopback caller. Compose does not enable it; use host development for the local smoke demo. Never use a real contact/password in test fixtures. Codes are not printed in application logs.
+For test OTP inboxes, additionally set a random `Identity__DevInboxKey` of at least 32 characters, then read `/dev/inbox/{verificationSessionId}` or `/dev/setup-inbox/{setupChallengeId}` with header `X-Dev-Inbox-Key`. This route requires Development, opt-in key and a loopback caller. Compose does not enable it; use host development for the local smoke demo. Never use a real contact/password in test fixtures. Codes are not printed in application logs.
 
 ## Registration API
 
@@ -58,6 +58,16 @@ dotnet run --project tests/SmartCore.Identity.Tests
 
 CI provisions PostgreSQL 17 and runs the same harness. Local PGlite results do not replace native PostgreSQL race verification. Install Python test dependencies with `python -m pip install -r requirements-dev.txt`. `scripts/api-smoke.py` additionally runs HTTP checks against a disposable database provided via `ConnectionStrings__Identity`.
 
-For investigation inspect non-secret `workflow_jobs` status: `recovery_needed`, attempts, next attempt, classified error; inspect counts/age of unpublished Outbox entries. No API exposes these operational tables. Do not dump verification/material/credential tables into tickets. No unrestricted admin mutation endpoint exists. Failed material/proof windows require the next delivery's formal recovery implementation; do not unlock guards or overwrite password hashes manually.
+For investigation inspect non-secret `workflow_jobs` status: `recovery_needed`, attempts, next attempt, classified error; inspect counts/age of unpublished Outbox entries. No API exposes these operational tables. Do not dump verification/material/credential tables into tickets. No unrestricted admin mutation endpoint exists. Expired initial proof/material can now use the separate setup flow below; formal operator recovery is still pending; do not unlock guards or overwrite password hashes manually.
 
 Production startup intentionally fails. Before removing that guard, complete reset, delivery, recovery, Session/BFF, native concurrency/crash tests, secret management, least-privilege roles, HTTPS, external audit and restore/reconciliation gates in the baseline. Deployment destination and provider credentials have not been supplied.
+
+## Complete a pending test registration
+
+After the initial proof expires or provisioning cannot finish, start a fresh contact verification using the same contact and a fresh binding/key. Verify its code. A proven conflict returns 409 CONTACT_UNAVAILABLE with RequestSetup for PendingCredential or SignIn for Ready. The new attempt's password is discarded.
+
+For RequestSetup, send the same verificationSessionId, code and bindingSecret to POST /auth/register/setup. Its 202 response includes setupChallengeId and its separate absolute expiry. Obtain the distinct code from the protected development setup inbox (or the future delivery adapter). Submit setupChallengeId, setup code, original bindingSecret and newPassword to POST /auth/register/complete, with a new Idempotency-Key.
+
+200/Ready plus CandidateSelected means that candidate won; ExistingWinner means the earlier password remains. 202/PendingCredential is durable pending work, not authentication. Within setup proof validity/budget, replay the identical body/key after an uncertain response. Changed input returns conflict; after expiry, repeat fresh contact verification. No GET-by-registrationId, password reset or operator unlock is added.
+
+HTTP conformance checks: `python scripts/setup-smoke.py` against an exclusively disposable migrated database, with the same configuration as api-smoke.py.

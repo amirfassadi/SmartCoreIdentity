@@ -1,0 +1,8 @@
+{
+  "repository": "amirfassadi/SmartCorePlatform",
+  "commit": "49ea40a50854c447b18afbdd7c2f3116dbee3136",
+  "path": "SmartCore_Platform_Docs_v1/Identity/events.schema.json",
+  "schemaVersion": "1.2.2",
+  "schemaId": "urn:smartcore:identity:events:proposed:1.2.2",
+  "ownerDisposition": "Amir selected sessionless PasswordChanged reset context on 2026-10-10; no main merge or production release"
+}

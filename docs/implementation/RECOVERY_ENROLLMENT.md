@@ -1,0 +1,27 @@
+# Development recovery enrollment and reset initiation
+
+Migrations 008–010 and OpenAPI 0.6.0 implement all three steps of the [selected recovery policy](RESET_PROOF_DECISION.md). `Identity__RecoveryEnrollmentEnabled=true` requires the existing password-change/authentication flags and private operator socket configuration. Default is disabled. Production startup and real-user onboarding remain disabled.
+
+## One-time enrollment
+
+POST /auth/recovery/enroll requires the authenticated test BFF, its trusted subject, a current Bearer Session, operationId, currentPassword and acceptLossRisk=true. Display «اگر رمز عبور و کد بازیابی را هر دو گم کنید، بازنشانی خودکار حساب ممکن نیست.» before asking the user to acknowledge. There is no admin enrollment shortcut. Current-password failures use shared Person backoff. KDF/queue wait occurs before the Person gate and Session row locks. JWT expiry, online Session/family deadlines, current epoch, readiness and unchanged Credential evidence are revalidated under the gate.
+
+The code contains 128 random bits, encoded as 32 uppercase hexadecimal characters. Only a purpose-bound MAC of Person/version/code is stored; no KDF is needed for this high-entropy secret. Replacement increments the code version and records its enrollment epoch. It does not revoke existing Sessions or advance the Person epoch. Challenges capture both current epoch and recovery version; a later replacement makes the old challenge version stale for the completion validator. Completion rechecks the captured version under the Person gate and rejects stale proof.
+
+Receipt and notification commit atomically with the version. Identical concurrent requests reveal one code once; all other bound retries return AlreadyIssued without recoveryCode. After a lost response, create a fresh operation with current-password proof to replace the unknown code; do not assume an old receipt means the old version is still current. Replay is bound to the original Session and authenticated client, and requires its current online eligibility. There is no clear or encrypted backup copy of the recovery code in storage, logs or notifications.
+
+Login/self expose recoveryEnrollmentRequired. This is the BFF onboarding signal; the backend does not silently mix business authorization with authentication. Current BFF is a test adapter. Real BFF must enforce initial enrollment and, after successful reset/login, replacement of the consumed code before ordinary use. Reset completion consumes the code after confirmed Applied; fresh new-password login and replacement are tested.
+
+## Uniform reset initiation
+
+POST /auth/password/reset requires the authenticated BFF/subject but no access token. Body: operationId, exactly one primary email/mobile, and a BFF-generated 256-bit bindingSecret. ReadyAcknowledged accounts with an enrolled code and no pending mutation receive an encrypted OTP delivery task. Unknown, unsupported, unenrolled, fenced and delivery-budget-exhausted accounts receive the same accepted challengeId/expiresAt/status shape without delivery. This is response-shape equality, not a constant-time enumeration claim.
+
+All these routes share the development change-category budgets (6/subject/minute, 120/BFF/minute). A separate atomic per-Person initiation window permits at most three OTP tasks per fifteen minutes; new operation IDs cannot bypass it, and suppression does not change the outward 202. This delivery budget is separate from the shared five-failures-per-Person proof window with escalating cooldowns. Bindings, enrollment version, epoch and ten-minute deadline are immutable. Repeating an identical operation during its lifetime returns its original challenge without redelivery or extending expiry. Changed binding/contact/client conflicts; after expiry replay is unauthorized. No initiation or delivery task can advance epoch, persist a change intent or close Sessions.
+
+Request deduplication uses reset-initiation:<operationId> before the Person gate. Never acquire that request guard while holding a Person or Credential guard; other mutation writers do not take it. The existing auth-person/credential no-overlap rule remains unchanged. OTP MAC uses reset-otp-v1 and challenge ID; encrypted delivery uses reset-delivery:<deliveryId>, distinct from registration/setup. The worker deletes expired decoys and unaccepted eligible challenges, cascading their delivery/attempt rows; accepted evidence is retained. The Development-only /dev/reset-inbox/<challengeId> requires loopback plus the separate inbox key; never expose it via a production proxy.
+
+## Notifications and release limits
+
+auth_account_notifications stores non-secret delivery intents for RecoveryCodeRegistered, RecoveryCodeReplaced, PasswordResetCompleted and once-per-window ResetRequestsLimited and ResetProofFailuresLimited. Resolve the primary contact from Person for delivery. These are private adapter tasks, not new public domain events, and they have no code/verifier payload. Provider delivery, retries, retention, named access roles, loss acknowledgement UI, notification delivery and contact-release/reassignment policy remain release work. Claiming a queued task is not claiming a delivered notification.
+
+POST /auth/password/reset/complete now implements dual-factor acceptance and receipt-backed recovery. See [PASSWORD_RESET.md](PASSWORD_RESET.md) for failure limits, code reservation/consumption, TTL cleanup, accepted initiation denial-of-service risk and release boundaries.

@@ -12,6 +12,7 @@ var clock=new TestClock();
 var secrets=new Secrets(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
 var service=new RegistrationService(db,secrets,clock);
 var worker=new Provisioning(db,secrets,clock);
+var setup=new RegistrationSetupService(db,secrets,clock,worker);
 int passed=0;
 void Check(bool condition,string name) { if(!condition) throw new Exception("FAIL: "+name); Console.WriteLine("PASS: "+name); passed++; }
 async Task Error(Func<Task> action,string code)
@@ -106,7 +107,116 @@ var raceRequest=Request(); var race=await service.Start(raceRequest,Secrets.Toke
 var raced=await Task.WhenAll(service.Verify(raceProof),service.Verify(raceProof));
 Check(raced.Count(x=>x.Created)==1 && raced[0].Result.RegistrationId==raced[1].Result.RegistrationId,"concurrent valid confirmations produce one registration");
 await worker.Tick();
-var events=await sql.Rows("SELECT payload::text AS payload FROM event_outbox ORDER BY occurred_at,id");
+
+// Pending-registration setup uses a fresh verified conflict, distinct purpose-bound code,
+// and a durable candidate. None of these paths resets a Ready password.
+await db.Migrate();
+Check((await sql.Rows("SELECT version FROM schema_versions ORDER BY version")).Select(x=>x.Get<int>("version")).SequenceEqual(new[]{1,2,3,4,5,6,7,8,9,10}),"forward migrations apply once and replay safely");
+async Task<(RegistrationResult Original, VerifyRegistration Proof, SetupPending Challenge)> PendingSetup()
+{
+    var originalRequest=Request();
+    var original=await service.Start(originalRequest,Secrets.Token());
+    var registration=(await service.Verify(new(original.VerificationSessionId,await Code(original.VerificationSessionId),originalRequest.BindingSecret))).Result;
+    var conflicting=originalRequest with {BindingSecret=Secrets.Token(),Password="discard this other password"};
+    var verification=await service.Start(conflicting,Secrets.Token());
+    var proof=new VerifyRegistration(verification.VerificationSessionId,await Code(verification.VerificationSessionId),conflicting.BindingSecret);
+    try {await service.Verify(proof);throw new Exception("Expected verified conflict");}
+    catch(ApiError error) when(error.Code=="CONTACT_UNAVAILABLE" && error.NextAction=="RequestSetup") { }
+    var challenge=await setup.Request(proof);
+    return (registration,proof,challenge);
+}
+async Task<string> SetupCode(string id)
+{
+    var row=(await sql.One("SELECT * FROM setup_delivery_outbox WHERE setup_id=@id AND sealed_code IS NOT NULL",("id",id)))!;
+    return secrets.Open(row.Get<byte[]>("sealed_code"),"setup-delivery:"+row.Get<Guid>("id"));
+}
+var pendingSetup=await PendingSetup();
+var setupCode=await SetupCode(pendingSetup.Challenge.SetupChallengeId);
+var setupReplay=await setup.Request(pendingSetup.Proof);
+Check(setupReplay==pendingSetup.Challenge && (await sql.One("SELECT count(*) AS n FROM setup_delivery_outbox WHERE setup_id=@id",("id",setupReplay.SetupChallengeId)))!.Get<long>("n")==1,
+    "setup initiation replay returns same challenge without redelivery or expiry extension");
+await service.Resend(new(pendingSetup.Proof.VerificationSessionId,pendingSetup.Proof.BindingSecret));
+Check((await sql.One("SELECT resends FROM verification_sessions WHERE id=@id",("id",pendingSetup.Proof.VerificationSessionId)))!.Get<int>("resends")==0,"conflict proof cannot be reopened or rotated by resend");
+var complete=new CompleteRegistration(pendingSetup.Challenge.SetupChallengeId,setupCode,pendingSetup.Proof.BindingSecret,"fresh safe setup password");
+var setupKey=Secrets.Token();
+await Error(async()=>{await setup.Complete(complete with {Code=pendingSetup.Proof.Code==setupCode ? "invalid" : pendingSetup.Proof.Code},setupKey);},pendingSetup.Proof.Code==setupCode ? "VALIDATION_FAILED" : "VERIFICATION_FAILED");
+await Error(async()=>{await setup.Complete(complete with {BindingSecret=Secrets.Token()},setupKey);},"VERIFICATION_FAILED");
+var completed=await setup.Complete(complete,setupKey);
+Check(completed.Status=="Ready" && completed.CredentialOutcome=="CandidateSelected" && completed.RegistrationId==pendingSetup.Original.RegistrationId,
+    "distinct setup proof completes the existing registration and selects its candidate");
+Check((await setup.Complete(complete,setupKey))==completed,"lost completion response replays the same candidate and immutable Ready result");
+await Error(async()=>{await setup.Complete(complete with {NewPassword="changed setup password"},setupKey);},"IDEMPOTENCY_CONFLICT");
+Check((await sql.One("SELECT attempts FROM setup_challenges WHERE id=@id",("id",complete.SetupChallengeId)))!.Get<int>("attempts")==5,"invalid binding/proof and changed replay share durable setup attempt budget");
+Check(!(await sql.One("SELECT sealed_password FROM setup_challenges WHERE id=@id",("id",complete.SetupChallengeId)))!.Has("sealed_password"),"winner commit erases losing and winning setup candidate material");
+
+var existingSetup=await PendingSetup();
+await worker.EnsureCredential(existingSetup.Original.RegistrationId);
+var winnerHash=(await sql.One("SELECT password_hash FROM credentials WHERE person_id=(SELECT person_id FROM registrations WHERE id=@id)",("id",existingSetup.Original.RegistrationId)))!.Get<string>("password_hash");
+var existingComplete=new CompleteRegistration(existingSetup.Challenge.SetupChallengeId,await SetupCode(existingSetup.Challenge.SetupChallengeId),existingSetup.Proof.BindingSecret,"new candidate cannot replace winner");
+var existingResult=await setup.Complete(existingComplete,Secrets.Token());
+Check(existingResult.Status=="Ready" && existingResult.CredentialOutcome=="ExistingWinner"
+    && (await sql.One("SELECT password_hash FROM credentials WHERE person_id=(SELECT person_id FROM registrations WHERE id=@id)",("id",existingResult.RegistrationId)))!.Get<string>("password_hash")==winnerHash,
+    "already committed automatic Credential wins without password replacement");
+
+var setupRace=await PendingSetup();
+var raceComplete=new CompleteRegistration(setupRace.Challenge.SetupChallengeId,await SetupCode(setupRace.Challenge.SetupChallengeId),setupRace.Proof.BindingSecret,"race setup candidate password");
+var raceKey=Secrets.Token();
+var candidateTask=setup.Complete(raceComplete,raceKey);
+await Task.WhenAll(candidateTask,worker.EnsureCredential(setupRace.Original.RegistrationId));
+var raceWinner=(await sql.One("SELECT operation_id FROM initial_credential_winners WHERE registration_id=@id",("id",setupRace.Original.RegistrationId)))!.Get<Guid>("operation_id");
+Check(candidateTask.Result.Status=="Ready" && (await sql.One("SELECT count(*) AS n FROM credentials WHERE person_id=(SELECT person_id FROM registrations WHERE id=@id)",("id",setupRace.Original.RegistrationId)))!.Get<long>("n")==1
+    && (candidateTask.Result.CredentialOutcome=="ExistingWinner")==(raceWinner==setupRace.Original.RegistrationId),
+    "automatic versus setup race reports the actual immutable winner");
+
+var parallelSetup=await PendingSetup();
+var parallelComplete=new CompleteRegistration(parallelSetup.Challenge.SetupChallengeId,await SetupCode(parallelSetup.Challenge.SetupChallengeId),parallelSetup.Proof.BindingSecret,"parallel setup safe password");
+var parallelKey=Secrets.Token();
+var parallelResults=await Task.WhenAll(setup.Complete(parallelComplete,parallelKey),setup.Complete(parallelComplete,parallelKey));
+Check(parallelResults.All(x=>x.Status=="Ready" && x.CredentialOutcome=="CandidateSelected")
+    && parallelResults[0]==parallelResults[1]
+    && (await sql.One("SELECT count(*) AS n FROM event_outbox WHERE registration_id=@id AND event_type='PersonRegistered'",("id",parallelSetup.Original.RegistrationId)))!.Get<long>("n")==1,
+    "parallel identical completions preserve one candidate, one Ready fact and one event");
+
+var exhaustedSetup=await PendingSetup();
+var exhaustedCode=await SetupCode(exhaustedSetup.Challenge.SetupChallengeId);
+for(var i=0;i<5;i++) await Error(async()=>{await setup.Complete(new(exhaustedSetup.Challenge.SetupChallengeId,exhaustedCode,Secrets.Token(),"safe candidate password"),Secrets.Token());},"VERIFICATION_FAILED");
+await Error(async()=>{await setup.Complete(new(exhaustedSetup.Challenge.SetupChallengeId,exhaustedCode,exhaustedSetup.Proof.BindingSecret,"safe candidate password"),Secrets.Token());},"VERIFICATION_FAILED");
+Check((await sql.One("SELECT accepted_at FROM setup_challenges WHERE id=@id",("id",exhaustedSetup.Challenge.SetupChallengeId)))!.Has("accepted_at")==false,"correct sixth setup proof cannot bypass shared exhaustion");
+
+var expiredSetup=await PendingSetup(); var expiredSetupCode=await SetupCode(expiredSetup.Challenge.SetupChallengeId);
+clock.Advance(TimeSpan.FromMinutes(11));
+await Error(async()=>{await setup.Complete(new(expiredSetup.Challenge.SetupChallengeId,expiredSetupCode,expiredSetup.Proof.BindingSecret,"expired candidate password"),Secrets.Token());},"VERIFICATION_FAILED");
+await worker.Tick();
+var disposedSetup=(await sql.One("SELECT * FROM setup_challenges WHERE id=@id",("id",expiredSetup.Challenge.SetupChallengeId)))!;
+Check(!disposedSetup.Has("code_mac") && !disposedSetup.Has("binding_mac") && !disposedSetup.Has("request_mac"),"expired setup proof and replay verifier are erased");
+Check(!(await sql.One("SELECT sealed_code FROM setup_delivery_outbox WHERE setup_id=@id",("id",expiredSetup.Challenge.SetupChallengeId)))!.Has("sealed_code"),"expired setup delivery code is erased");
+
+var failedSetup=await PendingSetup();
+var failedComplete=new CompleteRegistration(failedSetup.Challenge.SetupChallengeId,await SetupCode(failedSetup.Challenge.SetupChallengeId),failedSetup.Proof.BindingSecret,"durable retry candidate password");
+var failedKey=Secrets.Token();
+await sql.Execute("CREATE OR REPLACE FUNCTION test_fail_credential() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected'; END $$; CREATE TRIGGER test_credential_failure BEFORE INSERT ON credentials FOR EACH ROW EXECUTE FUNCTION test_fail_credential()");
+CompletionResult accepted;
+try {accepted=await setup.Complete(failedComplete,failedKey);}
+finally {await sql.Execute("DROP TRIGGER test_credential_failure ON credentials; DROP FUNCTION test_fail_credential()");}
+Check(accepted.Status=="PendingCredential" && accepted.CredentialOutcome=="Undetermined"
+    && (await sql.One("SELECT sealed_password,accepted_at FROM setup_challenges WHERE id=@id",("id",failedComplete.SetupChallengeId)))!.Has("sealed_password"),
+    "Credential transaction failure preserves a durable accepted candidate and honest pending result");
+// Proof expires after acceptance; the separately bounded material still permits worker completion.
+clock.Advance(TimeSpan.FromMinutes(11));
+await worker.Tick();
+Check((await RegistrationService.Result(sql,failedSetup.Original.RegistrationId)).Status=="Ready"
+    && (await sql.One("SELECT completed FROM workflow_jobs WHERE registration_id=@id",("id",failedSetup.Original.RegistrationId)))!.Get<bool>("completed"),
+    "worker recovers the same accepted setup candidate after proof expiry without reopening proof");
+await Error(async()=>{await setup.Complete(failedComplete,failedKey);},"VERIFICATION_FAILED");
+Check(true,"consumed setup proof cannot replay after its absolute expiry");
+
+passed+=await AuthenticationStorageChecks.Run(db,clock,(await sql.One("SELECT person_id FROM registrations WHERE id=@id",("id",result.Result.RegistrationId)))!.Get<Guid>("person_id"));
+passed+=await AuthenticationChecks.Run(db,secrets,clock,clock.Advance,request.Email!,request.Password);
+passed+=await PasswordChangeChecks.Run(db,secrets,clock,clock.Advance,request.Email!,request.Password);
+passed+=await AuthenticationAdmissionChecks.Run(db,secrets,clock,clock.Advance);
+passed+=await RecoveryEnrollmentChecks.Run(db,secrets,clock,clock.Advance);
+passed+=await PasswordResetChecks.Run(db,secrets,clock,clock.Advance);
+var events=await sql.Rows("SELECT payload::text AS payload FROM event_outbox UNION ALL SELECT payload::text AS payload FROM auth_domain_event_outbox UNION ALL SELECT payload::text AS payload FROM credential_change_outbox");
 var eventFile=Environment.GetEnvironmentVariable("SMARTCORE_EVENT_FIXTURES");
 if(eventFile is not null) await File.WriteAllTextAsync(eventFile,"["+string.Join(',',events.Select(x=>x.Get<string>("payload")))+"]");
 Console.WriteLine($"RESULT: {passed} checks passed. Backend: {Environment.GetEnvironmentVariable("SMARTCORE_TEST_ENGINE") ?? "PostgreSQL (caller-provided)"}");

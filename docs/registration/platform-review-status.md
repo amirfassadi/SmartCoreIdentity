@@ -24,3 +24,7 @@ Read the [readiness report](https://github.com/amirfassadi/SmartCorePlatform/blo
 Open: V-002/V-003, bounded collection pagination, self/service versus tenant-resource scope, Identity-first versus IoT Foundation milestone, exact grammar authority, T16 encoding/replay/owners and SESSION wire/coordination/compatibility. Owner-selected 900-second access, 86400-second absolute Session cap, no-idle, S2 strict reuse and all-Session password-change directions are preserved, not newly accepted policy.
 
 All four applicable 064 documentary gates and 065 quality/governance evidence must be complete before any implementation slice. Architectural signature alone is insufficient. Real code/runtime/crash/race/security verification follows implementation and is not claimed passed here. Archived uploaded sources and source-manifest.json are unchanged. No runtime code or deployment is introduced.
+
+### Registration setup implementation follow-up — 2026-10-10
+
+The recovered runtime baseline is now published as b4e1407; native PostgreSQL CI passed for that baseline. The active development revision adds distinct setup proof, immutable candidate acceptance, truthful completion outcome and durable worker recovery. See [phase baseline](../implementation/BASELINE.md) and [verification](../implementation/VERIFICATION.md) for actual scope/evidence; historical no-code/source-request statements are superseded. Full-MVP architectural/readiness/production gates remain separate.
