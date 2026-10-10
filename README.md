@@ -1,5 +1,7 @@
 # SmartCoreIdentity
 
+> **2026-10-09 implementation update:** The owner has explicitly directed backend implementation, registration first. [Implementation baseline](docs/implementation/BASELINE.md) and [run guide](docs/implementation/RUNBOOK.md) now describe the executable internal registration phase. Earlier no-code/readiness statements below describe the prior review snapshot. Public launch, complete Identity MVP and full governance validation remain pending.
+
 SmartCoreIdentity is the identity and authentication foundation of the SmartCore ecosystem.
 
 > Identity proves who the actor is and provides identity, organization, membership, and session context. Business authorization belongs to consuming capabilities.

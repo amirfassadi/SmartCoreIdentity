@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: smartcore
+      POSTGRES_USER: smartcore
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init-dev.sh first}
+    volumes:
+      - identity-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartcore -d smartcore"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: .
+    command: ["--migrate"]
+    environment:
+      ConnectionStrings__Identity: Host=db;Database=smartcore;Username=smartcore;Password=${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    build: .
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Identity: Host=db;Database=smartcore;Username=smartcore;Password=${POSTGRES_PASSWORD}
+      Identity__MacKey: ${IDENTITY_MAC_KEY:?Missing MAC key}
+      Identity__MaterialKey: ${IDENTITY_MATERIAL_KEY:?Missing material key}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  identity-db:

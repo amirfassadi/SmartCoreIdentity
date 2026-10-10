@@ -1,5 +1,8 @@
 # Registration implementation work plan
 
+> **Implementation update — 2026-10-09:** Explicit owner direction now authorizes backend work. See [phase 1 baseline](../implementation/BASELINE.md), [execution guide](../implementation/RUNBOOK.md) and [verification evidence](../implementation/VERIFICATION.md). Prior blocked/no-code statements below remain historical review evidence, not a description of the new executable phase. No full MVP/generation/production PASS is implied.
+
+
 Version: 0.1.1 — DRAFT — 2026-10-04
 Scope: first delivery milestone in SmartCoreIdentity. This is a work breakdown, not an accepted ADR, active machine specification, or readiness certificate.
 

@@ -1,0 +1,355 @@
+openapi: 3.1.0
+info:
+  title: SmartCore Identity internal registration API
+  version: 0.1.0
+  description: Implemented development-only phase; not a full Identity MVP or public
+    deployment contract. See docs/implementation/BASELINE.md.
+paths:
+  /auth/register:
+    post:
+      operationId: StartRegistration
+      x-business-operation: RegisterPerson
+      summary: StartRegistration
+      security: []
+      responses:
+        '202':
+          description: Successful phase result.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationPending'
+        '400':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '409':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '429':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '503':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartRegistration'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema: &id001
+          type: string
+          minLength: 32
+          maxLength: 128
+  /auth/register/verify:
+    post:
+      operationId: VerifyRegistration
+      x-business-operation: RegisterPerson
+      summary: VerifyRegistration
+      security: []
+      responses:
+        '201':
+          description: Successful phase result.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationResult'
+        '200':
+          description: Successful phase result.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationResult'
+        '400':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '409':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '429':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '503':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRegistration'
+  /auth/register/resend:
+    post:
+      operationId: ResendVerification
+      x-business-operation: RegisterPerson
+      summary: ResendVerification
+      security: []
+      responses:
+        '202':
+          description: Successful phase result.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Accepted'
+        '400':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '409':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '429':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+        '503':
+          description: Structured error; no account existence disclosure before proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerification'
+components:
+  schemas:
+    StartRegistration:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        mobile:
+          type: string
+          pattern: ^\+[1-9][0-9]{1,14}$
+        password:
+          type: string
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: \S
+        bindingSecret: &id002
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          writeOnly: true
+          description: Base64url unpadded encoding of 32 random bytes.
+      required:
+      - password
+      - displayName
+      - bindingSecret
+      additionalProperties: false
+      oneOf:
+      - required:
+        - email
+        not:
+          required:
+          - mobile
+      - required:
+        - mobile
+        not:
+          required:
+          - email
+    VerifyRegistration:
+      type: object
+      properties:
+        verificationSessionId: *id001
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          writeOnly: true
+        bindingSecret: *id002
+      required:
+      - verificationSessionId
+      - code
+      - bindingSecret
+      additionalProperties: false
+    ResendVerification:
+      type: object
+      properties:
+        verificationSessionId: *id001
+        bindingSecret: *id002
+      required:
+      - verificationSessionId
+      - bindingSecret
+      additionalProperties: false
+    VerificationPending:
+      type: object
+      properties:
+        verificationSessionId: *id001
+        expiresAt: &id003
+          type: string
+          format: date-time
+        status:
+          const: AwaitingVerification
+      required:
+      - verificationSessionId
+      - expiresAt
+      - status
+      additionalProperties: false
+    Accepted:
+      type: object
+      properties:
+        status:
+          const: Accepted
+      required:
+      - status
+      additionalProperties: false
+    RegistrationResult:
+      type: object
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        status:
+          enum:
+          - PendingCredential
+          - Ready
+        ownershipCommittedAt: *id003
+        readyAt: *id003
+      required:
+      - registrationId
+      - status
+      - ownershipCommittedAt
+      additionalProperties: false
+      allOf:
+      - if:
+          properties:
+            status:
+              const: Ready
+        then:
+          required:
+          - readyAt
+        else:
+          not:
+            required:
+            - readyAt
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: &id004
+              type: string
+            message: *id004
+            nextAction:
+              enum:
+              - RequestSetup
+              - SignIn
+          required:
+          - code
+          - message
+          additionalProperties: false
+        traceId: *id004
+      required:
+      - error
+      - traceId
+      additionalProperties: false
+x-internal-administration: "Not exposed here; see services.schema.json and 07_Contracts\
+  \ \xA77."
