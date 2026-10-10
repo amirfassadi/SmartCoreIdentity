@@ -65,10 +65,7 @@ public sealed class CredentialChanges(Database db,Secrets secrets,TimeProvider c
         if(!rejectWithoutApplying)
         {
             var eventId=Guid.NewGuid();
-            var envelope=new {EventId=eventId,EventType="PasswordChanged",AggregateType="Credential",AggregateId=credential.Get<Guid>("id"),
-                OccurredAt=now,ActorIdentity=intent.Get<Guid>("person_id"),SessionReference=intent.Get<Guid>("session_id"),
-                ExecutionContext=new {CorrelationId=intent.Get<Guid>("id").ToString()},
-                Payload=new {PersonId=intent.Get<Guid>("person_id"),CredentialId=credential.Get<Guid>("id")}};
+            var envelope=PasswordChangedEvents.Create(eventId,credential.Get<Guid>("id"),intent,now);
             await c.Execute("INSERT INTO credential_change_outbox(id,operation_id,payload,occurred_at) VALUES(@id,@op,CAST(@payload AS jsonb),@now)",
                 ("id",eventId),("op",operation),("payload",JsonSerializer.Serialize(envelope)),("now",now));
         }
@@ -83,15 +80,15 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
     AccessTokens access,CredentialChanges credentials) : IPasswordChangeRunner
 {
     private static ApiError Denied()=>new(401,"UNAUTHORIZED");
-    private static Task<Row?> Evidence(NpgsqlConnection c,Guid person)=>c.One("""
+    internal static Task<Row?> Evidence(NpgsqlConnection c,Guid person)=>c.One("""
         SELECT c.*,p.status AS person_status,r.status AS registration_status,w.phase FROM credentials c
         JOIN persons p ON p.id=c.person_id JOIN registrations r ON r.person_id=p.id
         JOIN initial_credential_winners w ON w.person_id=p.id WHERE p.id=@id
         """,("id",person));
-    private static bool Ready(Row? row)=>row is not null && row.Get<string>("status")=="Active"
+    internal static bool Ready(Row? row)=>row is not null && row.Get<string>("status")=="Active"
         && row.Get<string>("person_status")=="Active" && row.Get<string>("registration_status")=="Ready"
         && row.Get<string>("phase")=="ReadyAcknowledged";
-    private static Task<Row?> Load(NpgsqlConnection c,Guid id)=>c.One("""
+    internal static Task<Row?> Load(NpgsqlConnection c,Guid id)=>c.One("""
         SELECT i.*,m.session_id,m.client_id,m.expected_hash_mac,m.replacement_hash_mac,m.sealed_hash,m.expires_at,m.sealed_replay_hash,m.replay_until
         FROM auth_credential_change_intents i JOIN auth_change_material m ON m.intent_id=i.id WHERE i.id=@id
         """,("id",id));
@@ -144,32 +141,40 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
             || session.Get<long>("issuance_epoch")!=proof.Epoch || session.Get<string>("status")!="Active"
             || session.Time("expires_at")<=now || session.Time("last_foreground_refresh_at").AddMinutes(30)<=now
             || family?.Get<string>("status")!="Active" || state.Epoch==long.MaxValue) throw Denied();
+        await AdmitVerified(c,state,request.OperationId,proof.PersonId,client,proof.SessionId,current,replacement,requestMac,"ChangePassword",now.AddSeconds(900));
+        await tx.CommitAsync();
+        return new(request.OperationId,"Fenced");
+    }
+    // Caller owns the Session transaction and has revalidated proof under the Person gate.
+    internal async Task AdmitVerified(NpgsqlConnection c,IssuanceGateState state,Guid id,Guid person,string client,
+        Guid? session,Row current,string replacement,byte[] requestMac,string kind,DateTimeOffset replayUntil)
+    {
+        if(!state.AllowsIssuance || state.Epoch==long.MaxValue || kind is not ("ChangePassword" or "ResetPassword")) throw Denied();
+        var now=Timestamps.Now(clock);
         var operation=Guid.NewGuid();
         await c.Execute("""
             INSERT INTO auth_credential_change_intents(id,person_id,kind,request_mac,verified_at,created_at,target_epoch,
               credential_operation_id,expected_credential_id,protected_material_reference,stage,next_attempt_at,request_version)
-            VALUES(@id,@person,'ChangePassword',@mac,@now,@now,@epoch,@op,@credential,@reference,'Fenced',@now,2)
-            """,("id",request.OperationId),("person",proof.PersonId),("mac",requestMac),("now",now),("epoch",state.Epoch+1),
-            ("op",operation),("credential",current.Get<Guid>("id")),("reference","auth-change-material:"+request.OperationId));
+            VALUES(@id,@person,@kind,@mac,@now,@now,@epoch,@op,@credential,@reference,'Fenced',@now,2)
+            """,("id",id),("kind",kind),("person",person),("mac",requestMac),("now",now),("epoch",state.Epoch+1),
+            ("op",operation),("credential",current.Get<Guid>("id")),("reference","auth-change-material:"+id));
         await c.Execute("INSERT INTO auth_change_material(intent_id,session_id,client_id,expected_hash_mac,replacement_hash_mac,sealed_hash,expires_at,sealed_replay_hash,replay_until) VALUES(@id,@session,@client,@expected,@replacement,@sealed,@expiry,@hash,@replay)",
-            ("id",request.OperationId),("session",proof.SessionId),("client",client),
+            ("id",id),("session",session),("client",client),
             ("expected",secrets.Mac("credential-evidence",current.Get<string>("password_hash"))),
             ("replacement",secrets.Mac("credential-evidence",replacement)),
-            ("sealed",secrets.Seal(replacement,"password-change:"+request.OperationId)),("expiry",now.AddHours(24)),("hash",secrets.Seal(replacement,"password-change-replay:"+request.OperationId)),("replay",now.AddSeconds(900)));
-        await c.Execute("UPDATE auth_issuance_state SET epoch=epoch+1,pending_operation_id=@op WHERE person_id=@person",("op",request.OperationId),("person",proof.PersonId));
+            ("sealed",secrets.Seal(replacement,"password-change:"+id)),("expiry",now.AddHours(24)),("hash",secrets.Seal(replacement,"password-change-replay:"+id)),("replay",replayUntil));
+        await c.Execute("UPDATE auth_issuance_state SET epoch=epoch+1,pending_operation_id=@op WHERE person_id=@person",("op",id),("person",person));
         // Gate serializes all Session writers. Lock Session IDs in stable order before families.
-        await c.Rows("SELECT id FROM auth_sessions WHERE person_id=@person AND status='Active' ORDER BY id FOR UPDATE",("person",proof.PersonId));
-        await c.Execute("UPDATE auth_sessions SET status='Closed',closed_at=@now,close_reason='PasswordChanged' WHERE person_id=@person AND status='Active'",("now",now),("person",proof.PersonId));
+        await c.Rows("SELECT id FROM auth_sessions WHERE person_id=@person AND status='Active' ORDER BY id FOR UPDATE",("person",person));
+        await c.Execute("UPDATE auth_sessions SET status='Closed',closed_at=@now,close_reason=@reason WHERE person_id=@person AND status='Active'",("now",now),("person",person),("reason",kind=="ResetPassword"?"PasswordReset":"PasswordChanged"));
         await c.Execute("""
             UPDATE auth_refresh_families SET status='Revoked',revoked_at=@now
             WHERE session_id IN (SELECT id FROM auth_sessions WHERE person_id=@person) AND status='Active'
-            """,("now",now),("person",proof.PersonId));
-        await tx.CommitAsync();
-        return new(request.OperationId,"Fenced");
+            """,("now",now),("person",person));
     }
     private async Task<ChangeStatus> Replay(Row prior,AccessProof proof,ChangePasswordRequest request,byte[] requestMac,string bearer)
     {
-        if(prior.Get<short>("request_version")!=2 || prior.Get<Guid>("person_id")!=proof.PersonId || prior.Get<Guid>("session_id")!=proof.SessionId
+        if(prior.Get<short>("request_version")!=2 || prior.Get<Guid>("person_id")!=proof.PersonId || !prior.Has("session_id") || prior.Get<Guid>("session_id")!=proof.SessionId
             || prior.Get<string>("client_id")!=proof.ClientId || !Secrets.Equal(prior.Get<byte[]>("request_mac"),requestMac)) throw new ApiError(409,"IDEMPOTENCY_CONFLICT");
         if(!prior.Has("sealed_replay_hash") || prior.Time("replay_until")<=Timestamps.Now(clock)) throw Denied();
         var failures=new PasswordFailures(db,clock);
@@ -214,6 +219,22 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
         await c.Execute("UPDATE auth_credential_change_intents SET stage='Reconciled',resolved_at=@now,last_classification=NULL WHERE id=@id",("now",Timestamps.Now(clock)),("id",id));
         await c.Execute("UPDATE auth_issuance_state SET pending_operation_id=NULL WHERE person_id=@person",("person",intent.Get<Guid>("person_id")));
         await c.Execute("UPDATE auth_change_material SET sealed_hash=NULL WHERE intent_id=@id",("id",id));
+        if(intent.Get<string>("kind")=="ResetPassword")
+        {
+            var applied=receipt.Get<string>("outcome")=="Applied";
+            if(await c.Execute("""
+                UPDATE auth_recovery_codes SET reserved_intent_id=NULL,
+                  verifier=CASE WHEN @applied THEN NULL ELSE verifier END,
+                  consumed_at=CASE WHEN @applied THEN @now ELSE NULL END,
+                  consumed_operation_id=CASE WHEN @applied THEN @id ELSE NULL END
+                WHERE person_id=@person AND reserved_intent_id=@id
+                """,("applied",applied),("now",Timestamps.Now(clock)),("id",id),("person",intent.Get<Guid>("person_id")))!=1)
+                throw new InvalidOperationException("IntegrityConflict");
+            if(applied) await c.Execute("""
+                INSERT INTO auth_account_notifications(id,person_id,operation_id,kind,created_at)
+                VALUES(@notice,@person,@id,'PasswordResetCompleted',@now) ON CONFLICT(operation_id,kind) DO NOTHING
+                """,("notice",Guid.NewGuid()),("person",intent.Get<Guid>("person_id")),("id",id),("now",Timestamps.Now(clock)));
+        }
         if(operatorAction is not null) await Audit(c,id,operatorAction,receipt.Get<string>("outcome"));
         await tx.CommitAsync();
     }
@@ -276,6 +297,16 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
         await c.Execute("""
             UPDATE auth_credential_change_intents SET stage='FailedClosed',resolved_at=@now,last_classification='OutcomeUnknown'
             WHERE stage IN ('Fenced','AwaitingCredential') AND attempts>=8 AND next_attempt_at<=@now
+            """,("now",Timestamps.Now(clock)));
+        await c.Execute("""
+            DELETE FROM auth_reset_decoys WHERE operation_id IN
+              (SELECT operation_id FROM auth_reset_decoys WHERE expires_at<=@now ORDER BY expires_at LIMIT 100)
+            """,("now",Timestamps.Now(clock)));
+        await c.Execute("""
+            DELETE FROM auth_reset_challenges WHERE id IN
+              (SELECT ch.id FROM auth_reset_challenges ch WHERE ch.expires_at<=@now
+                AND NOT EXISTS(SELECT 1 FROM auth_reset_acceptances a WHERE a.challenge_id=ch.id)
+                ORDER BY ch.expires_at LIMIT 100)
             """,("now",Timestamps.Now(clock)));
         await c.Execute("UPDATE auth_reset_delivery SET sealed_code=NULL WHERE expires_at<=@now AND sealed_code IS NOT NULL",("now",Timestamps.Now(clock)));
         await c.Execute("UPDATE auth_change_material SET sealed_hash=NULL WHERE expires_at<=@now AND sealed_hash IS NOT NULL",("now",Timestamps.Now(clock)));

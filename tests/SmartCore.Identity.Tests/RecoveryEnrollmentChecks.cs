@@ -96,7 +96,7 @@ internal static class RecoveryEnrollmentChecks
         advance(TimeSpan.FromMinutes(10));
         await Error(async()=>{await initiation.Start(client,begin);},"UNAUTHORIZED");
         var changes=new PasswordChanges(db,secrets,clock,gate,access,new CredentialChanges(db,secrets,clock));await changes.Tick();
-        Check(!(await sql.One("SELECT sealed_code FROM auth_reset_delivery WHERE id=@id",("id",otp.Get<Guid>("id"))))!.Has("sealed_code"),
+        Check(await sql.One("SELECT sealed_code FROM auth_reset_delivery WHERE id=@id",("id",otp.Get<Guid>("id"))) is null,
             "expired reset replay cannot extend OTP life and the scheduled cleanup erases delivery material");
         var expiring=(await auth.Login(new(email,null,password),client)).Session;
         var expiryGate=new PausedGate();var expiryEnrollment=new RecoveryEnrollment(db,secrets,clock,expiryGate,access);

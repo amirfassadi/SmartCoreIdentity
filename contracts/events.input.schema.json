@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:smartcore:identity:events:proposed:1.2.1",
+  "$id": "urn:smartcore:identity:events:proposed:1.2.2",
   "title": "Identity events (DRAFT)",
   "$defs": {
     "PersonRegistered": {
@@ -1021,6 +1021,11 @@
             },
             "DeviceInfo": {
               "type": "string"
+            },
+            "RecoveryProofReference": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the accepted ResetPassword operation/intent after verified primary-contact OTP plus enrolled recovery code. Not a challenge ID, raw proof or secret. Exactly one of SessionReference and this field is permitted."
             }
           },
           "required": [],
@@ -1052,8 +1057,7 @@
         "AggregateId",
         "OccurredAt",
         "ActorIdentity",
-        "Payload",
-        "SessionReference"
+        "Payload"
       ],
       "additionalProperties": false,
       "allOf": [
@@ -1078,6 +1082,32 @@
                 ]
               }
             }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "ExecutionContext"
+            ],
+            "properties": {
+              "ExecutionContext": {
+                "required": [
+                  "RecoveryProofReference"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "SessionReference"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "SessionReference"
+            ]
           }
         }
       ]

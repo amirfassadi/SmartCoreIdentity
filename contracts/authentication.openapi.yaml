@@ -1,12 +1,11 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.4.0
-  description: Development BFF adapter. Authenticated BFF supplies a stable opaque
-    X-Bff-Subject for separate distributed admission budgets. Password change is separately
-    opt-in. Operator recovery HTTP is available only over a private Unix domain socket,
-    never on the application TCP listener. No reset endpoint. Recovery enrollment
-    and reset initiation are separately opt-in. Reset completion is not implemented.
+  version: 0.5.0
+  description: Development authenticated BFF adapter. Recovery enrollment and dual-factor
+    reset are opt-in. Reset requires primary-contact OTP plus a pre-enrolled recovery
+    code. The accepted reset operation closes Sessions and uses receipt-backed recovery;
+    no Session is manufactured. Private operator routes are Unix-socket only.
 paths:
   /auth/login:
     post:
@@ -462,6 +461,64 @@ paths:
         schema:
           type: string
           pattern: ^[A-Za-z0-9_-]{32,128}$
+  /auth/password/reset/complete:
+    post:
+      security:
+      - bffKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompletePasswordReset'
+      responses:
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Bound operation conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its
+            two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '202':
+          description: Verified reset intent accepted or bound receipt replayed; no
+            tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeStatus'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
 components:
   schemas:
     Login:
@@ -714,6 +771,36 @@ components:
           format: date-time
         status:
           const: Accepted
+    CompletePasswordReset:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - challengeId
+      - bindingSecret
+      - code
+      - recoveryCode
+      - newPassword
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        challengeId:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        bindingSecret:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+        recoveryCode:
+          type: string
+          pattern: ^[0-9A-F]{32}$
+        newPassword:
+          type: string
+          minLength: 15
+          maxLength: 128
   securitySchemes:
     bffKey:
       type: apiKey

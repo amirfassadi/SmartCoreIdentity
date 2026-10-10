@@ -20,7 +20,7 @@ public sealed class AuthenticationService(Database db,Secrets secrets,TimeProvid
         row.Get<string>("contact_kind")=="email"?row.Get<string>("contact"):null,
         row.Get<string>("contact_kind")=="mobile"?row.Get<string>("contact"):null,row.Get<string>("status"),row.Get<bool>("recovery_required"));
     private static Task<Row?> Evidence(NpgsqlConnection c,Guid person)=>c.One("""
-        SELECT p.*,r.status AS registration_status,c.id AS credential_id,c.status AS credential_status,c.password_hash,(rc.person_id IS NULL) AS recovery_required
+        SELECT p.*,r.status AS registration_status,c.id AS credential_id,c.status AS credential_status,c.password_hash,(rc.verifier IS NULL) AS recovery_required
         FROM persons p LEFT JOIN registrations r ON r.person_id=p.id LEFT JOIN credentials c ON c.person_id=p.id LEFT JOIN auth_recovery_codes rc ON rc.person_id=p.id WHERE p.id=@id
         """,("id",person));
     private static string? Failure(Row? row)=>row is null ? "PersonNotFound" : row.Get<string>("status")!="Active" ? "PersonInactive"

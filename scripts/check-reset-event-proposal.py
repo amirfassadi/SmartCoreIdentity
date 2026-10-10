@@ -1,12 +1,13 @@
-"""Executable owner-review examples; this does not adopt the proposed contract."""
+"""Owner-selected Platform context union acceptance checks."""
 import copy,json,sys,uuid
 from pathlib import Path
 from jsonschema import Draft202012Validator,FormatChecker
 
 root=Path(__file__).resolve().parents[1]
-schema=json.loads((root/'contracts/proposals/password-changed-reset.schema.json').read_text())
+schema=json.loads((root/'contracts/events.input.schema.json').read_text())['$defs']['PasswordChanged']
 pinned=json.loads((root/'contracts/events.input.schema.json').read_text())['$defs']['PasswordChanged']
-assert 'SessionReference' in pinned['required'], 'Original Platform input must remain unchanged'
+assert 'SessionReference' not in pinned['required']
+assert pinned['properties']['ExecutionContext']['properties']['RecoveryProofReference']['description'].startswith('Identifier of the accepted ResetPassword')
 Draft202012Validator.check_schema(schema)
 validator=Draft202012Validator(schema,format_checker=FormatChecker())
 identifier=str(uuid.uuid4())
@@ -23,4 +24,4 @@ assert all(list(validator.iter_errors(value)) for value in (missing,ambiguous,se
 if len(sys.argv)>1:
  for event in json.loads(Path(sys.argv[1]).read_text()):
   if event.get('EventType')=='PasswordChanged':validator.validate(event)
-print('PROPOSAL PASS: existing Session context and sessionless recovery context; missing, ambiguous and secret-bearing contexts rejected; pinned input unchanged')
+print('RESET CONTEXT PASS: existing Session context and sessionless recovery context; missing, ambiguous and secret-bearing contexts rejected; selected Platform 1.2.2 context pinned')

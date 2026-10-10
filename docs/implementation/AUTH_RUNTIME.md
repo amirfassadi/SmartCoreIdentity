@@ -35,3 +35,7 @@ The additional `Identity__PasswordChangeEnabled=true` development slice implemen
 ## Verification
 
 The C# harness includes immutability regressions and authentication tests for Ready admission, uniform errors, signature/client rejection, generation rotation/reuse and races, logout replay, access/idle/absolute boundaries, foreground/background behavior, persistent fence denial and resolved-epoch eligibility. Internal mutation fixtures do not perform actual Credential replacement. `scripts/auth-smoke.py` exercises the real ASP.NET process with OpenAPI response checks, BFF admission, strict input, login/self/refresh/reuse/logout; the CI workflow runs it after existing registration/setup smokes. Actual outcomes are recorded in [verification](VERIFICATION.md), not inferred from configured checks.
+
+## Dual-factor reset candidate, 2026-10-10
+
+Platform schema 1.2.2 is pinned from `49ea40a50854c447b18afbdd7c2f3116dbee3136` with source provenance. Migration 009 adds deletable decoys, shared Person proof limits, immutable reset acceptance and receipt-backed recovery-code reservation/consumption. The worker and private recovery operator are reused; no synthetic Session is created. See [PASSWORD_RESET.md](PASSWORD_RESET.md). Runtime CI evidence for this candidate is pending; previous test counts apply only to their recorded commits.

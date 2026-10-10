@@ -64,9 +64,10 @@ public sealed class RecoveryEnrollment(Database db,Secrets secrets,TimeProvider 
         var version=(old?.Get<long>("version") ?? 0)+1;
         var code=Convert.ToHexString(RandomNumberGenerator.GetBytes(16)); // 128 random bits, shown once.
         await c.Execute("""
-            INSERT INTO auth_recovery_codes VALUES(@person,@version,@epoch,@session,@verifier,@now)
+            INSERT INTO auth_recovery_codes(person_id,version,enrolled_epoch,enrollment_session_id,verifier,enrolled_at) VALUES(@person,@version,@epoch,@session,@verifier,@now)
             ON CONFLICT(person_id) DO UPDATE SET version=EXCLUDED.version,enrolled_epoch=EXCLUDED.enrolled_epoch,
-              enrollment_session_id=EXCLUDED.enrollment_session_id,verifier=EXCLUDED.verifier,enrolled_at=EXCLUDED.enrolled_at
+              enrollment_session_id=EXCLUDED.enrollment_session_id,verifier=EXCLUDED.verifier,enrolled_at=EXCLUDED.enrolled_at,
+              consumed_at=NULL,consumed_operation_id=NULL,reserved_intent_id=NULL
             """,("person",proof.PersonId),("version",version),("epoch",state.Epoch),("session",proof.SessionId),
             ("verifier",Verifier(proof.PersonId,version,code)),("now",now));
         await c.Execute("INSERT INTO auth_recovery_enrollments VALUES(@id,@person,@session,@client,@version,@epoch,@mac,@now)",

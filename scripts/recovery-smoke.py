@@ -90,9 +90,47 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   status,unknown=call('/auth/password/reset',{**reset,'operationId':str(uuid.uuid4()),'email':secrets.token_hex(10)+'@example.test'},reset_bff)
   assert status==202 and set(unknown)==set(pending) and unknown['status']==pending['status']
   assert call('/dev/reset-inbox/'+unknown['challengeId'],headers={'X-Dev-Inbox-Key':env['Identity__DevInboxKey']})[0]==404
+  timings={'known':[],'unknown':[],'suppressed':[]}
+  def measured(body,label):
+   headers={**reset_bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
+   before=time.perf_counter();status,value=call('/auth/password/reset',body,headers)
+   timings[label].append((time.perf_counter()-before)*1000);assert status==202
+   return value
+  for _ in range(2):measured({**reset,'operationId':str(uuid.uuid4())},'known')
+  for _ in range(3):
+   measured({**reset,'operationId':str(uuid.uuid4())},'suppressed')
+   measured({**reset,'operationId':str(uuid.uuid4()),'email':secrets.token_hex(10)+'@example.test'},'unknown')
+  print('RESET TIMING OBSERVATION (small CI sample, not constant-time certification): '+json.dumps({
+   label:{'n':len(values),'median_ms':round(__import__('statistics').median(values),2),'max_ms':round(max(values),2)}
+   for label,values in timings.items()}))
   assert call('/me',headers=auth)[0]==200
-  assert call('/auth/password/reset/complete',dict(code=otp['code']),reset_bff)[0]==404
-  print('HTTP RECOVERY PASS: explicit loss acknowledgement, authenticated one-time enrollment/replacement, BFF onboarding state, uniform reset initiation, bound replay, protected distinct OTP inbox and no premature completion route')
+  complete_bff={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
+  new_password='new password dual factor HTTP fixture'
+  complete=dict(operationId=str(uuid.uuid4()),challengeId=pending['challengeId'],bindingSecret=reset['bindingSecret'],
+   code=otp['code'],recoveryCode=replacement['recoveryCode'],newPassword=new_password)
+  assert call('/auth/password/reset/complete',complete)[0]==401
+  wrong={**complete,'recoveryCode':'0'*32}
+  assert call('/auth/password/reset/complete',wrong,complete_bff)[0]==401
+  assert call('/me',headers=auth)[0]==200
+  status,accepted=call('/auth/password/reset/complete',complete,complete_bff)
+  assert status==202 and accepted['operationId']==complete['operationId']
+  assert call('/me',headers=auth)[0]==401
+  operator_headers={'X-Auth-Operator-Key':env['Identity__AuthOperatorKey']}
+  for _ in range(100):
+   status,state=call('/dev/auth/recovery/'+complete['operationId'],headers=operator_headers,private=True)
+   if status==200 and state['stage']=='Reconciled':break
+   time.sleep(.1)
+  else:raise RuntimeError('Reset did not reconcile')
+  status,replayed=call('/auth/password/reset/complete',complete,complete_bff)
+  assert status==202 and replayed['stage']=='Reconciled'
+  assert call('/auth/login',dict(email=email,password=password),bff)[0]==401
+  status,new_login=call('/auth/login',dict(email=email,password=new_password),bff)
+  assert status==200 and new_login['person']['recoveryEnrollmentRequired'] is True
+  new_auth={**bff,'X-Bff-Subject':secrets.token_urlsafe(32),'Authorization':'Bearer '+new_login['session']['accessToken']}
+  status,new_factor=call('/auth/recovery/enroll',dict(operationId=str(uuid.uuid4()),currentPassword=new_password,acceptLossRisk=True),new_auth)
+  assert status==200 and new_factor['version']==3 and len(new_factor['recoveryCode'])==32
+  assert call('/me',headers=new_auth)[1]['recoveryEnrollmentRequired'] is False
+  print('HTTP RECOVERY PASS: one-time enrollment, uniform initiation, two-factor reset, receipt recovery, old Session denial, bounded replay, fresh-login replacement and pinned response schemas')
  finally:
   process.terminate()
   try:process.wait(timeout=10)

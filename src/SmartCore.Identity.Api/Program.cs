@@ -50,7 +50,7 @@ if(authenticationEnabled)
         if(operatorKey is not {Length:>=32} || operatorKey==bffKey) throw new InvalidOperationException("A separate development operator key is required.");
         builder.Services.AddSingleton<CredentialChanges>();
         builder.Services.AddSingleton<PasswordChanges>();
-        if(recoveryEnrollmentEnabled) {builder.Services.AddSingleton<RecoveryEnrollment>();builder.Services.AddSingleton<PasswordResetInitiation>();}
+        if(recoveryEnrollmentEnabled) {builder.Services.AddSingleton<RecoveryEnrollment>();builder.Services.AddSingleton<PasswordResetInitiation>();builder.Services.AddSingleton<PasswordResetCompletion>();}
         builder.Services.AddSingleton<IPasswordChangeRunner>(c=>c.GetRequiredService<PasswordChanges>());
         var socket=builder.Configuration["Identity:AuthOperatorSocket"];
         var applicationPort=builder.Configuration.GetValue<int>("Identity:ApplicationPort");
@@ -97,7 +97,7 @@ app.Use(async(context,next)=>
         if(!privateConnection) throw new ApiError(404,"NOT_FOUND");
     }
     else if(privateConnection && passwordChangeEnabled) throw new ApiError(404,"NOT_FOUND");
-    var category=path switch {"/auth/login"=>"login","/auth/password/change" or "/auth/recovery/enroll" or "/auth/password/reset"=>"change","/auth/refresh" or "/auth/logout" or "/me"=>"session",_=>null};
+    var category=path switch {"/auth/login"=>"login","/auth/password/change" or "/auth/recovery/enroll" or "/auth/password/reset" or "/auth/password/reset/complete"=>"change","/auth/refresh" or "/auth/logout" or "/me"=>"session",_=>null};
     if(authenticationEnabled && category is not null)
     {
         var secrets=context.RequestServices.GetRequiredService<Secrets>();
@@ -110,7 +110,7 @@ app.MapGet("/health/live",()=>Results.Ok(new {status="live"}));
 app.MapGet("/health/ready",async(Database db)=>
 {
     await using var c=await db.Source.OpenConnectionAsync();
-    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",authenticationEnabled?8:2));
+    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",authenticationEnabled?9:2));
     return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope=authenticationEnabled?"internal-authentication":"internal-registration"});
 });
 app.MapPost("/auth/register",async(HttpRequest http,RegistrationService service)=>
@@ -184,6 +184,11 @@ if(authenticationEnabled)
             {
                 Bff(request,secrets);
                 return Results.Json(await initiation.Start(bffClient,await Read<StartPasswordReset>(request)),statusCode:202);
+            }).RequireRateLimiting("authentication-transport");
+            app.MapPost("/auth/password/reset/complete",async(HttpRequest request,Secrets secrets,PasswordResetCompletion completion)=>
+            {
+                Bff(request,secrets);
+                return Results.Accepted(value:await completion.Accept(bffClient,await Read<CompletePasswordReset>(request)));
             }).RequireRateLimiting("authentication-transport");
             app.MapPost("/auth/recovery/enroll",async(HttpRequest request,Secrets secrets,AccessTokens access,RecoveryEnrollment enrollment)=>
             {
