@@ -51,7 +51,7 @@ These values resolve the archived conflicting values for this phase only. Passwo
 
 The request authorizes forward progress on these items. It does not turn unchecked items into completed work. See [execution guide](RUNBOOK.md) and [verification evidence](VERIFICATION.md).
 
-The next authentication slice's transaction alternatives and preserved owner policies are prepared in [authentication transaction decision](AUTH_TRANSACTION_DECISION.md). A shared Credential/Session mutation transaction has not been selected by general implementation authorization.
+The owner explicitly selected A on 2026-10-10: [authentication transaction decision](AUTH_TRANSACTION_DECISION.md). Migration 003 and [storage/gate foundations](AUTH_STORAGE.md) preserve separate Credential commits; Session coordination owns its own transaction. No authentication/reset endpoint or background password reconciliation is enabled by this storage slice. B requires evidence and a separate scoped ADR revision.
 
 ## Registration setup/completion — revision 0.2.0
 
