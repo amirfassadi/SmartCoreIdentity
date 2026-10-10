@@ -67,6 +67,20 @@ internal static class AuthenticationChecks
         await Denied(async()=>{await auth.Refresh(new(logout.RefreshToken,true),client);});
         Check((await sql.One("SELECT count(*) AS n FROM auth_domain_event_outbox WHERE session_id=@id AND event_type='LogoutCompleted'",("id",logout.SessionId)))!.Get<long>("n")==1,
             "logout and lost-response replay preserve one closure/event and deny refresh");
+        var closeRace=(await Login()).Session; var closeProof=Proof(closeRace);
+        async Task RefreshOrDeny()
+        {
+            try {await auth.Refresh(new(closeRace.RefreshToken,true),client);}
+            catch(ApiError e) when(e.Status==401) { }
+        }
+        await Task.WhenAll(RefreshOrDeny(),auth.Logout(closeProof));
+        Check((await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",closeRace.SessionId)))!.Get<string>("status")=="Closed"
+            && (await sql.One("SELECT status FROM auth_refresh_families WHERE session_id=@id",("id",closeRace.SessionId)))!.Get<string>("status")=="Revoked",
+            "logout versus refresh race leaves every successor unusable");
+        var closeDeadline=clock.GetUtcNow().AddSeconds(5);
+        var clipped=access.Issue(login.Person.PersonId,Guid.NewGuid(),0,client,Secrets.Token(),closeDeadline);
+        Check(clipped.AccessExpiresAt<=closeDeadline && access.Read(clipped.AccessToken,client).PersonId==login.Person.PersonId,
+            "signed access deadline is clipped to a near Session deadline");
         var expiry=(await Login()).Session;
         advance(TimeSpan.FromSeconds(900));
         await Denied(()=>Task.Run(()=>Proof(expiry)));
