@@ -61,7 +61,15 @@ internal static class BffProcessPeer
         }
         public async ValueTask DisposeAsync()
         {
-            if(!process.HasExited)await Kill();
+            // DONE may reach the reader just before the successful process exits.
+            // Cleanup accepts normal completion; explicit Kill() above still requires
+            // abnormal termination of the peer paused at a crash boundary.
+            if(!process.HasExited)
+            {
+                try{await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(1));}
+                catch(TimeoutException)
+                {process.Kill(entireProcessTree:true);await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));}
+            }
             await stderr;process.Dispose();
         }
     }
