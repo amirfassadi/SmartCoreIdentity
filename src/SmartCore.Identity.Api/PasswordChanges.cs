@@ -151,6 +151,7 @@ public sealed class PasswordChanges(Database db,Secrets secrets,TimeProvider clo
     {
         if(!state.AllowsIssuance || state.Epoch==long.MaxValue || kind is not ("ChangePassword" or "ResetPassword")) throw Denied();
         var now=Timestamps.Now(clock);
+        if(replayUntil<=now) throw Denied(); // Proof must still be live at the admission timestamp.
         var operation=Guid.NewGuid();
         await c.Execute("""
             INSERT INTO auth_credential_change_intents(id,person_id,kind,request_mac,verified_at,created_at,target_epoch,

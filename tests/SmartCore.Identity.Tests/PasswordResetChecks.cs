@@ -49,6 +49,14 @@ internal static class PasswordResetChecks
         var reserved=(await sql.One("SELECT * FROM auth_recovery_codes WHERE person_id=@id",("id",fixture.Person)))!;
         Check(reserved.Has("verifier") && reserved.Get<Guid>("reserved_intent_id")==request.OperationId && !reserved.Has("consumed_at"),
             "reset acceptance reserves the one-time recovery code without consuming it before Credential outcome");
+        try
+        {
+            await sql.Execute("UPDATE auth_recovery_codes SET verifier=NULL,reserved_intent_id=NULL,consumed_at=@now,consumed_operation_id=@op WHERE person_id=@id",
+                ("now",Timestamps.Now(clock)),("op",request.OperationId),("id",fixture.Person));
+            throw new Exception("Consumption before receipt accepted");
+        }
+        catch(PostgresException e) when(e.SqlState=="23514") { }
+        Check(true,"database rejects recovery-code consumption before receipt-backed reconciliation");
         await Denied(async()=>{await auth.Self(access.Read(fixture.Token,client));});
         await Denied(async()=>{await auth.Login(new(fixture.Contact,null,password),client);});
         Check((await sql.One("SELECT count(*) AS n FROM auth_sessions WHERE person_id=@id AND status='Active'",("id",fixture.Person)))!.Get<long>("n")==0,
@@ -105,6 +113,9 @@ internal static class PasswordResetChecks
             && (await auth.Login(new(limited.Contact,null,password),client)).Person.PersonId==limited.Person,
             "terminal NotApplied receipt releases the reserved code without changing the password");
         var phone=await Ready(true);var phoneProof=await Proof(phone.Contact,phone.Recovery,true);
+        await Denied(async()=>{await complete.Accept(client,phoneProof with {RecoveryCode=new string('0',32)});});
+        Check(await sql.One("SELECT id FROM auth_credential_change_intents WHERE id=@id",("id",phoneProof.OperationId)) is null,
+            "possession of a telephone OTP alone cannot reset or fence the existing account");
         await complete.Accept(client,phoneProof);await changes.Process(phoneProof.OperationId);
         Check((await auth.Login(new(null,phone.Contact,replacement),client)).Person.RecoveryEnrollmentRequired,
             "telephone accounts require both proofs and use the same receipt-backed reset coordinator");
