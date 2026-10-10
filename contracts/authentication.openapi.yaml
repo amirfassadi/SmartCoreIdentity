@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.1.0
-  description: Opt-in server-side BFF test adapter. Zero refresh grace; foreground
-    must be asserted by authenticated BFF. expiresAt is immutable Session deadline;
-    accessExpiresAt is bounded JWT expiry. No reset/change endpoint.
+  version: 0.2.0
+  description: Opt-in development BFF adapter; zero refresh grace and immutable Session
+    expiry. Password change additionally requires PasswordChangeEnabled. No reset
+    endpoint. Operator recovery is a separately keyed, loopback-only Development adapter.
 paths:
   /auth/login:
     post:
@@ -162,6 +162,139 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /auth/password/change:
+    post:
+      security:
+      - bffKey: []
+        bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+      responses:
+        '202':
+          description: Durable workflow status; Reconciled may mean Applied or RejectedNotApplied,
+            not a password-success assertion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeStatus'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /dev/auth/recovery/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      security:
+      - operatorKey: []
+      responses:
+        '200':
+          description: Durable workflow status; Reconciled may mean Applied or RejectedNotApplied,
+            not a password-success assertion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeStatus'
+        '404':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      security:
+      - operatorKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recovery'
+      responses:
+        '200':
+          description: Durable workflow status; Reconciled may mean Applied or RejectedNotApplied,
+            not a password-success assertion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeStatus'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Login:
@@ -268,6 +401,51 @@ components:
       required:
       - error
       - traceId
+    ChangePassword:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - currentPassword
+      - newPassword
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 15
+          maxLength: 128
+    ChangeStatus:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - stage
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        stage:
+          enum:
+          - Fenced
+          - AwaitingCredential
+          - Reconciled
+          - FailedClosed
+    Recovery:
+      type: object
+      additionalProperties: false
+      required:
+      - action
+      properties:
+        action:
+          enum:
+          - Retry
+          - ResolveNotApplied
   securitySchemes:
     bffKey:
       type: apiKey
@@ -277,3 +455,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    operatorKey:
+      type: apiKey
+      in: header
+      name: X-Auth-Operator-Key

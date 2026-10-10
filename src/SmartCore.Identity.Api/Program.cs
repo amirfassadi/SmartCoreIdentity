@@ -24,6 +24,8 @@ builder.Services.AddSingleton<RegistrationService>();
 builder.Services.AddSingleton<Provisioning>();
 builder.Services.AddSingleton<RegistrationSetupService>();
 var authenticationEnabled=builder.Configuration.GetValue("Identity:AuthenticationEnabled",false);
+var passwordChangeEnabled=builder.Configuration.GetValue("Identity:PasswordChangeEnabled",false);
+if(passwordChangeEnabled && !authenticationEnabled) throw new InvalidOperationException("Password change requires authentication.");
 string? bffKey=null;
 var bffClient="development-bff";
 if(authenticationEnabled)
@@ -38,6 +40,15 @@ if(authenticationEnabled)
     builder.Services.AddSingleton<IAuthenticationIssuanceGate,PostgresAuthenticationIssuanceGate>();
     builder.Services.AddSingleton(c=>new AccessTokens(signingKey,c.GetRequiredService<TimeProvider>()));
     builder.Services.AddSingleton<AuthenticationService>();
+    if(passwordChangeEnabled)
+    {
+        if(!builder.Environment.IsDevelopment()) throw new InvalidOperationException("Password recovery adapter is Development-only.");
+        var operatorKey=builder.Configuration["Identity:AuthOperatorKey"];
+        if(operatorKey is not {Length:>=32} || operatorKey==bffKey) throw new InvalidOperationException("A separate development operator key is required.");
+        builder.Services.AddSingleton<CredentialChanges>();
+        builder.Services.AddSingleton<PasswordChanges>();
+        if(builder.Configuration.GetValue("Identity:PasswordChangeWorkerEnabled",true)) builder.Services.AddHostedService<PasswordChangeWorker>();
+    }
 }
 if(builder.Configuration.GetValue("Identity:WorkerEnabled",true)) builder.Services.AddHostedService<ProvisioningWorker>();
 builder.Services.ConfigureHttpJsonOptions(o=>o.SerializerOptions.DefaultIgnoreCondition=JsonIgnoreCondition.WhenWritingNull);
@@ -65,7 +76,7 @@ app.MapGet("/health/live",()=>Results.Ok(new {status="live"}));
 app.MapGet("/health/ready",async(Database db)=>
 {
     await using var c=await db.Source.OpenConnectionAsync();
-    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",authenticationEnabled?4:2));
+    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",passwordChangeEnabled?5:authenticationEnabled?4:2));
     return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope=authenticationEnabled?"internal-authentication":"internal-registration"});
 });
 app.MapPost("/auth/register",async(HttpRequest http,RegistrationService service)=>
@@ -125,6 +136,32 @@ if(authenticationEnabled)
         await service.Logout(proof);
         return Results.NoContent();
     }).RequireRateLimiting("registration");
+    if(passwordChangeEnabled)
+    {
+        app.MapPost("/auth/password/change",async(HttpRequest request,Secrets secrets,AccessTokens access,PasswordChanges changes)=>
+        {
+            _=Proof(request,secrets,access);
+            return Results.Json(await changes.Accept(request.Headers.Authorization.ToString()[7..],bffClient,
+                await Read<ChangePasswordRequest>(request)),statusCode:202);
+        }).RequireRateLimiting("registration");
+        void Operator(HttpContext context,Secrets secrets)
+        {
+            var remote=context.Connection.RemoteIpAddress;
+            if(remote is null || !System.Net.IPAddress.IsLoopback(remote)
+                || !Secrets.Equal(secrets.Mac("auth-operator",builder.Configuration["Identity:AuthOperatorKey"]!),
+                    secrets.Mac("auth-operator",context.Request.Headers["X-Auth-Operator-Key"].ToString()))) throw new ApiError(404,"NOT_FOUND");
+        }
+        app.MapGet("/dev/auth/recovery/{id:guid}",async(Guid id,HttpContext context,Secrets secrets,PasswordChanges changes)=>
+        {
+            Operator(context,secrets); return Results.Ok(await changes.Status(id));
+        }).RequireRateLimiting("registration");
+        app.MapPost("/dev/auth/recovery/{id:guid}",async(Guid id,HttpContext context,Secrets secrets,PasswordChanges changes)=>
+        {
+            Operator(context,secrets); var request=await Read<RecoveryRequest>(context.Request);
+            try {return Results.Ok(await changes.Recover(id,request.Action));}
+            catch(InvalidOperationException) {throw new ApiError(409,"RECOVERY_CONFLICT");}
+        }).RequireRateLimiting("registration");
+    }
 }
 // Fake inbox is opt-in, loopback-only, authenticated and unavailable outside Development.
 if(builder.Environment.IsDevelopment() && builder.Configuration["Identity:DevInboxKey"] is {Length: >= 32} inboxKey)

@@ -1,6 +1,6 @@
 # Authentication storage and transaction ownership — A
 
-Date: 2026-10-10. Owner: Amir (@amirfassadi), project/architecture owner under 051 §7. [Explicit A disposition](AUTH_TRANSACTION_DECISION.md). Source inputs: Platform `724ff849a9ddd6741fc5d84d6b54c366dcb774be`; Identity `968b918858345927a3624c3b8b8688cab88d9501`. The prior revision added storage/gate foundations. The current development-only login/self/refresh/logout adapter is described in [authentication runtime](AUTH_RUNTIME.md); reset, Credential replacement and a production BFF remain absent.
+Date: 2026-10-10. Owner: Amir (@amirfassadi), project/architecture owner under 051 §7. [Explicit A disposition](AUTH_TRANSACTION_DECISION.md). Source inputs: Platform `724ff849a9ddd6741fc5d84d6b54c366dcb774be`; Identity `968b918858345927a3624c3b8b8688cab88d9501`. The prior revision added storage/gate foundations. The current development-only login/self/refresh/logout adapter is described in [authentication runtime](AUTH_RUNTIME.md); reset and a production BFF remain absent. The additional opt-in password-change/recovery slice is described in [password-change protocol](PASSWORD_CHANGE.md).
 
 ## Transaction owners and write authority
 
@@ -40,7 +40,7 @@ Reset initiation/delivery/invalid proof **cannot** insert an admitted intent, ad
 
 Credential replacement then uses a separate idempotent operation. Timeout/crash leaves issuance denied; a worker queries the authoritative outcome before retrying or releasing the fence. `next_attempt_at`, attempts, stage and safe classification make this work durable/observable to authorized operators. `FailedClosed` is terminal operator attention, not authority to reopen issuance. Only confirmed/reconciled outcome permits resolution; old Sessions are never restored. A resolved definitive failure may reopen future login against the unchanged Credential only after authoritative reconciliation, while already closed Sessions stay closed.
 
-The scheduler, proof adapters, Credential operation/outcome protocol and operator-authenticated status endpoint are **not implemented in this storage-only slice**. No real fence can be activated through an exposed endpoint. Their next delivery must test crash at every phase, stuck/unknown results, bounded retry escalation and restricted status. Login/refresh failures use the same outward shape for fenced and other unauthorized states; no account/reset-progress enumeration. Do not automatically clear a stuck fence on a timer.
+Migration 003 originally supplied storage only. Migration 005 and the separate opt-in [password-change slice](PASSWORD_CHANGE.md) now add authenticated change proof, Credential receipts, scheduled reconciliation and development operator status/actions. Reset proof and production operator authentication remain absent. The newer verification record distinguishes actual replacement/recovery tests from the earlier internal fixtures. Login/refresh failures use the same outward shape for fenced and other unauthorized states; no account/reset-progress enumeration. Do not automatically clear a stuck fence on a timer.
 
 ## Strict reuse: zero grace, finite recognition
 
