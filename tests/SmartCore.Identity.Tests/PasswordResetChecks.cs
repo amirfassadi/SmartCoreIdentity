@@ -197,12 +197,12 @@ internal static class PasswordResetChecks
             advance(TimeSpan.FromMinutes(16));
             var binding=Secrets.Token();
             var real=await Measure("initiation-real",()=>starts.Start(client,new(Guid.NewGuid(),timingFixture.Contact,null,binding)));
-            var unknown=await Measure("initiation-decoy",()=>starts.Start(client,new(Guid.NewGuid(),Guid.NewGuid()+"@example.test",null,binding)));
+            var decoySample=await Measure("initiation-decoy",()=>starts.Start(client,new(Guid.NewGuid(),Guid.NewGuid()+"@example.test",null,binding)));
             await starts.Start(client,new(Guid.NewGuid(),timingFixture.Contact,null,binding));
             await starts.Start(client,new(Guid.NewGuid(),timingFixture.Contact,null,binding));
             var suppressed=await Measure("initiation-suppressed",()=>starts.Start(client,new(Guid.NewGuid(),timingFixture.Contact,null,binding)));
             var wrong=new CompletePasswordReset(Guid.NewGuid(),real.ChallengeId,binding,"00000000",new string('0',32),replacement);
-            foreach(var item in new[]{("completion-real",real),("completion-decoy",unknown),("completion-suppressed",suppressed)})
+            foreach(var item in new[]{("completion-real",real),("completion-decoy",decoySample),("completion-suppressed",suppressed)})
                 await Measure(item.Item1,async()=>{await Denied(async()=>{await complete.Accept(client,wrong with {ChallengeId=item.Item2.ChallengeId});});return true;});
         }
         static double Quantile(List<double> values,double fraction)=>values.Order().ElementAt((int)Math.Ceiling(values.Count*fraction)-1);
