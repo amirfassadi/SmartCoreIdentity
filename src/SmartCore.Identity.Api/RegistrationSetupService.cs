@@ -61,6 +61,13 @@ public sealed class RegistrationSetupService(Database db, Secrets secrets, TimeP
         await using(var connection=await db.Source.OpenConnectionAsync())
         await using(var tx=await connection.BeginTransactionAsync())
         {
+            // Credential writes lock the registration before its challenges. Take the same
+            // per-registration guard before locking a challenge: its update also takes a
+            // foreign-key lock on registration, so the inverse order can deadlock.
+            var target=await connection.One("SELECT registration_id FROM setup_challenges WHERE id=@id",("id",request.SetupChallengeId));
+            Input.Require(target is not null,"VERIFICATION_FAILED",400);
+            await connection.Execute("SELECT pg_advisory_xact_lock(hashtextextended(@id,0))",
+                ("id","credential:"+target!.Get<Guid>("registration_id")));
             var row=await connection.One("SELECT * FROM setup_challenges WHERE id=@id FOR UPDATE",("id",request.SetupChallengeId));
             var now=Timestamps.Now(clock);
             Input.Require(row is not null && row.Time("expires_at")>now && row.Get<int>("attempts")<5,"VERIFICATION_FAILED",400);
