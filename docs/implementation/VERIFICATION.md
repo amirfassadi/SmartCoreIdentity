@@ -121,3 +121,242 @@ Controlled 12-sample HTTP completion groups real/decoy/suppressed had p50 217.22
 The harness now checks PostgreSQL's actual validated Person and Credential status CHECK predicates for exact Active-only scope. The BFF_REFRESH_DESIGN.md document specifies server-side tokens, shared-store row serialization, independently committed dispatch evidence before Identity HTTP, successor commit recognition and BFF-controlled user-action foreground routing. This is design, not implemented BFF or multi-instance acceptance. Runtime/check revision `f0e31440694ca867d86da302bef0bcbcb4d9d46b` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38079795586): **199 C# checks**, **188 emitted-event schema checks**, all **five HTTP smokes**, both reset timing gates and zero-warning/error builds. Job `114294168730` logs were inspected directly, including the two actual validated status CHECK assertions. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38079795582) passed. Local/source tree is `ad65354d8a07d4d66a12b76c7a40057dc1c906c5`. Earlier 197/188 evidence remains revision-specific. This evidence follow-up changes documentation only.
 
 The completion HTTP real/decoy/suppressed p50 values were 213.66/211.25/216.06 ms, p90 220.31/279.22/219.45 ms, and maxima 223.00/303.71/221.94 ms. The p90 spread of 59.77 ms passed the declared <60 ms bound but is close to it. Preserve this observation: no threshold was widened and no test retried to hide it. The small sample cannot attribute the tail to execution, scheduling or transport, establish statistical channel evidence, or prove reliable thresholds under representative load. Initiation p50 values were 212.74/208.26/208.65 ms and p90 221.88/217.81/217.76 ms. The 12/group gate remains regression evidence only; investigate future flakes and require adversarial/load testing with failure-overrun monitoring before real-user release.
+
+## BFF core scaffold and behavioral Active-only checks — verified 779c6ab
+
+Person/Credential status regression now attempts inactive writes inside rolled-back transactions and requires PostgreSQL 23514, without depending on generated constraint names or pg_get_expr formatting. The new BFF class-library scaffold and BffRefreshChecks cover shared-store coordination, native Identity rotation, owner/transport faults and foreground. The test uses two independent data sources/pools, not two deployed browser hosts; controlled HTTP bridge tests also exercise the concrete adapter, real response loss and redirect rejection; complete middleware, production failover/load/browser acceptance remain outstanding. Runtime `779c6ab7d2b15d149b6adfb37b2d714e3691a765` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38081091659): **224 C# checks**, **230 emitted-event schema checks**, all **five existing API HTTP smoke scripts**, both reset timing gates and zero-warning/error builds. The 26 new BFF checks, including the controlled loopback HTTP bridge, are part of the C# count; they are not a sixth browser smoke suite. Job `114297980653` logs were inspected directly. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38081091647) also passed. Local/runtime tree is `db4c7d15e1c3f55d90123ab2fb9102c42c629f07`. Earlier 199/188 results remain revision-specific. This follow-up changes documentation only.
+
+Directly observed PASS: 20 foreground contenders on two independent BFF stores/pools caused one Identity rotation; valid committed access was read during a held refresh lock; an expired-access contender waited past two seconds and reused the committed successor. Fault coverage includes before dispatch, durable dispatch before HTTP, response received before successor write/commit, committed successor before marker cleanup, actual server-side PostgreSQL owner connection termination, injected lost/malformed/timed-out responses and cancellation. Separate loopback HTTP checks observed one authenticated refresh for 20 contenders, an actual connection abort after Identity commit without replay, and a redirect with zero trap calls. Background rotation did not advance foreground time, user action after a fresh background rotation coalesced once, and polling could not pass the thirty-minute boundary. Known revocation was excluded from uncertainty and terminal local cookie closure erased token material.
+
+The first core candidate `92ca8a9` passed compilation and the initial concurrency/fault checks but failed the exact polling-deadline comparison because the test clock retained 100-nanosecond precision while PostgreSQL stored microseconds. The final source normalizes BFF timestamps with the existing Identity Timestamps.Now helper and compares the same precision; the complete rerun passed. No timing threshold was widened or retry used to hide that failure. Latest HTTP reset completion p90 real/decoy/suppressed: 220.34/221.27/220.57 ms; initiation: 223.26/220.16/222.98 ms. These remain small regression samples, not statistical/load certification.
+
+This is a class-library token coordination scaffold, not a deployed browser BFF. The two coordinators share a PostgreSQL store through independent pools in one test process, and the controlled HTTP bridge calls real Identity services without the complete middleware pipeline. Separate-process kill/DB failover durability, pool/load acceptance, browser cookies/CSRF/Origin and real logout/onboarding/provider integration remain release dependencies. The initial uncertainty thresholds are review triggers, not a change to zero-grace policy.
+
+
+## BFF admission receipts and actual OS process death — verified 9a9da68 (recorded 2026-10-11)
+
+Runtime `9a9da68b203036c2beaf8bb37cccc5c1c5616a01`, source tree
+`55ee7a3cad35ccb94654c486ce171f162fbe64b7`, passed
+[native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38082500995):
+**242 C# checks (44 BFF checks)**, **256 emitted-event schema checks**, all
+**five existing API HTTP smoke scripts**, both reset timing gates, locked restore
+and zero-warning/error builds. Job `114302131842` logs were inspected directly.
+[Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38082501002)
+also passed. This evidence follow-up modifies documentation only.
+
+Observed admission PASS: signed nonce-bound `NotProcessed` rate/busy receipts
+CAS-clear only their dispatch attempt, retain the active token bundle/version
+and cause `BFF_BUSY` with a bounded retry delay. Twenty cross-instance contenders
+within the shared retry deadline sent no additional HTTP dispatch; later attempts
+rotated the original unconsumed token once. Generic proxy 502/503/504, wrong nonce
+and invalid proof remained uncertain without retry. The real Identity middleware
+HTTP smoke exhausted a subject's session budget, checked the 429 receipt MAC and
+rotated that same token with a fresh admitted subject. The 503 busy receipt is a
+controlled bridge case: current Identity refresh has no KDF, and the contract
+reserves this receipt for pre-invocation admission only.
+
+Observed process PASS: twenty refresh decisions from two independently launched
+OS processes/pools/HTTP clients made exactly one real Identity HTTP rotation.
+The parent forcibly killed a peer paused at each of BeforeDispatch,
+DispatchCommitted, ResponseReceived, SuccessorWritten and SuccessorCommitted.
+Independent recovery safely made the first dispatch when no marker existed,
+recognized the exact committed successor after commit, and never resent the
+predecessor for the three unmatched-marker boundaries. These are actual process
+kill/connection-release tests, distinct from the retained exception seams and
+PostgreSQL connection termination. The PostgreSQL 17 startup guard passed;
+version-16 rejection uses a supplied Version value, not an actual PostgreSQL 16
+server deployment.
+
+The first candidate `86ea1d2cdf4975187b3814d37a0a333585e335ff`
+([run 38082252626](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38082252626))
+passed compilation, admission checks and separate-process contention but failed
+normal peer teardown: DONE reached the parent before clean process exit, and
+cleanup incorrectly required an abnormal kill exit. Cleanup now accepts normal
+completion; explicit kill of a paused fault peer still requires abnormal process
+termination. The complete revised run passed. No timing threshold was widened
+or test retried to conceal the failure.
+
+Counting correction: the 779c6ab job `114297980653` has **26** BFF PASS lines,
+previously reported as 25. Its total of 224 C# checks remains correct. The
+historical BFF count in this file and BFF_CORE.md is corrected; the current count
+is 44, with 18 added executable checks.
+
+Latest controlled HTTP reset completion p90 real/decoy/suppressed:
+222.05/221.57/222.43 ms; initiation: 220.59/218.17/219.77 ms. Twelve samples per
+group remain regression evidence, not statistical channel or load certification.
+A single PostgreSQL server and controlled Identity bridge do not prove replicated
+failover durability, browser cookies/CSRF/Origin, production pool/load behavior,
+upstream logout/resource-401 handling, delivery providers or real onboarding.
+The browser host must call Identity logout before token erasure and terminalize
+its session on Identity 401. Those browser handlers remain unimplemented.
+Platform merge/canonical pin verification must precede Identity merge/release;
+both PRs remain drafts.
+
+
+## BFF configuration protection, upstream logout and random process kills — 2026-10-11
+
+Verified runtime source: `4edc2c392a4413b72865e2c9361fa507721133e1`, tree
+`6c6a7affa5dc5697634c5bf59a6b327dce6b282d`. Native PostgreSQL 17
+[run 38123254599](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38123254599),
+job `114422189289`, completed SUCCESS: **263 C# checks**, including **65 BFF
+checks**, **296 emitted events** matching the pinned Platform schema, all five
+API HTTP smokes, and zero build warnings. Documentary run `38123254595` also
+completed SUCCESS. The subsequent evidence update changes documentation only.
+
+Executable checks cover independent receipt-key validation, wrong client key and
+subject configuration rejection without token erasure, per-session admission
+subjects on a shared adapter, cross-pool latched rejection circuit and trusted
+reset, invalid receipt quarantine without predecessor replay, upstream-first
+idempotent logout including lost response after Identity commit, and trusted
+resource Session-401 handling. In addition to twenty decisions across two actual
+processes producing one rotation and the five named kill boundaries, six random
+real process kills ran without stage probes. Latest seed: `1208417327`; delays
+75, 63, 133, 36, 9 and 33 ms. Recovery checked at most one rotation, no consumed
+predecessor resend, and committed cleanup or terminal reconciliation of each
+marker. This is sampled interleaving coverage, not exhaustive or replicated
+failover certification.
+
+The first candidate `bbae3b4a9212217c8623e9c02d91c6e9822b59ff`
+([run 38122102541](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38122102541),
+job `114418780270`) passed native checks but failed the existing recovery HTTP
+timing maximum: a decoy completion took 359.66 ms against the unchanged 350 ms
+bound. Its cause was not established. Added protected Development/loopback
+server timing diagnostics and separate wire measurements; floor, maximum and
+median/tail spread gates were not widened, and no automatic retry was added.
+The diagnostic revision `871edb2` passed run `38122506072`.
+A subsequent absent/wrong-diagnostic-key smoke in `d9f88dc` failed run
+`38122911693` because its fixture reused an already exhausted admission subject
+and received 429. Each privacy check now uses a fresh subject. The verified
+4edc2c3 run passes both checks: no Server-Timing without the valid protected key.
+The original timing outlier remains an unresolved observation, not a proven fix.
+
+Latest HTTP completion p90 real/decoy/suppressed: 218.46/220.77/217.80 ms;
+initiation: 218.89/220.07/221.87 ms. Twelve samples per group are regression
+evidence only; production load/timing acceptance remains required. Diagnostic
+work latency can reveal account-path differences and must not be enabled for
+public traffic.
+
+Deployment requires an independent Identity:RefreshReceiptKey, distinct from
+the client credential and shared with the trusted BFF adapter. The circuit uses
+durable state and a metric; metrics export, alert delivery and a private operator
+HTTP host are not supplied. Its heuristic may also trip on legitimate bulk
+revocation, and cannot restore sessions closed before its threshold. Browser
+host/cookie/CSRF/Origin handlers, replicated database failover durability, actual
+notification providers and contact-release policy remain release work. Upstream
+logout and Session-401 core methods are now implemented, superseding that earlier
+limitation; browser integration still must call them correctly. Platform PR #11
+merge and canonical pin verification must precede Identity merge/release. Both
+PRs remain drafts; no main merge or production change was performed.
+
+
+## Automatic circuit recovery and immediate logout intent — 2026-10-11
+
+Verified source `6fe9d69b3a680c796e801f98bea62121e4ecc3e0`, tree
+`258db08d31625d1ddf0635014f787d862dec5ec4`: native PostgreSQL 17
+[run 38124562388](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38124562388),
+job `114426124812`, completed SUCCESS with **280 C# checks**, including
+**82 BFF checks**, **305 emitted-event validations**, all five API HTTP smokes
+and zero build warnings. Documentary run `38124562418` also passed. Intermediate
+runs `38124295931` and `38124393325` both completed SUCCESS. Their apparently
+long-running status prompted a two-minute BFF harness watchdog; no deadlock or
+stalled fixture was established, and no retry or acceptance-bound relaxation
+was used. Subsequent evidence commits are documentation-only.
+
+Migration 004 preserves old terminal states and adds irreversible LogoutRequested
+with retained sealed material, plus circuit next_probe_at/probe_session. Checks
+verify known-unconsumed refresh recovers automatically after credential repair,
+twenty cross-pool contenders elect exactly one half-open probe, failed/disappeared
+probes leave a minute of backoff, and only a validated elected success closes the
+circuit. Owner budgets of 60 seconds or more are rejected to prevent overlap with
+the recovery interval. The journal still forbids replay of unmatched dispatches.
+Three separate unverified 403 sessions are required to open the deployment circuit;
+one malformed 403 quarantines only its session. Other unverifiable receipt claims
+retain the immediate integrity guard, and verified configuration receipts can
+open immediately. No permanent circuit latch mode is enabled.
+
+The native contention check held the circuit singleton row FOR UPDATE while twenty
+distinct success sample writes completed through two pools: 3.14 ms elapsed.
+Normal successful refresh no longer takes the singleton lock. This is a controlled
+sample-write contention check, not a full refresh throughput benchmark, production
+load test or exact synchronized failure-ratio measurement.
+
+A paused real HTTP logout proves another instance rejects cached access before
+the upstream response finishes. Lost-response coverage verifies committed
+LogoutRequested, denied refresh/access, database rejection of reactivation, retained
+material for idempotent retry, one upstream logout event and terminal erasure.
+Logout completes independently of an open refresh circuit. No autonomous retry
+worker or browser cookie handler is implied; the future host must expire the cookie
+and schedule bounded completion of retained server intent.
+
+Random process-kill seed in this run: `1588439761`; all six trials and the named
+kill boundaries passed. Latest reset completion p90 real/decoy/suppressed:
+222.91/222.90/223.73 ms, maxima 222.91/223.56/284.99 ms. Initiation p90:
+219.63/218.77/222.08 ms. Existing timing gates remain unchanged; twelve samples
+per group do not prove channel resistance or load behavior.
+
+Release gates remain browser-host cookie/CSRF/Origin integration, alert/metrics
+delivery and operator hosting, production load/timing, replicated database failover,
+notification delivery and contact-release policy. The runbook in BFF_CORE.md
+forbids deleting journals or force-retrying predecessors. A future permanent latch
+policy needs the operator host, delivered alert and an accepted operational runbook.
+Platform PR #11 merge/canonical pin verification still precedes Identity release;
+no main merge or production/VPS change was performed.
+
+
+## Dispatch-only probe election and cookie-free logout maintenance — 2026-10-11
+
+Verified runtime `af2704cd6088229448b7502bf7508ff082cfe230`, tree
+`22034ef64f8511f2480b26c7603bfef28ae612aa`: native PostgreSQL 17
+[run 38125504097](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38125504097),
+job `114428918204`, completed SUCCESS: **298 C# checks**, including **100 BFF
+checks**, **323 emitted-event validations**, all five API HTTP smokes, and zero
+build warnings. Documentary run `38125504091` passed. The subsequent evidence
+commit is documentation-only.
+
+Probe acquisition now follows journal reconciliation, due and admission-backoff
+checks, immediately before durable dispatch. Five non-due refresh calls with an
+open circuit return valid access without acquiring a probe or making HTTP requests.
+The first candidate `197e004` failed run `38125173635`, job `114427924457`, at an
+old expectation: immediate retry expected BFF_UNAVAILABLE but now correctly received
+BFF_BUSY from persisted admission backoff before probe election. The expectation
+was corrected; revision `1fbc05b` passed complete run `38125416118`. No runtime
+acceptance threshold was relaxed or failed run retried in place.
+
+Migration 005 replaces each new logout intent's full sealed bundle with separately
+sealed access-only proof in the same transaction. Native tests decrypt the intent
+proof to verify it is exactly the access token and confirm sealed_tokens is NULL.
+CompleteLogout/SweepLogout use trusted session ids, never a cookie. Tests verify
+initial and increasing persisted backoff, actual hosted-service completion after
+cookie deletion, two independent pools racing a single idempotent completion,
+conversion of legacy intents before network work, and expires_at cleanup with no
+upstream request. Logout intent still cannot restore ordinary access.
+
+BffMaintenance ticks every two seconds and prunes up to one thousand old samples
+per tick before sweeping at most twenty due/expired intents; each tick is bounded
+to ninety seconds. Success-only sample pruning passed without triggering a failure
+path. It is supplied and tested as a BackgroundService, not automatically running
+in a nonexistent browser host: that future host must register the service and
+provide matching BFF store/keys and trusted Identity adapter. Broader retention and
+production maintenance capacity remain release work.
+
+Probe dispatch and ambiguity are durably identified in the journal. One uncertain
+probe terminalization adds exactly one ProbeLossCount and repeated terminal reads
+do not add another; a definitive Identity 401 is excluded. The process metric
+bff.refresh.probe_sessions_lost is emitted after the loss flag commit; the database
+count is authoritative across restart. A real user session may be lost when its
+probe rotation has an ambiguous outcome under zero grace; no synthetic session or
+unsafe retry is introduced. Aggregate persisted counts before future journal purge.
+
+Latest controlled sample-write contention result: twenty distinct sessions across
+two pools completed in 4.28 ms while the circuit singleton was held FOR UPDATE.
+This is not a full refresh load benchmark. Six random real process kills passed
+with seed `1225063783`, as did named-boundary kills and two-process single-flight.
+Reset completion p90 real/decoy/suppressed: 219.99/219.81/220.96 ms; initiation:
+219.79/220.05/222.46 ms. Twelve samples per group remain regression evidence only;
+all original timing gates are unchanged.
+
+Release gates remain alert/metrics delivery, full production load/timing acceptance,
+replicated database failover, browser cookie/CSRF/Origin integration with registered
+maintenance, notification delivery and contact-release policy. Platform PR #11 merge
+and canonical provenance verification precede Identity release. No main merge or
+production/VPS change was performed.

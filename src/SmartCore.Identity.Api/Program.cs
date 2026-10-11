@@ -34,6 +34,8 @@ if(authenticationEnabled)
 {
     bffKey=builder.Configuration["Identity:BffClientKey"];
     if(bffKey is not {Length:>=32}) throw new InvalidOperationException("An authenticated development BFF client key is required.");
+    var receiptKey=builder.Configuration["Identity:RefreshReceiptKey"];
+    if(receiptKey is not {Length:>=32} || receiptKey==bffKey)throw new InvalidOperationException("A distinct refresh receipt key is required.");
     var signingKey=builder.Configuration["Identity:AccessSigningKey"] ?? "";
     var bytes=Convert.FromBase64String(signingKey);
     if(bytes.SequenceEqual(Convert.FromBase64String(builder.Configuration["Identity:MacKey"] ?? ""))
@@ -78,6 +80,20 @@ builder.Services.AddRateLimiter(options=>
 var app=builder.Build();
 app.Use(async(context,next)=>
 {
+    var diagnosticStarted=System.Diagnostics.Stopwatch.GetTimestamp();
+    var diagnosticKey=builder.Configuration["Identity:DevInboxKey"];
+    var diagnosticAllowed=builder.Environment.IsDevelopment() && builder.Configuration.GetValue("Identity:ResetTimingDiagnostics",false)
+        && context.Connection.RemoteIpAddress is not null && System.Net.IPAddress.IsLoopback(context.Connection.RemoteIpAddress)
+        && diagnosticKey is {Length:>=32}
+        && Secrets.Equal(context.RequestServices.GetRequiredService<Secrets>().Mac("reset-timing-diagnostic",diagnosticKey),
+            context.RequestServices.GetRequiredService<Secrets>().Mac("reset-timing-diagnostic",context.Request.Headers["X-Reset-Timing-Key"].ToString()));
+    using var diagnosticScope=diagnosticAllowed?ResetResponseTiming.Diagnostics(sample=>context.Items["reset-timing-sample"]=sample):null;
+    if(diagnosticAllowed)context.Response.OnStarting(()=>
+    {
+        if(context.Items["reset-timing-sample"] is ResetTimingSample sample)
+            context.Response.Headers["Server-Timing"]=FormattableString.Invariant($"reset-work;dur={sample.WorkMilliseconds:F3}, reset-total;dur={sample.TotalMilliseconds:F3}, reset-deadline;dur={sample.DeadlineMilliseconds:F3}, pipeline;dur={System.Diagnostics.Stopwatch.GetElapsedTime(diagnosticStarted).TotalMilliseconds:F3}");
+        return Task.CompletedTask;
+    });
     context.Response.Headers.CacheControl="no-store";
     context.Response.Headers["X-Content-Type-Options"]="nosniff";
     try { await next(); }
@@ -101,7 +117,8 @@ app.Use(async(context,next)=>
     if(authenticationEnabled && category is not null)
     {
         var secrets=context.RequestServices.GetRequiredService<Secrets>();
-        if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",context.Request.Headers["X-Bff-Client-Key"].ToString()))) throw new ApiError(401,"UNAUTHORIZED");
+        if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",context.Request.Headers["X-Bff-Client-Key"].ToString()))) throw new ApiError(403,"BFF_CREDENTIALS_REJECTED");
+        if(!Input.Id(context.Request.Headers["X-Bff-Subject"].ToString()))throw new ApiError(403,"BFF_CREDENTIALS_REJECTED");
         await context.RequestServices.GetRequiredService<AuthenticationAdmission>().Admit(bffClient,context.Request.Headers["X-Bff-Subject"].ToString(),category);
     }
     await next();
@@ -141,7 +158,7 @@ if(authenticationEnabled)
     void Bff(HttpRequest request,Secrets secrets)
     {
         if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",request.Headers["X-Bff-Client-Key"].ToString())))
-            throw new ApiError(401,"UNAUTHORIZED");
+            throw new ApiError(403,"BFF_CREDENTIALS_REJECTED");
     }
     AccessProof Proof(HttpRequest request,Secrets secrets,AccessTokens access)
     {
@@ -158,7 +175,9 @@ if(authenticationEnabled)
     app.MapPost("/auth/refresh",async(HttpRequest request,Secrets secrets,AuthenticationService service)=>
     {
         Bff(request,secrets);
-        return Results.Ok(await service.Refresh(await Read<RefreshRequest>(request),bffClient));
+        var body=await Read<RefreshRequest>(request);
+        request.HttpContext.Items["refresh-invoked"]=true;
+        return Results.Ok(await service.Refresh(body,bffClient));
     }).RequireRateLimiting("authentication-transport");
     app.MapGet("/me",async(HttpRequest request,Secrets secrets,AccessTokens access,AuthenticationService service)=>
         Results.Ok(await service.Self(Proof(request,secrets,access)))).RequireRateLimiting("authentication-transport");
@@ -254,6 +273,15 @@ app.Run();
 static Task WriteError(HttpContext context,int status,string code,string? nextAction=null)
 {
     context.Response.StatusCode=status;
+    var key=context.RequestServices.GetRequiredService<IConfiguration>()["Identity:RefreshReceiptKey"];
+    if(context.Request.Path=="/auth/refresh" && !context.Items.ContainsKey("refresh-invoked")
+        && RefreshRejection.Allowed(status,code) && key is {Length:>=32}
+        && Guid.TryParseExact(context.Request.Headers["X-Refresh-Request"].ToString(),"D",out var reference) && reference!=Guid.Empty)
+    {
+        var retry=status==429?60:2;
+        context.Response.Headers.RetryAfter=retry.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return context.Response.WriteAsJsonAsync(RefreshRejection.Create(key,status,code,reference,retry));
+    }
     return context.Response.WriteAsJsonAsync(new {error=new {code,message="Request could not be completed.",nextAction},traceId=context.TraceIdentifier});
 }
 

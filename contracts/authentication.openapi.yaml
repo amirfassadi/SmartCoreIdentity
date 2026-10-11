@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.6.0
+  version: 0.8.0
   description: Development authenticated BFF adapter. Recovery enrollment and dual-factor
     reset are opt-in. Reset requires primary-contact OTP plus a pre-enrolled recovery
     code. The accepted reset operation closes Sessions and uses receipt-backed recovery;
@@ -43,6 +43,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       requestBody:
         required: true
         content:
@@ -74,7 +81,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                oneOf:
+                - $ref: '#/components/schemas/Error'
+                - $ref: '#/components/schemas/RefreshRejection'
         '401':
           description: Uniform failure
           content:
@@ -82,17 +91,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: RATE_LIMITED caller or transport budget exhausted
+          description: NotProcessed only with authenticated admission receipt before
+            Refresh invocation; ordinary Error responses do not certify non-consumption.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                oneOf:
+                - $ref: '#/components/schemas/RefreshRejection'
+                - $ref: '#/components/schemas/Error'
+          headers:
+            Retry-After:
+              description: Receipt retry delay in seconds (signed in body).
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
         '503':
-          description: Uniform failure
+          description: NotProcessed only with authenticated admission receipt before
+            Refresh invocation; ordinary Error responses do not certify non-consumption.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                oneOf:
+                - $ref: '#/components/schemas/RefreshRejection'
+                - $ref: '#/components/schemas/Error'
+          headers:
+            Retry-After:
+              description: Receipt retry delay in seconds (signed in body).
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/Error'
+                - $ref: '#/components/schemas/RefreshRejection'
       requestBody:
         required: true
         content:
@@ -108,6 +146,20 @@ paths:
         schema:
           type: string
           pattern: ^[A-Za-z0-9_-]{32,128}$
+      - name: X-Refresh-Request
+        in: header
+        required: false
+        description: Fresh UUID per HTTP dispatch. Required to receive a signed NotProcessed
+          admission receipt; older callers receive the ordinary Error envelope. Never
+          reuse across dispatches.
+        schema:
+          type: string
+          format: uuid
+      description: Zero-grace rotation. Only a verified nonce-bound NotProcessed admission
+        receipt permits retry. Any unsigned proxy 502/503/504, malformed response
+        or uncertain transport remains ambiguous and must not reuse the predecessor.
+        Refresh currently does no KDF; AUTHENTICATION_BUSY is reserved for pre-invocation
+        admission only.
   /auth/logout:
     post:
       security:
@@ -136,6 +188,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
           content:
             application/json:
               schema:
@@ -187,6 +246,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
           content:
             application/json:
               schema:
@@ -246,6 +312,13 @@ paths:
         '503':
           description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its
             two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
           content:
             application/json:
               schema:
@@ -394,6 +467,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecoveryEnrollmentResult'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       parameters:
       - name: X-Bff-Subject
         in: header
@@ -452,6 +532,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResetPending'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       parameters:
       - name: X-Bff-Subject
         in: header
@@ -510,6 +597,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChangeStatus'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       parameters:
       - name: X-Bff-Subject
         in: header
@@ -554,9 +648,9 @@ components:
           maxLength: 180
         foreground:
           type: boolean
-          description: Trusted BFF assertion for an allowlisted user-action route. Polling,
-            scheduled refresh and other background work must use false. The browser cannot
-            set this Identity field directly; see docs/implementation/BFF_REFRESH_DESIGN.md.
+          description: Trusted BFF assertion for an allowlisted user-action route.
+            Polling, scheduled refresh and other background work must use false. The
+            browser cannot set this Identity field directly; see docs/implementation/BFF_REFRESH_DESIGN.md.
       required:
       - refreshToken
       - foreground
@@ -811,6 +905,39 @@ components:
           type: string
           minLength: 15
           maxLength: 128
+    RefreshRejection:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - disposition
+      - requestReference
+      - retryAfterSeconds
+      - proof
+      properties:
+        code:
+          enum:
+          - RATE_LIMITED
+          - AUTHENTICATION_BUSY
+          - BFF_CREDENTIALS_REJECTED
+          - VALIDATION_FAILED
+        disposition:
+          const: NotProcessed
+        requestReference:
+          type: string
+          format: uuid
+        retryAfterSeconds:
+          type: integer
+          minimum: 1
+          maximum: 60
+        proof:
+          type: string
+          description: Base64 HMAC-SHA256 with independent Identity:RefreshReceiptKey
+            (distinct from the BFF client credential) over UTF-8 identity-refresh-not-processed-v1\n{HTTP
+            status decimal}\n{code}\n{requestReference lowercase D UUID}\n{retryAfterSeconds
+            decimal}, no final newline. Nonce, status/code pair, disposition and delay
+            must validate. Domain-specific receipt, not a bearer credential.
+          pattern: ^[A-Za-z0-9+/]{43}=$
   securitySchemes:
     bffKey:
       type: apiKey
