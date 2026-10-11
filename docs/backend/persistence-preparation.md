@@ -1,6 +1,6 @@
 # PostgreSQL persistence implementation map
 
-Status: candidate implementation map, not executable DDL. Baseline: [inventory](status-and-next-steps.md). ASP.NET Core/.NET 10 and PostgreSQL are provisional. Keep independent Identity and Credential commit boundaries even if databases are eventually cohosted. No cross-database foreign key or distributed transaction is assumed.
+Status: candidate full-MVP implementation map. The development registration/setup subset now has executable migrations 001/002 and test evidence in ../implementation/; other rows remain required future evidence. Baseline: [inventory](status-and-next-steps.md). ASP.NET Core/.NET 10 and PostgreSQL are provisional. Keep independent Identity and Credential commit boundaries even if databases are eventually cohosted. No cross-database foreign key or distributed transaction is assumed.
 
 ## Storage responsibilities
 

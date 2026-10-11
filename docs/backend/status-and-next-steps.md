@@ -1,8 +1,8 @@
 # Backend continuation — 2026-10-10
 
-Status: reviewed remote inventory; preparation candidate, not release approval.
+Status: historical remote inventory corrected after local source recovery; registration/setup implementation remains development-only, not release approval.
 
-## Reproducible baseline
+## Historical inventory before source recovery
 
 - Identity main: f72a4fdf9f29edd3970b4bd719bfbf8040089534. Three documentation files; no executable backend, database migrations or runtime tests.
 - Identity reconciliation: f0781c1415b3a784788c326b93c2cd45bd5206cd. Archived Blueprint, registration review documents and documentary checker.
@@ -32,7 +32,7 @@ Steps 1–3 are preparation. Steps 4–10 do not require a purchased domain. A d
 
 ## Actual owner dependencies
 
-Immediate: make the existing local backend branch available on GitHub (publishing it does not require changing its code), or provide an archive of that branch. Remote documentation can continue independently, but executable continuation needs authoritative source.
+Source dependency resolved: the previous assistant-created backend was committed locally but not pushed. Source 770486d was recovered and published unchanged as b4e1407 on implementation/registration-backend; its native PostgreSQL CI passed. Continue from that source, not a second backend. The active phase baseline and evidence are in ../implementation/BASELINE.md and ../implementation/VERIFICATION.md.
 
 Before production retention/cleanup: choose finite retention for internal refresh events and security audit, including replay horizon and purge procedure. No retention number or automatic deletion is invented.
 
@@ -41,3 +41,9 @@ Before deployment: domain name, fresh host inventory and intended database insta
 ## Verification limits
 
 The existing registration checker verifies archived file hashes and local Markdown links. New preparation checker validates this candidate event schema and examples; neither runs the backend or certifies complete Blueprint validation. This change does not merge main, amend accepted ADR-0004, select co-location, or apply SQL to any database.
+
+## Current executable continuation
+
+The first inventory described GitHub at that time, not all surviving local sessions. Registration API, migration 001, Credential/Ready/ack worker and runtime tests were found in a prior session and published with explicit owner permission. Setup/completion and forward migration 002 extend that existing implementation on implementation/registration-recovery. Stack is now .NET 10 / PostgreSQL 17 for the development phase; full-MVP topology/SESSION/T16/production choices remain distinct.
+
+Next: finish formal audited recovery; then login/self/logout and governed Session/password lifecycle including reset before public onboarding; real delivery; transport/consumer conformance; release/restore/keys/roles evidence. VPS remains paused. No further source archive is needed. The retained preparation contracts describe future scope and do not override actual executable phase behavior.
