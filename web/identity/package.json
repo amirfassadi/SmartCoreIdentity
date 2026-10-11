@@ -1,0 +1,30 @@
+{
+  "name": "@smartcore/identity-browser",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "check": "node scripts/check-shell.mjs",
+    "smoke": "node scripts/smoke-shell.mjs"
+  },
+  "dependencies": {
+    "next": "16.4.0",
+    "next-intl": "4.14.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/postcss": "4.3.3"
+  }
+}

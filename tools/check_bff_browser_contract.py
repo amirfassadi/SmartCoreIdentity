@@ -141,6 +141,24 @@ def classify_guards(faults):
     return None
 
 
+def classify_raw_request(doc, case):
+    """Raw envelope candidate; CSRF result injected until the live host exists."""
+    raw = case['body'].encode('utf-8')
+    if case['bodyBytes'] > len(raw):
+        raw += b' ' * (case['bodyBytes'] - len(raw))
+    headers = normalized_headers(case['headers'])
+    if len(raw) > 16384: return 413, 'REQUEST_TOO_LARGE'
+    if headers.get('content-type') != ['application/json']: return 415, 'UNSUPPORTED_MEDIA_TYPE'
+    if headers.get('origin') != ['https://localhost:7443'] or headers.get('sec-fetch-site', ['same-origin'])[0] not in ('same-origin', 'none'):
+        return 403, 'ORIGIN_REJECTED'
+    if not case['csrfValid']: return 403, 'CSRF_REJECTED'
+    try:
+        body = json.loads(raw)
+        validate_schema(doc, doc['paths'][case['path']][case['method'].lower()]['requestBody']['content']['application/json']['schema'], body)
+    except (ValueError, ValidationError): return 400, 'VALIDATION_FAILED'
+    return None
+
+
 def main():
     doc = yaml.safe_load((ROOT/'contracts/bff-browser.openapi.yaml').read_text())
     assert doc['openapi'] == '3.1.0' and doc['x-runtime-implemented'] is False
@@ -176,6 +194,9 @@ def main():
         assert classify_guards([second[0], first[0]]) == first[1:]
         pairs += 1
     assert classify_guards(['fetch']) == (403, 'ORIGIN_REJECTED')
+    raw_cases = json.loads((ROOT/'tests/browser/b1-guard-precedence.json').read_text())
+    for case in raw_cases:
+        assert classify_raw_request(doc, case) == (case['status'], case['code']), case['name']
     negative = 0
     for case in fixtures:
         try:
@@ -192,6 +213,7 @@ def main():
             positives += 1
     print(f'B1 draft: OpenAPI 3.1 validated; five paths; {positives} valid schema/wire examples; {negative} rejected negative controls.')
     print(f'Guard precedence: {pairs} pairwise competing-fault controls; cross-site classified as 403 ORIGIN_REJECTED.')
+    print(f'Raw envelope candidate: {len(raw_cases)} competing-error request fixtures; CSRF validity is injected, not cryptographically verified.')
     print('Not checked: client generation, live host/Origin/CSRF cryptography, proxy or browser behavior.')
 
 

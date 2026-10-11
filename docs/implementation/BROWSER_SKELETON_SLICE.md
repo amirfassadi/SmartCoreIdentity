@@ -273,8 +273,9 @@ complete only after B3, but each slice has a separate demonstrable CI outcome.
 | 9 | Run Playwright through real HTTPS ingress across two hosts | Exactly one rotation for parallel reads; negative CSRF/Origin/cookie tests and outage/busy behavior pass; publish safe evidence |
 
 No host code precedes task 1. Contract review is a concrete implementation prerequisite,
-not a requirement to ask for another permission. Tasks 1–9 are implementation work still
-open; this edit runs documentary checks only.
+not a requirement to ask for another permission. Contract revision 0.1.1 has been reviewed. Task 2 now has a buildable shell/host;
+task 3 has core and shared-key wiring, with seeded account integration still open.
+Tasks 4–9 remain open; see BFF_BROWSER_HOST.md for bounded evidence.
 
 ## Browser CI acceptance
 
@@ -324,3 +325,7 @@ documentary candidate evidence; live response validation is still a B1 host task
 Primary configuration references:
 https://next-intl.dev/docs/routing/configuration and
 https://learn.microsoft.com/aspnet/core/security/data-protection/configuration/overview .
+
+B1 tasks 2/3 progress and explicit remaining work are tracked in
+[BFF_BROWSER_HOST.md](BFF_BROWSER_HOST.md). Contract review 0.1.1 is complete;
+Infrastructure build/HTTP checks are distinct from full browser acceptance.
