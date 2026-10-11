@@ -107,8 +107,16 @@ and replacement enrollment after the successful reset login. No production diagn
 are introduced by a test requirement.
 
 Accepted contract scope means the applicable registration/authentication OpenAPI and
-pinned Platform 1.2.2 contract. Generate the server-side Identity client from those
-contracts. Browser code targets a separate same-origin BFF contract; it must not call
+pinned Platform 1.2.2 contract. Generate the trusted .NET-side Identity client from those
+contracts. Next.js performs no authenticated SSR reads; browser code targets a
+separate same-origin BFF contract; it must not call
 Identity refresh or send trusted BFF headers. Declare/generate that BFF contract in
 stage B and fail CI on generation/schema drift. These are future acceptance tests,
 not newly executed CI evidence.
+
+Stage B is specified in [BROWSER_SKELETON_SLICE.md](BROWSER_SKELETON_SLICE.md).
+Explicit Origin and antiforgery checks also protect anonymous browser mutations,
+including login/register/reset; same-origin routing and SameSite alone do not close
+this gate. fa/en UI support does not expand the Iran-only SMS market. Server input
+normalization, self-hosted fonts and frozen notification locale/template intent are
+required as specified in the slice before their corresponding path is released.
