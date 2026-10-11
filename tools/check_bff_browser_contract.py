@@ -43,7 +43,6 @@ def validate_request(doc, path, method, body, headers, approved_origin="https://
     if method == 'get':
         assert body is None
         return
-    validate_schema(doc, op['requestBody']['content']['application/json']['schema'], body)
     wire = normalized_headers(headers)
     assert wire.get('content-type') == ['application/json']
     for declared in op['parameters']:
@@ -54,6 +53,7 @@ def validate_request(doc, path, method, body, headers, approved_origin="https://
         for value in values:
             validate_schema(doc, declared['schema'], value)
     assert wire.get('origin') == [approved_origin]
+    assert wire.get('sec-fetch-site', ['same-origin'])[0] in ('same-origin', 'none')
     cookie = wire.get('cookie', [])
     assert len(cookie) == 1
     parsed = SimpleCookie(); parsed.load(cookie[0])
@@ -69,10 +69,21 @@ def validate_request(doc, path, method, body, headers, approved_origin="https://
             if scheme == 'bffSession':
                 assert re.fullmatch(r'[A-Za-z0-9_-]{43}', parsed[name].value)
 
+    validate_schema(doc, op['requestBody']['content']['application/json']['schema'], body)
+    if path == '/bff/login':
+        assert len(body['password'].encode('utf-16-le')) // 2 <= 128
+
 
 def validate_response(doc, path, method, status, body, headers):
-    operation = doc['paths'][path][method]
-    spec = resolve(doc, operation['responses'][str(status)])
+    operation = doc['paths'].get(path, {}).get(method)
+    spec = resolve(doc, operation['responses'].get(str(status), operation['responses']['default']) if operation else doc['x-router-fallback'])
+    if status in (404, 405):
+        assert body == {'code': 'NOT_FOUND' if status == 404 else 'METHOD_NOT_ALLOWED'}
+        assert (path not in doc['paths']) if status == 404 else (path in doc['paths'] and method not in doc['paths'][path])
+        if status == 405:
+            assert normalized_headers(headers).get('allow') == [next(iter(doc['paths'][path])).upper()]
+    else:
+        assert operation and str(status) in operation['responses']
     if 'content' in spec:
         validate_schema(doc, spec['content']['application/json']['schema'], body)
     else:
@@ -117,6 +128,19 @@ def validate_response(doc, path, method, status, body, headers):
                 assert 0 < int(cookies[name]['max-age']) <= 86400
 
 
+def classify_guards(faults):
+    """Candidate precedence model, not live middleware or cryptographic verification."""
+    for fault, status, code in [('size', 413, 'REQUEST_TOO_LARGE'),
+                                ('media', 415, 'UNSUPPORTED_MEDIA_TYPE'),
+                                ('origin', 403, 'ORIGIN_REJECTED'),
+                                ('fetch', 403, 'ORIGIN_REJECTED'),
+                                ('csrf', 403, 'CSRF_REJECTED'),
+                                ('body', 400, 'VALIDATION_FAILED')]:
+        if fault in faults:
+            return status, code
+    return None
+
+
 def main():
     doc = yaml.safe_load((ROOT/'contracts/bff-browser.openapi.yaml').read_text())
     assert doc['openapi'] == '3.1.0' and doc['x-runtime-implemented'] is False
@@ -145,6 +169,13 @@ def main():
                 for example in media['examples'].values():
                     validate_schema(doc, media['schema'], example['value']); positives += 1
     fixtures = json.loads((ROOT/'contracts/examples/bff-browser-b1.json').read_text())
+    from itertools import combinations
+    guards = [('size',413,'REQUEST_TOO_LARGE'), ('media',415,'UNSUPPORTED_MEDIA_TYPE'), ('origin',403,'ORIGIN_REJECTED'), ('fetch',403,'ORIGIN_REJECTED'), ('csrf',403,'CSRF_REJECTED'), ('body',400,'VALIDATION_FAILED')]
+    pairs = 0
+    for first, second in combinations(guards, 2):
+        assert classify_guards([second[0], first[0]]) == first[1:]
+        pairs += 1
+    assert classify_guards(['fetch']) == (403, 'ORIGIN_REJECTED')
     negative = 0
     for case in fixtures:
         try:
@@ -160,6 +191,7 @@ def main():
             assert case['valid'], 'Unexpected valid negative control: '+case['name']
             positives += 1
     print(f'B1 draft: OpenAPI 3.1 validated; five paths; {positives} valid schema/wire examples; {negative} rejected negative controls.')
+    print(f'Guard precedence: {pairs} pairwise competing-fault controls; cross-site classified as 403 ORIGIN_REJECTED.')
     print('Not checked: client generation, live host/Origin/CSRF cryptography, proxy or browser behavior.')
 
 
