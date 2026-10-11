@@ -360,3 +360,38 @@ replicated database failover, browser cookie/CSRF/Origin integration with regist
 maintenance, notification delivery and contact-release policy. Platform PR #11 merge
 and canonical provenance verification precede Identity release. No main merge or
 production/VPS change was performed.
+
+## Logout bounds, maintenance diagnostics and split review stack — 2026-10-11
+
+Runtime `27a12b4c2f797736f15fd84969129e051b7faaf7`, tree
+`5ff4a12c89874b2f6225811cb4428e2bd1893c51`, passed native run
+[38127553725](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38127553725),
+job 114434962504: **303 C# checks, 104 BFF checks, 327 event validations**, all
+five HTTP smokes and builds with zero warnings. Documentation checks also passed.
+BFF checks are counted from the actual `PASS: BFF` log entries. The prior reported
+100 BFF checks for `af2704c` should read 99; this update adds five executed checks.
+
+Logout intent sets transaction-local lock_timeout to LockWait. A real competing
+row lock test returns BFF_BUSY within that budget without intent or upstream work.
+Completion retains SKIP LOCKED. A running hosted maintenance service with a disposed
+store emits bff.maintenance.failures and a structured exception-type warning;
+shutdown cancellation is excluded and raw exception text/secrets are not logged.
+Committed Identity-401 and absolute-expiry closes emit bff.logout_local_only with
+separate reasons; known-204 completion and terminal replay do not double-count.
+This process counter can lose an emission after commit and is not durable audit.
+
+Twenty distinct sessions across two pools completed sample writes in 3.38 ms while
+the circuit row was held. Six randomized real process kills passed with seed
+1698072828. Completion HTTP p90 real/decoy/suppressed was 220.50/220.22/217.65 ms;
+initiation was 222.19/220.70/222.71 ms. These are controlled regression samples,
+not full load, failover or constant-time certification; acceptance gates were not
+relaxed.
+
+The exact same runtime tree independently passed BFF stage #7 run 38127635293,
+job 114435207440: 303 checks / 104 BFF checks / 327 events / five HTTP smokes.
+Sample-write contention: 4.92 ms; random-kill seed 740517349. The three preceding
+stages also passed fresh native CI. See [PR_STACK.md](PR_STACK.md) for scope,
+commit/tree identities, cumulative counts and dependency order. PR #3 is an
+integration reference; no main merge, deployment or production/VPS change occurred.
+Release gates remain delivered alerts, full load, replicated failover and the
+browser host, plus notification/contact-release and canonical Platform provenance.

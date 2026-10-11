@@ -274,3 +274,10 @@ These outcomes do not certify upstream revocation. Normal known-204 logout and
 terminal replay do not count. This process metric can miss an emission if the
 process dies after commit; it is operational telemetry, not the durable probe
 loss total.
+
+Current verified runtime `27a12b4` passes 104 BFF checks within 303 C# checks,
+327 event validations and five HTTP smokes on native PostgreSQL 17. The preceding
+100 BFF count above should read 99; current counts come from completed job logs.
+The independent BFF review stage passes the same runtime tree. Review and merge
+order is recorded in [PR_STACK.md](PR_STACK.md); PR #3 remains an integration
+reference while Draft PRs #4–#7 carry the dependency-ordered implementation.
