@@ -145,7 +145,7 @@ latency can disclose account-path differences. The earlier outlier cannot be
 attributed retrospectively; new observations do not erase the failed run or prove
 that CI tail variability is eliminated. There is no automatic test retry.
 
-Current verified runtime `4edc2c3` passes 65 BFF checks within 263 C# checks,
+Previous verified runtime `4edc2c3` passes 65 BFF checks within 263 C# checks,
 296 emitted-event validations and all five API HTTP smokes on PostgreSQL 17.
 The exact source, successful run and earlier failed candidates are recorded in
 [VERIFICATION.md](VERIFICATION.md). A legitimate bulk session revocation can also
@@ -200,3 +200,10 @@ journal or force-retry its predecessor. Trusted Reset accelerates eligibility
 for a fresh decision only; unmatched dispatch still requires reauthentication.
 Metrics export and alert delivery remain release gates. Permanent lock policy
 requires a separately delivered operator host, alert and accepted runbook.
+
+Latest verified runtime `6fe9d69` passes 82 BFF checks within 280 C# checks,
+305 event-schema validations and all five API HTTP smokes. The controlled
+20-session sample-write test completed in 3.14 ms across two pools while the
+singleton circuit row was held FOR UPDATE. This measures only sample writes,
+not full refresh throughput or production capacity. Exact evidence is in
+[VERIFICATION.md](VERIFICATION.md).

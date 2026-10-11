@@ -247,3 +247,57 @@ logout and Session-401 core methods are now implemented, superseding that earlie
 limitation; browser integration still must call them correctly. Platform PR #11
 merge and canonical pin verification must precede Identity merge/release. Both
 PRs remain drafts; no main merge or production change was performed.
+
+
+## Automatic circuit recovery and immediate logout intent — 2026-10-11
+
+Verified source `6fe9d69b3a680c796e801f98bea62121e4ecc3e0`, tree
+`258db08d31625d1ddf0635014f787d862dec5ec4`: native PostgreSQL 17
+[run 38124562388](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38124562388),
+job `114426124812`, completed SUCCESS with **280 C# checks**, including
+**82 BFF checks**, **305 emitted-event validations**, all five API HTTP smokes
+and zero build warnings. Documentary run `38124562418` also passed. Intermediate
+runs `38124295931` and `38124393325` both completed SUCCESS. Their apparently
+long-running status prompted a two-minute BFF harness watchdog; no deadlock or
+stalled fixture was established, and no retry or acceptance-bound relaxation
+was used. Subsequent evidence commits are documentation-only.
+
+Migration 004 preserves old terminal states and adds irreversible LogoutRequested
+with retained sealed material, plus circuit next_probe_at/probe_session. Checks
+verify known-unconsumed refresh recovers automatically after credential repair,
+twenty cross-pool contenders elect exactly one half-open probe, failed/disappeared
+probes leave a minute of backoff, and only a validated elected success closes the
+circuit. Owner budgets of 60 seconds or more are rejected to prevent overlap with
+the recovery interval. The journal still forbids replay of unmatched dispatches.
+Three separate unverified 403 sessions are required to open the deployment circuit;
+one malformed 403 quarantines only its session. Other unverifiable receipt claims
+retain the immediate integrity guard, and verified configuration receipts can
+open immediately. No permanent circuit latch mode is enabled.
+
+The native contention check held the circuit singleton row FOR UPDATE while twenty
+distinct success sample writes completed through two pools: 3.14 ms elapsed.
+Normal successful refresh no longer takes the singleton lock. This is a controlled
+sample-write contention check, not a full refresh throughput benchmark, production
+load test or exact synchronized failure-ratio measurement.
+
+A paused real HTTP logout proves another instance rejects cached access before
+the upstream response finishes. Lost-response coverage verifies committed
+LogoutRequested, denied refresh/access, database rejection of reactivation, retained
+material for idempotent retry, one upstream logout event and terminal erasure.
+Logout completes independently of an open refresh circuit. No autonomous retry
+worker or browser cookie handler is implied; the future host must expire the cookie
+and schedule bounded completion of retained server intent.
+
+Random process-kill seed in this run: `1588439761`; all six trials and the named
+kill boundaries passed. Latest reset completion p90 real/decoy/suppressed:
+222.91/222.90/223.73 ms, maxima 222.91/223.56/284.99 ms. Initiation p90:
+219.63/218.77/222.08 ms. Existing timing gates remain unchanged; twelve samples
+per group do not prove channel resistance or load behavior.
+
+Release gates remain browser-host cookie/CSRF/Origin integration, alert/metrics
+delivery and operator hosting, production load/timing, replicated database failover,
+notification delivery and contact-release policy. The runbook in BFF_CORE.md
+forbids deleting journals or force-retrying predecessors. A future permanent latch
+policy needs the operator host, delivered alert and an accepted operational runbook.
+Platform PR #11 merge/canonical pin verification still precedes Identity release;
+no main merge or production/VPS change was performed.
