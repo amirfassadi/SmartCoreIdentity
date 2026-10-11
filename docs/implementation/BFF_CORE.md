@@ -18,16 +18,16 @@ BffRefreshChecks is part of the native PostgreSQL C# harness. It uses two indepe
 
 The transport seam calls the actual Identity service directly. Additional controlled loopback HTTP bridge checks exercise the concrete adapter: twenty parallel decisions on two instances send one authenticated HTTP refresh, an HTTP abort after the real Identity commit is never retried, and a redirect never forwards secrets. This bridge is not the complete Identity middleware pipeline. The initial runtime 779c6ab did not test OS process death. The admission follow-up below adds independent process peers and actual kill coverage. Browser cookie/CSRF endpoints, database failover durability, pool exhaustion and production load remain acceptance work before real users. The core has no autonomous purge or production retention decision. Runtime 779c6ab passed native PostgreSQL CI with 26 BFF checks within 224 total C# checks, 230 emitted-event validations and five existing API HTTP smokes. Exact SHA/run/job evidence and limits are in [VERIFICATION.md](VERIFICATION.md).
 
-## Admission rejection contract (authentication subset 0.7.0)
+## Admission rejection contract (authentication subset 0.8.0)
 
 Identity issues a `NotProcessed` receipt only for authenticated refresh requests
 rejected before invoking `AuthenticationService.Refresh`: `429 RATE_LIMITED`, or
 reserved pre-invocation `503 AUTHENTICATION_BUSY`. Refresh presently performs no
 KDF, so its current overload rejection is the admission/rate boundary. Dependency
-`TEMPORARILY_UNAVAILABLE` is never a receipt. A fresh `X-Refresh-Request` UUID,
+`TEMPORARILY_UNAVAILABLE` is never a receipt. Pre-invocation 403 BFF_CREDENTIALS_REJECTED and 400 VALIDATION_FAILED also receive this receipt; wrong key/subject and invalid BFF requests are configuration failures. A fresh `X-Refresh-Request` UUID,
 status/code pair and retry delay are bound with domain-separated HMAC-SHA256 using
-the BFF client key. The adapter validates the bounded body and exact nonce. This
-assumes a trusted Identity origin/TLS termination and confidential client key; it
+the independent Identity:RefreshReceiptKey (distinct from the BFF client credential). The adapter validates the bounded body and exact nonce. This
+assumes a trusted Identity origin/TLS termination and confidential receipt key; it
 is not protection from a proxy that holds that key. Unsigned proxy 502/503/504,
 wrong nonce, invalid proof, redirect, lost response and malformed body remain
 uncertain. HTTP status alone never authorizes predecessor retry.
@@ -68,3 +68,48 @@ passed. The real Identity middleware smoke also verified a signed rate-rejection
 receipt and subsequent rotation of the unconsumed token. See VERIFICATION.md for
 run/job provenance, the initial test teardown failure and the corrected historical
 BFF subcount (26, previously reported as 25).
+
+
+## Shared operational circuit (0.8.0)
+
+Wrong BFF key/subject is 403 BFF_CREDENTIALS_REJECTED, separate from Session 401.
+Receipt signing requires the independent Identity:RefreshReceiptKey; API startup
+rejects a missing key or one equal to the BFF credential. Deploy API and BFF with
+this shared receipt key before changing the development client credential. A
+verified configuration receipt CAS-clears its known non-consumed dispatch,
+preserves tokens and opens the deployment circuit. An unverifiable 403 opens it
+but retains the unmatched journal; it does not authorize retry. In both cases
+callers receive BFF_UNAVAILABLE, with a suggested 60-second retry delay.
+
+Migration 003 stores one latched circuit per shared BFF database/deployment and
+recent samples keyed by distinct BFF session. It opens immediately on a
+configuration receipt/unverifiable 403, or on at least five distinct 400/401/403
+rejections making up at least 50% of the last 30-second session samples. Repeated
+errors from one session cannot fill that threshold. The triggering and later
+sessions retain tokens; unmatched dispatches are quarantined. Before threshold,
+individual definitive 401 still closes that session; the circuit cannot restore
+sessions already closed. In-flight results already committed before opening also
+remain committed. Ordinary cached valid access is still available.
+
+The circuit is latched, not a timer-based permission to replay. A trusted operator
+must repair configuration/investigate rejection cause, then call BffCircuit.Reset
+from an authenticated operator host. Reset clears only circuit samples/state,
+never journal evidence, Identity fences or tokens; subsequent reconciliation of
+an unmatched marker still requires login. The durable opened_at/reason and
+bff.refresh.circuit_opened metric are operational signals. Actual metrics export,
+alert delivery and a private operator endpoint are not implemented in this core.
+Receipt-key mismatch is thus quarantined conservatively, not silently retried.
+
+The coordinator derives X-Bff-Subject from the stable Identity session id using
+the BFF MAC key and a separate purpose. An adapter shared by all requests no
+longer carries one constant subject. Instances sharing BFF keys agree, client
+credential rotation does not change the subject, and separate sessions have
+separate opaque budgets. The client-wide cap continues to apply.
+
+Six additional trials kill a peer at an independently selected random delay while
+ten decisions race, without a stage probe. The parent waits for any in-flight
+Identity bridge work to settle, then recovers in a separate process and checks
+at most one rotation, zero predecessor reuse, and either committed-success
+cleanup or terminal reconciliation of every unmatched marker. A terminal marker
+is retained as audit evidence; it is resolved, not retryable. Trials cover a small
+random sample, not exhaustive interleavings or replicated database failover.

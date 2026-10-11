@@ -10,24 +10,24 @@ public enum BffActivity {Background,UserAction}
 public enum RefreshStage {BeforeDispatch,DispatchCommitted,ResponseReceived,SuccessorWritten,SuccessorCommitted}
 // Development fault seam, never an HTTP request field.
 public interface IRefreshProbe {Task Observe(RefreshStage stage,CancellationToken cancellation);}
-public interface IIdentityRefresh {Task<SessionTokens> Refresh(string token,bool foreground,CancellationToken cancellation);}
+public interface IIdentityRefresh {Task<SessionTokens> Refresh(string token,bool foreground,string subject,CancellationToken cancellation);}
 // Own the handler: no redirect or automatic retry may expose/reuse refresh secrets.
 public sealed class IdentityRefreshHttp:IIdentityRefresh,IDisposable
 {
-    private readonly HttpClient client;private readonly string bffKey;private readonly string trustedSubject;
-    public IdentityRefreshHttp(Uri identity,string bffKey,string trustedSubject,bool developmentLoopback=false)
+    private readonly HttpClient client;private readonly string bffKey;private readonly string receiptKey;
+    public IdentityRefreshHttp(Uri identity,string bffKey,string receiptKey,bool developmentLoopback=false)
     {
         if(!identity.IsAbsoluteUri || identity.UserInfo.Length!=0 || identity.Query.Length!=0 || identity.Fragment.Length!=0
             || !(identity.Scheme=="https" || developmentLoopback && identity.Scheme=="http" && identity.IsLoopback)
-            || bffKey.Length<32 || !Input.Secret(trustedSubject))throw new ArgumentException("Trusted Identity origin/key/subject required");
-        this.bffKey=bffKey;this.trustedSubject=trustedSubject;
+            || bffKey.Length<32 || receiptKey.Length<32 || receiptKey==bffKey)throw new ArgumentException("Trusted Identity origin/key/subject required");
+        this.bffKey=bffKey;this.receiptKey=receiptKey;
         client=new HttpClient(new HttpClientHandler {AllowAutoRedirect=false}){BaseAddress=identity,Timeout=Timeout.InfiniteTimeSpan};
     }
-    public async Task<SessionTokens> Refresh(string token,bool foreground,CancellationToken cancellation)
+    public async Task<SessionTokens> Refresh(string token,bool foreground,string subject,CancellationToken cancellation)
     {
         using var request=new HttpRequestMessage(HttpMethod.Post,"auth/refresh");
         var reference=Guid.NewGuid();request.Headers.Add("X-Refresh-Request",reference.ToString("D"));
-        request.Headers.Add("X-Bff-Client-Key",bffKey);request.Headers.Add("X-Bff-Subject",trustedSubject);
+        request.Headers.Add("X-Bff-Client-Key",bffKey);request.Headers.Add("X-Bff-Subject",subject);
         request.Content=JsonContent.Create(new RefreshRequest(token,foreground));
         using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancellation);
         await using var stream=await response.Content.ReadAsStreamAsync(cancellation);
@@ -37,13 +37,13 @@ public sealed class IdentityRefreshHttp:IIdentityRefresh,IDisposable
         if(used>32768)throw new InvalidOperationException("Oversized successor");
         if(!response.IsSuccessStatusCode)
         {
-            if(response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.ServiceUnavailable)
+            if(response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.ServiceUnavailable or System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.BadRequest)
             {
                 try
                 {
                     var rejection=JsonSerializer.Deserialize<RefreshRejection>(bytes.AsSpan(0,used),new JsonSerializerOptions(JsonSerializerDefaults.Web)
                         {UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow});
-                    if(rejection is not null && rejection.Verify(bffKey,(int)response.StatusCode,reference))throw new RefreshNotProcessed(rejection.RetryAfterSeconds);
+                    if(rejection is not null && rejection.Verify(receiptKey,(int)response.StatusCode,reference))throw new RefreshNotProcessed(rejection.RetryAfterSeconds,response.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.BadRequest);
                 }
                 catch(JsonException) { /* Generic proxy/malformed response has no admission proof. */ }
             }
@@ -63,8 +63,8 @@ public sealed record BffBudgets(TimeSpan Http,TimeSpan Owner,TimeSpan LockWait)
 // Server-to-server value. Browser routes must never serialize it.
 public sealed record BffAccess(string AccessToken,Guid SessionId,long Version,bool RefreshDue);
 // Trusted adapters only: HTTP creates this after verifying the nonce-bound receipt.
-public sealed class RefreshNotProcessed(int retryAfterSeconds):Exception("Refresh not processed")
-{public int RetryAfterSeconds {get;}=Math.Clamp(retryAfterSeconds,1,60);}
+public sealed class RefreshNotProcessed(int retryAfterSeconds,bool configuration=false):Exception("Refresh not processed")
+{public bool Configuration {get;}=configuration;public int RetryAfterSeconds {get;}=Math.Clamp(retryAfterSeconds,1,60);}
 public sealed class BffError(string code,int? retryAfterSeconds=null):Exception(code)
 {public string Code {get;}=code;public int? RetryAfterSeconds {get;}=retryAfterSeconds;}
 
@@ -132,6 +132,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         using var owner=CancellationTokenSource.CreateLinkedTokenSource(cancellation);owner.CancelAfter(limits.Owner-cleanupBudget);
         var ct=owner.Token;
         if(row is null || !Live(row))throw new BffError("REAUTHENTICATION_REQUIRED");
+        if(await new BffCircuit(store,clock).IsOpen(ct))throw new BffError("BFF_UNAVAILABLE",60);
         var id=row.Get<Guid>("id");var version=row.Get<long>("version");
         // Read journal without locking it in A: B must be able to update it independently.
         var journal=(await BffStore.One(c,"SELECT * FROM bff_refresh_journal WHERE session_id=@id",ct,("id",id)))!;
@@ -166,7 +167,8 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             }
             await Observe(RefreshStage.DispatchCommitted,ct);
             using var http=CancellationTokenSource.CreateLinkedTokenSource(ct);http.CancelAfter(limits.Http);
-            var successor=await identity.Refresh(Tokens(row).RefreshToken,activity==BffActivity.UserAction,http.Token).WaitAsync(http.Token);
+            var successor=await identity.Refresh(Tokens(row).RefreshToken,activity==BffActivity.UserAction,Subject(row.Get<Guid>("identity_session_id")),http.Token).WaitAsync(http.Token);
+            await new BffCircuit(store,clock).Record(id,200,false,ct);
             await Observe(RefreshStage.ResponseReceived,ct);
             if(successor.SessionId!=row.Get<Guid>("identity_session_id") || successor.ExpiresAt!=row.Time("expires_at")
                 || successor.AccessExpiresAt<=Now.AddSeconds(2) || successor.AccessExpiresAt>successor.ExpiresAt
@@ -196,10 +198,27 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
                 WHERE session_id=@id AND attempt_id=@op AND source_version=@version
                 """,cleanup.Token,("retry",Now.AddSeconds(retry)),("streak",streak),("id",id),("op",operation),("version",version));
             if(cleared!=1)throw new BffError("REAUTHENTICATION_REQUIRED");
+            if(rejection.Configuration)
+            {
+                await new BffCircuit(store,clock).Record(id,403,true,cleanup.Token);
+                throw new BffError("BFF_UNAVAILABLE",60);
+            }
             throw new BffError("BFF_BUSY",retry);
         }
         catch(Exception failure) when(dispatched)
         {
+            if(!commitAttempted && failure is HttpRequestException {StatusCode:var status} && status is not null)
+            {
+                using var circuitBudget=new CancellationTokenSource(cleanupBudget);
+                var code=(int)status.Value;
+                if(await new BffCircuit(store,clock).Record(id,code,code==403,circuitBudget.Token))
+                    throw new BffError("BFF_UNAVAILABLE",60); // Keep unmatched marker and tokens quarantined, never retry.
+            }
+            if(!commitAttempted)
+            {
+                using var checkBudget=new CancellationTokenSource(cleanupBudget);
+                if(await new BffCircuit(store,clock).IsOpen(checkBudget.Token))throw new BffError("BFF_UNAVAILABLE",60);
+            }
             // Never overwrite a possibly committed successor after losing its commit acknowledgment.
             // If commit was not attempted, use reserved owner time to terminalize the local cookie.
             if(!commitAttempted)
@@ -219,6 +238,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             throw new BffError("REAUTHENTICATION_REQUIRED");
         }
     }
+    private string Subject(Guid session)=>Convert.ToBase64String(secrets.Mac("bff-admission-session-v1",session.ToString("D"))).TrimEnd('=').Replace('+','-').Replace('/','_');
     private async Task Clear(Guid id,Guid attempt,long version,CancellationToken cancellation)
     {
         await using var c=await store.Source.OpenConnectionAsync(cancellation);

@@ -70,6 +70,6 @@ The core uncertainty aggregate reports persisted, reconciled outcomes. An unmatc
 
 A signed, nonce-bound pre-invocation admission rejection is a known non-consumed
 outcome, distinct from definitive revocation and uncertainty. See `BFF_CORE.md`
-and authentication subset 0.7.0 for receipt validation and durable shared retry
+and authentication subset 0.8.0 for receipt validation and durable shared retry
 backoff. Generic overload/proxy status is insufficient. Retrying an uncertain
 predecessor remains forbidden. Startup requires PostgreSQL 17 or newer.

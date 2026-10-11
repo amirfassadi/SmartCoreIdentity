@@ -161,16 +161,23 @@ internal static class BffRefreshChecks
             "definitive Identity revocation requires login but is excluded from uncertain-outcome ratio");
         // Exercise the concrete non-redirecting HTTP adapter through a loopback Identity bridge.
         // This is not the complete Identity middleware/BFF browser host.
-        var httpCalls=0;var trapCalls=0;var httpMode="normal";var httpKey=Secrets.Token();var httpSubject=Secrets.Token();
+        var httpActive=0;var subjects=new ConcurrentQueue<string>();var httpCalls=0;var trapCalls=0;var httpMode="normal";var httpKey=Secrets.Token();var receiptKey=Secrets.Token();
         var httpBuilder=WebApplication.CreateSlimBuilder(new WebApplicationOptions {EnvironmentName="Development"});
         httpBuilder.Logging.ClearProviders();httpBuilder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
         await using(var host=httpBuilder.Build())
         {
+            host.Use(async(context,next)=>{Interlocked.Increment(ref httpActive);try{await next();}finally{Interlocked.Decrement(ref httpActive);}});
             host.MapPost("/auth/refresh",async(HttpContext context)=>
             {
                 Interlocked.Increment(ref httpCalls);
-                if(context.Request.Headers["X-Bff-Client-Key"]!=httpKey || context.Request.Headers["X-Bff-Subject"]!=httpSubject)
-                {context.Response.StatusCode=401;return;}
+                subjects.Enqueue(context.Request.Headers["X-Bff-Subject"].ToString());
+                if(context.Request.Headers["X-Bff-Client-Key"]!=httpKey || !Input.Secret(context.Request.Headers["X-Bff-Subject"].ToString()))
+                {
+                    context.Response.StatusCode=403;
+                    await context.Response.WriteAsJsonAsync(RefreshRejection.Create(receiptKey,403,"BFF_CREDENTIALS_REJECTED",Guid.Parse(context.Request.Headers["X-Refresh-Request"].ToString()),2));return;
+                }
+                if(httpMode=="raw401"){context.Response.StatusCode=401;return;}
+                if(httpMode=="random-kill")await Task.Delay(Random.Shared.Next(20,100));
                 if(httpMode=="redirect"){context.Response.StatusCode=307;context.Response.Headers.Location="/trap";return;}
                 if(httpMode is "rate" or "busy" or "unsigned" or "wrong-nonce" or "bad-proof" or "proxy502" or "proxy504")
                 {
@@ -179,7 +186,7 @@ internal static class BffRefreshChecks
                     if(httpMode is "unsigned" or "proxy502" or "proxy504")
                     {await context.Response.WriteAsJsonAsync(new {code="AUTHENTICATION_BUSY"});return;}
                     var reference=Guid.Parse(context.Request.Headers["X-Refresh-Request"].ToString());
-                    var receipt=RefreshRejection.Create(httpKey,status,status==429?"RATE_LIMITED":"AUTHENTICATION_BUSY",httpMode=="wrong-nonce"?Guid.NewGuid():reference,2);
+                    var receipt=RefreshRejection.Create(receiptKey,status,status==429?"RATE_LIMITED":"AUTHENTICATION_BUSY",httpMode=="wrong-nonce"?Guid.NewGuid():reference,2);
                     if(httpMode=="bad-proof")receipt=receipt with {Proof=Convert.ToBase64String(new byte[32])};
                     await context.Response.WriteAsJsonAsync(receipt);return;
                 }
@@ -196,7 +203,7 @@ internal static class BffRefreshChecks
             host.MapPost("/trap",()=>{Interlocked.Increment(ref trapCalls);return Results.NoContent();});
             await host.StartAsync();
             var address=host.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
-            using var http=new IdentityRefreshHttp(new Uri(address+"/"),httpKey,httpSubject,developmentLoopback:true);
+            using var http=new IdentityRefreshHttp(new Uri(address+"/"),httpKey,receiptKey,developmentLoopback:true);
             var network=await Fixture();advance(TimeSpan.FromMinutes(13));
             var networkA=new BffRefresh(storeA,secrets,clock,http);var networkB=new BffRefresh(storeB,secrets,clock,http);
             var networkResults=await Task.WhenAll(Enumerable.Range(0,20).Select(i=>(i%2==0?networkA:networkB).RefreshIfDue(network.Cookie,BffActivity.UserAction)));
@@ -239,7 +246,40 @@ internal static class BffRefreshChecks
                 Check(httpCalls==before+1 && (await State(untrusted.Tokens)).Has("uncertain_at"),mode+" rejection remains uncertain and is never retried");
             }
             httpMode="normal";
-            BffPeerConfig Config(string cookie,RefreshStage? stage=null)=>new(connection,macKey,materialKey,address+"/",httpKey,httpSubject,Timestamps.Now(clock),cookie,stage);
+            var circuit=new BffCircuit(storeA,clock);
+            var badConfig=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeBad=httpCalls;
+            using(var badClient=new IdentityRefreshHttp(new Uri(address+"/"),Secrets.Token(),receiptKey,true))
+            {
+                try{await new BffRefresh(storeA,secrets,clock,badClient).RefreshIfDue(badConfig.Cookie,BffActivity.UserAction);throw new Exception("Expected config rejection");}
+                catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            }
+            var safeBad=await State(badConfig.Tokens);
+            Check(safeBad.Get<string>("status")=="Active" && safeBad.Has("sealed_tokens") && await Generation(badConfig.Tokens)==0,
+                "wrong BFF credential with independent receipt key preserves active tokens and opens shared circuit");
+            try{await networkB.RefreshIfDue(badConfig.Cookie,BffActivity.UserAction);throw new Exception("Expected open circuit");}
+            catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            Check(httpCalls==beforeBad+1,"configuration circuit prevents dispatch from another pool");
+            await circuit.Reset();advance(TimeSpan.FromSeconds(3));await networkB.RefreshIfDue(badConfig.Cookie,BffActivity.UserAction);
+            Check(await Generation(badConfig.Tokens)==1,"operator reset after credential repair safely rotates known non-consumed predecessor");
+            Check(subjects.Count>1 && subjects.All(Input.Secret) && subjects.Distinct().Count()>1,
+                "one HTTP adapter derives opaque admission subjects per session rather than per instance");
+            await circuit.Reset();httpMode="raw401";
+            var cohort=new List<(string Cookie,SessionTokens Tokens)>();
+            for(var n=0;n<6;n++){cohort.Add(await Fixture());advance(TimeSpan.FromMinutes(13));}
+            // Keep the earlier sessions live while advancing the test clock.
+            foreach(var f in cohort)await sql.Execute("UPDATE bff_sessions SET last_foreground_at=@now WHERE identity_session_id=@id",("now",Timestamps.Now(clock)),("id",f.Tokens.SessionId));
+            for(var n=0;n<4;n++)await Reauth(async()=>{await networkA.RefreshIfDue(cohort[n].Cookie,BffActivity.UserAction);});
+            try{await networkA.RefreshIfDue(cohort[4].Cookie,BffActivity.UserAction);throw new Exception("Expected rejection breaker");}
+            catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            var quarantined=await State(cohort[4].Tokens);var beforeStop=httpCalls;
+            try{await networkB.RefreshIfDue(cohort[5].Cookie,BffActivity.UserAction);throw new Exception("Expected shared circuit");}
+            catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            Check(quarantined.Has("sealed_tokens") && quarantined.Get<string>("status")=="Active" && httpCalls==beforeStop,
+                "five distinct session rejections latch shared breaker; triggering session and later sessions are not erased");
+            await circuit.Reset();httpMode="normal";
+            await Reauth(async()=>{await networkB.RefreshIfDue(cohort[4].Cookie,BffActivity.UserAction);});
+            Check(httpCalls==beforeStop,"resetting breaker never clears unmatched dispatch evidence or authorizes retry");
+            BffPeerConfig Config(string cookie,RefreshStage? stage=null)=>new(connection,macKey,materialKey,address+"/",httpKey,receiptKey,Timestamps.Now(clock),cookie,stage);
             var processes=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeProcesses=httpCalls;
             await using(var peerA=await BffProcessPeer.Peer.Start(Config(processes.Cookie)))
             await using(var peerB=await BffProcessPeer.Peer.Start(Config(processes.Cookie)))
@@ -267,6 +307,24 @@ internal static class BffRefreshChecks
                         && !(await State(killed.Tokens)).Has("sealed_tokens"),
                         "actual process kill at "+stage+" releases row lock but retains durable marker; survivor never resends");
             }
+            httpMode="random-kill";
+            for(var n=0;n<6;n++)
+            {
+                var fuzz=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeFuzz=httpCalls;
+                await using(var victim=await BffProcessPeer.Peer.Start(Config(fuzz.Cookie) with {HoldAfterDone=true}))
+                {
+                    await victim.Go();await Task.Delay(Random.Shared.Next(5,160));await victim.Kill();
+                }
+                using(var settled=new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                    while(Volatile.Read(ref httpActive)!=0)await Task.Delay(10,settled.Token);
+                await using var survivor=await BffProcessPeer.Peer.Start(Config(fuzz.Cookie));await survivor.Go();var outcome=await survivor.Line();
+                var fuzzState=await State(fuzz.Tokens);
+                var marker=(await sql.One("SELECT attempt_id FROM bff_refresh_journal WHERE session_id=@id",("id",fuzzState.Get<Guid>("id"))))!;
+                var reuse=(await sql.One("SELECT count(*) AS n FROM auth_refresh_security_events WHERE session_id=@id AND type='RefreshTokenReuseDetected'",("id",fuzz.Tokens.SessionId)))!.Get<long>("n");
+                Check(httpCalls<=beforeFuzz+1 && await Generation(fuzz.Tokens)<=1 && reuse==0
+                    && (outcome.StartsWith("DONE:",StringComparison.Ordinal) && !marker.Has("attempt_id") || outcome=="ERROR:REAUTHENTICATION_REQUIRED" && !fuzzState.Has("sealed_tokens")),
+                    "random real process kill during ten parallel decisions preserves no-reuse and single-rotation invariants");
+            }
             await host.StopAsync();
         }
         var closeFixture=await Fixture();var closeCore=Core(storeA,new Transport(auth,client));await closeCore.Close(closeFixture.Cookie);
@@ -287,7 +345,7 @@ internal static class BffRefreshChecks
         public ConcurrentQueue<bool> Foregrounds {get;}=new();
         public TaskCompletionSource Entered {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<SessionTokens> Refresh(string token,bool foreground,CancellationToken cancellation)
+        public async Task<SessionTokens> Refresh(string token,bool foreground,string subject,CancellationToken cancellation)
         {
             Interlocked.Increment(ref calls);Foregrounds.Enqueue(foreground);Entered.TrySetResult();
             if(Pause)await Release.Task.WaitAsync(cancellation);

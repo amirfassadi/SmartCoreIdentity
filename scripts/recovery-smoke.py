@@ -12,7 +12,7 @@ env.update(ASPNETCORE_ENVIRONMENT='Development',ASPNETCORE_URLS='http://127.0.0.
  Identity__MacKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__MaterialKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__AccessSigningKey=base64.b64encode(secrets.token_bytes(32)).decode(),
- Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
+ Identity__RefreshReceiptKey=secrets.token_urlsafe(32),Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
  Identity__DevInboxKey=secrets.token_urlsafe(32),Identity__WorkerEnabled='true',
  Identity__PasswordChangeEnabled='true',Identity__RecoveryEnrollmentEnabled='true',Identity__AuthOperatorKey=secrets.token_urlsafe(32),
  Identity__ApplicationPort='5159',Identity__AuthOperatorSocket=operator_socket)
@@ -70,7 +70,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   import uuid
   operation=str(uuid.uuid4());request=dict(operationId=operation,currentPassword=password,acceptLossRisk=True)
   auth={**bff,'Authorization':'Bearer '+login['session']['accessToken']}
-  assert call('/auth/recovery/enroll',request)[0]==401
+  assert call('/auth/recovery/enroll',request)[0]==403
   assert call('/auth/recovery/enroll',request,bff)[0]==401
   assert call('/auth/recovery/enroll',{**request,'acceptLossRisk':False},auth)[0]==400
   status,enrolled=call('/auth/recovery/enroll',request,auth)
@@ -108,7 +108,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   new_password='new password dual factor HTTP fixture'
   complete=dict(operationId=str(uuid.uuid4()),challengeId=pending['challengeId'],bindingSecret=reset['bindingSecret'],
    code=otp['code'],recoveryCode='  '+replacement['recoveryCode'].lower()+'  ',newPassword=new_password)
-  assert call('/auth/password/reset/complete',complete)[0]==401
+  assert call('/auth/password/reset/complete',complete)[0]==403
   wrong={**complete,'recoveryCode':'0'*32}
   assert call('/auth/password/reset/complete',wrong,complete_bff)[0]==401
   assert call('/me',headers=auth)[0]==200

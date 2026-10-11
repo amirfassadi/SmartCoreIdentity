@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartCore development authentication subset
-  version: 0.7.0
+  version: 0.8.0
   description: Development authenticated BFF adapter. Recovery enrollment and dual-factor
     reset are opt-in. Reset requires primary-contact OTP plus a pre-enrolled recovery
     code. The accepted reset operation closes Sessions and uses receipt-backed recovery;
@@ -43,6 +43,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       requestBody:
         required: true
         content:
@@ -74,7 +81,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                oneOf:
+                - $ref: '#/components/schemas/Error'
+                - $ref: '#/components/schemas/RefreshRejection'
         '401':
           description: Uniform failure
           content:
@@ -113,6 +122,15 @@ paths:
                 type: integer
                 minimum: 1
                 maximum: 60
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/Error'
+                - $ref: '#/components/schemas/RefreshRejection'
       requestBody:
         required: true
         content:
@@ -174,6 +192,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       requestBody:
         required: true
         content:
@@ -221,6 +246,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
           content:
             application/json:
               schema:
@@ -280,6 +312,13 @@ paths:
         '503':
           description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its
             two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
           content:
             application/json:
               schema:
@@ -428,6 +467,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecoveryEnrollmentResult'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       parameters:
       - name: X-Bff-Subject
         in: header
@@ -486,6 +532,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResetPending'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       parameters:
       - name: X-Bff-Subject
         in: header
@@ -544,6 +597,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChangeStatus'
+        '403':
+          description: 'BFF_CREDENTIALS_REJECTED: BFF key or subject assertion rejected
+            before endpoint execution. Separate from Session 401.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       parameters:
       - name: X-Bff-Subject
         in: header
@@ -859,6 +919,8 @@ components:
           enum:
           - RATE_LIMITED
           - AUTHENTICATION_BUSY
+          - BFF_CREDENTIALS_REJECTED
+          - VALIDATION_FAILED
         disposition:
           const: NotProcessed
         requestReference:
@@ -870,11 +932,11 @@ components:
           maximum: 60
         proof:
           type: string
-          description: Base64 HMAC-SHA256 with authenticated BFF client key over UTF-8
-            identity-refresh-not-processed-v1\n{HTTP status decimal}\n{code}\n{requestReference
-            lowercase D UUID}\n{retryAfterSeconds decimal}, no final newline. Nonce,
-            status/code pair, disposition and delay must validate. Domain-specific
-            receipt, not a bearer credential.
+          description: Base64 HMAC-SHA256 with independent Identity:RefreshReceiptKey
+            (distinct from the BFF client credential) over UTF-8 identity-refresh-not-processed-v1\n{HTTP
+            status decimal}\n{code}\n{requestReference lowercase D UUID}\n{retryAfterSeconds
+            decimal}, no final newline. Nonce, status/code pair, disposition and delay
+            must validate. Domain-specific receipt, not a bearer credential.
           pattern: ^[A-Za-z0-9+/]{43}=$
   securitySchemes:
     bffKey:

@@ -34,6 +34,8 @@ if(authenticationEnabled)
 {
     bffKey=builder.Configuration["Identity:BffClientKey"];
     if(bffKey is not {Length:>=32}) throw new InvalidOperationException("An authenticated development BFF client key is required.");
+    var receiptKey=builder.Configuration["Identity:RefreshReceiptKey"];
+    if(receiptKey is not {Length:>=32} || receiptKey==bffKey)throw new InvalidOperationException("A distinct refresh receipt key is required.");
     var signingKey=builder.Configuration["Identity:AccessSigningKey"] ?? "";
     var bytes=Convert.FromBase64String(signingKey);
     if(bytes.SequenceEqual(Convert.FromBase64String(builder.Configuration["Identity:MacKey"] ?? ""))
@@ -101,7 +103,8 @@ app.Use(async(context,next)=>
     if(authenticationEnabled && category is not null)
     {
         var secrets=context.RequestServices.GetRequiredService<Secrets>();
-        if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",context.Request.Headers["X-Bff-Client-Key"].ToString()))) throw new ApiError(401,"UNAUTHORIZED");
+        if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",context.Request.Headers["X-Bff-Client-Key"].ToString()))) throw new ApiError(403,"BFF_CREDENTIALS_REJECTED");
+        if(!Input.Id(context.Request.Headers["X-Bff-Subject"].ToString()))throw new ApiError(403,"BFF_CREDENTIALS_REJECTED");
         await context.RequestServices.GetRequiredService<AuthenticationAdmission>().Admit(bffClient,context.Request.Headers["X-Bff-Subject"].ToString(),category);
     }
     await next();
@@ -141,7 +144,7 @@ if(authenticationEnabled)
     void Bff(HttpRequest request,Secrets secrets)
     {
         if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",request.Headers["X-Bff-Client-Key"].ToString())))
-            throw new ApiError(401,"UNAUTHORIZED");
+            throw new ApiError(403,"BFF_CREDENTIALS_REJECTED");
     }
     AccessProof Proof(HttpRequest request,Secrets secrets,AccessTokens access)
     {
@@ -256,10 +259,9 @@ app.Run();
 static Task WriteError(HttpContext context,int status,string code,string? nextAction=null)
 {
     context.Response.StatusCode=status;
-    var key=context.RequestServices.GetRequiredService<IConfiguration>()["Identity:BffClientKey"];
+    var key=context.RequestServices.GetRequiredService<IConfiguration>()["Identity:RefreshReceiptKey"];
     if(context.Request.Path=="/auth/refresh" && !context.Items.ContainsKey("refresh-invoked")
         && RefreshRejection.Allowed(status,code) && key is {Length:>=32}
-        && CryptographicKeyMatches(key,context.Request.Headers["X-Bff-Client-Key"].ToString())
         && Guid.TryParseExact(context.Request.Headers["X-Refresh-Request"].ToString(),"D",out var reference) && reference!=Guid.Empty)
     {
         var retry=status==429?60:2;
@@ -268,10 +270,6 @@ static Task WriteError(HttpContext context,int status,string code,string? nextAc
     }
     return context.Response.WriteAsJsonAsync(new {error=new {code,message="Request could not be completed.",nextAction},traceId=context.TraceIdentifier});
 }
-
-static bool CryptographicKeyMatches(string expected,string supplied)=>System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-    System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(expected)),
-    System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(supplied)));
 
 static async Task<T> Read<T>(HttpRequest request)
 {

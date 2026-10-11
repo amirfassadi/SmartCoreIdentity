@@ -6,7 +6,7 @@ namespace SmartCore.Identity;
 // Only an admission boundary that has NOT invoked Refresh may issue this receipt.
 public sealed record RefreshRejection(string Code,string Disposition,Guid RequestReference,int RetryAfterSeconds,string Proof)
 {
-    public static bool Allowed(int status,string code)=>status==429 && code=="RATE_LIMITED" || status==503 && code=="AUTHENTICATION_BUSY";
+    public static bool Allowed(int status,string code)=>status==429 && code=="RATE_LIMITED" || status==503 && code=="AUTHENTICATION_BUSY" || status==403 && code=="BFF_CREDENTIALS_REJECTED" || status==400 && code=="VALIDATION_FAILED";
     private static byte[] Mac(string key,int status,string code,Guid reference,int retry)=>HMACSHA256.HashData(
         Encoding.UTF8.GetBytes(key),Encoding.UTF8.GetBytes($"identity-refresh-not-processed-v1\n{status}\n{code}\n{reference:D}\n{retry}"));
     public static RefreshRejection Create(string key,int status,string code,Guid reference,int retry)

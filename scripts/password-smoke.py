@@ -12,7 +12,7 @@ env.update(ASPNETCORE_ENVIRONMENT='Development',ASPNETCORE_URLS='http://127.0.0.
  Identity__MacKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__MaterialKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__AccessSigningKey=base64.b64encode(secrets.token_bytes(32)).decode(),
- Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
+ Identity__RefreshReceiptKey=secrets.token_urlsafe(32),Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
  Identity__DevInboxKey=secrets.token_urlsafe(32),Identity__WorkerEnabled='true',
  Identity__PasswordChangeEnabled='true',Identity__AuthOperatorKey=secrets.token_urlsafe(32),
  Identity__ApplicationPort='5158',Identity__AuthOperatorSocket=operator_socket)

@@ -5,14 +5,14 @@ using SmartCore.Identity;
 using SmartCore.Identity.Bff;
 
 // Test-only stdin IPC. Credentials are never command-line arguments or output.
-internal sealed record BffPeerConfig(string Connection,string MacKey,string MaterialKey,string Origin,string Key,string Subject,DateTimeOffset Now,string Cookie,RefreshStage? Pause);
+internal sealed record BffPeerConfig(string Connection,string MacKey,string MaterialKey,string Origin,string Key,string ReceiptKey,DateTimeOffset Now,string Cookie,RefreshStage? Pause,bool HoldAfterDone=false);
 internal static class BffProcessPeer
 {
     public static async Task Run()
     {
         var config=JsonSerializer.Deserialize<BffPeerConfig>((await Console.In.ReadLineAsync())!)!;
         await using var store=new BffStore(config.Connection);await store.Migrate();
-        using var http=new IdentityRefreshHttp(new Uri(config.Origin),config.Key,config.Subject,true);
+        using var http=new IdentityRefreshHttp(new Uri(config.Origin),config.Key,config.ReceiptKey,true);
         var core=new BffRefresh(store,new Secrets(config.MacKey,config.MaterialKey),new FixedClock(config.Now),http,probe:new PauseProbe(config.Pause));
         Console.WriteLine("READY");
         if(await Console.In.ReadLineAsync()!="GO")throw new Exception("Missing peer start signal");
@@ -22,6 +22,7 @@ internal static class BffProcessPeer
             Console.WriteLine("DONE:"+string.Join(',',results.Select(x=>x.Version)));
         }
         catch(BffError error){Console.WriteLine("ERROR:"+error.Code);}
+        if(config.HoldAfterDone)await Task.Delay(Timeout.InfiniteTimeSpan);
     }
     private sealed class FixedClock(DateTimeOffset now):TimeProvider {public override DateTimeOffset GetUtcNow()=>now;}
     private sealed class PauseProbe(RefreshStage? pause):IRefreshProbe
