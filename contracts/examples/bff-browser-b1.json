@@ -1606,5 +1606,22 @@
       "Cache-Control": "no-store"
     },
     "valid": true
+  },
+  {
+    "name": "actual HTTP uppercase GET method",
+    "kind": "response",
+    "path": "/bff/csrf",
+    "method": "GET",
+    "body": {
+      "code": "BFF_UNAVAILABLE",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
   }
 ]

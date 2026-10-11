@@ -465,7 +465,7 @@ Local infrastructure evidence:
 - Configuration-only host smoke passed: Production/public bind/missing certificate/
   equal receipt-client keys rejected; two distinct processes protected/unprotected
   the proof using the same encrypted shared ring; XML has no plaintext masterKey.
-- Candidate browser checks now have 111 positive checks, 38 negative controls,
+- Candidate browser checks now have 112 positive checks, 38 negative controls,
   15 model precedence pairs and 5 raw-envelope competing-error fixtures. The raw
   model injects CSRF validity; it does not prove live middleware order.
 - Documentary checks: 20 archives, 17 current documents, 63 relative links.
@@ -476,3 +476,8 @@ this runtime evidence. No real HTTPS ingress, authenticated browser flow, sessio
 principal/CSRF validation, seeded Identity integration or hydration claim yet.
 Tasks 2/3 infrastructure is documented in BFF_BROWSER_HOST.md; task 3 is partial
 until the seeded account crosses the real task-6 login handler. Tasks 4–9 remain.
+
+Initial infrastructure CI passed the Next production job and reached two-host
+response validation, then exposed an adapter mismatch: actual uppercase HTTP
+methods were not normalized for lowercase OpenAPI operation lookup. The validator
+now normalizes methods and has an uppercase GET fixture; fresh CI is required.

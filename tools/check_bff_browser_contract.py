@@ -39,6 +39,7 @@ def normalized_headers(headers):
 
 def validate_request(doc, path, method, body, headers, approved_origin="https://localhost:7443"):
     """Structural envelope only; cannot validate CSRF cryptography or cookie identity."""
+    method = method.lower()
     op = doc['paths'][path][method]
     if method == 'get':
         assert body is None
@@ -75,6 +76,7 @@ def validate_request(doc, path, method, body, headers, approved_origin="https://
 
 
 def validate_response(doc, path, method, status, body, headers):
+    method = method.lower()
     operation = doc['paths'].get(path, {}).get(method)
     spec = resolve(doc, operation['responses'].get(str(status), operation['responses']['default']) if operation else doc['x-router-fallback'])
     if status in (404, 405):
