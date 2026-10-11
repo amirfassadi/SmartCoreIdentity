@@ -72,7 +72,11 @@ no Domain; bounded absolute expiry from the server session. Fresh cookie on logi
 clear on committed local logout or terminal rejection. All mutations, including
 anonymous login/register/reset (login CSRF matters), require exact approved Origin
 and ASP.NET antiforgery cookie/header validation before forwarding or side effects.
-Reject missing/null/wrong Origin for these browser routes. No credentials in URL.
+Reject missing/null/wrong Origin for these browser routes. If Sec-Fetch-Site is
+present, additionally require same-origin or none; reject cross-site/same-site/unknown
+values using ORIGIN_REJECTED. Absence is allowed only with the required Origin and
+CSRF checks still passing; this optional defense never replaces those checks.
+No credentials in URL.
 
 ### Explicit CSRF/session binding
 
@@ -103,7 +107,18 @@ must fail after logout/login even for the same Person. Fresh GET responses are t
 to the current session, never a caller-supplied ID. Startup must register authentication
 before antiforgery, and both BFF hosts share a durable protected ASP.NET Data Protection
 key ring and application name; otherwise cross-host CSRF tokens will fail. These keys
-are separate from Identity/BFF MAC/material keys.
+are separate from Identity/BFF MAC/material keys. On Linux persist the shared key
+ring in an access-restricted durable volume and explicitly encrypt key XML with
+ProtectKeysWithCertificate using a separate X.509 wrapping certificate. Both hosts
+receive the same certificate/private key via read-only secret mounts, provisioned
+outside images/git and outside the key-ring volume; non-root service-only permissions.
+The encrypted XML volume alone must not contain its decryption key. Missing wrapping
+certificate/key ring must fail startup rather than fall back to plaintext/ephemeral
+keys. For rotation deploy new wrapping/decryption certificates to both hosts, retain
+old decryption certificates for still-live keys/tokens, then switch new-key encryption;
+back up encrypted ring and protected wrapping secrets separately and test restore.
+CI asserts encrypted XML, cross-host validation and startup failure without wrapping
+material; certificate provisioning/rotation is deployment work, not done evidence.
 
 No-store on all account/BFF material; no shared cache, logs or tracing payload capture
 for passwords, OTP, recovery code, cookies or CSRF tokens. A locale cookie is separate
@@ -125,7 +140,11 @@ strips those public headers; the response header remains paired with the rendere
 HTML. Production baseline: default-src 'self'; script-src 'self' 'nonce-{fresh}'
 'strict-dynamic'; style-src 'self' 'nonce-{fresh}'; img-src 'self' data:; font-src
 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self';
-frame-ancestors 'none'. No script unsafe-inline/unsafe-eval in the production build.
+frame-ancestors 'none'. Explicit style-src-attr 'none': B1 forbids React style props and HTML style attributes
+in our code and imported B1 components. Use Tailwind/CSS classes, not attribute
+nonces (which cannot authorize style attributes). No style-src-attr unsafe-inline
+exception in B1; future calendar/menu libraries require a separate reviewed policy.
+No script unsafe-inline/unsafe-eval in the production build.
 Any required style/library exception is explicit, minimal and reviewed before merge;
 B1 must demonstrate hydration works under this policy, not silently disable CSP.
 Development HMR exceptions stay separate; browser acceptance builds Next in production
@@ -173,7 +192,13 @@ request locale cannot alter proof verification, admission or error uniformity.
 ## Internationalization and input
 
 /fa/... and /en/...; /bff stays outside locales. Precedence: explicit URL/selection,
-then saved locale preference, then supported Accept-Language match, then fa. Only
+then saved locale preference, then supported Accept-Language match, then fa.
+Configure next-intl localeCookie explicitly: name=smartcore-locale, secure=true,
+sameSite=lax, path=/, maxAge=15552000 (180 days), no Domain; not an auth cookie and
+not HttpOnly so an explicit client language switch can update it. Values restricted
+to fa/en. NEXT_LOCALE is not forwarded or used as an implicit fallback. Test a language
+switch followed by unprefixed navigation through the proxy preserves that preference;
+unknown/duplicate locale cookies are ignored. Only
 unprefixed page entry redirects; prefixed URLs are not overridden. Public equivalents
 have canonical/hreflang metadata. Locale negotiation excludes /bff, /_next and assets.
 Direction: fa RTL, en LTR. Use logical Tailwind spacing/alignment and test keyboard,
@@ -292,3 +317,10 @@ antiforgery) and https://nextjs.org/docs/app/guides/content-security-policy (non
 requires dynamic rendering); https://next-intl.dev/docs/getting-started and
 https://next-intl.dev/ (routing and ICU support). Existing runtime scope/evidence:
 [PR_STACK.md](PR_STACK.md). Public-user gates: [RELEASE_GATES.md](RELEASE_GATES.md).
+
+B1 draft contract is now [bff-browser.openapi.yaml](../../contracts/bff-browser.openapi.yaml).
+It covers exactly five paths, before any host code. Schema/example checks are
+documentary candidate evidence; live response validation is still a B1 host task.
+Primary configuration references:
+https://next-intl.dev/docs/routing/configuration and
+https://learn.microsoft.com/aspnet/core/security/data-protection/configuration/overview .
