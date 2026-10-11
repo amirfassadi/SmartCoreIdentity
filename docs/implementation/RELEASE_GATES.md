@@ -120,3 +120,12 @@ including login/register/reset; same-origin routing and SameSite alone do not cl
 this gate. fa/en UI support does not expand the Iran-only SMS market. Server input
 normalization, self-hosted fonts and frozen notification locale/template intent are
 required as specified in the slice before their corresponding path is released.
+
+Stage B now lands as B1 (session/proxy/CSRF with seeded login), B2 (registration/OTP),
+and B3 (recovery/reset/change). B1 specifies a custom opaque-cookie authentication
+handler before antiforgery, per-BFF-session identity binding, __Host antiforgery
+cookie rotation and fresh frontend tokens on auth transitions. Locale-only cookie
+allowlisting to Next, nonce CSP/dynamic uncached HTML and other security headers,
+cross-tab logout and timezone/digit regression tests are B1 acceptance requirements.
+The browser OpenAPI precedes host code and validates actual host responses as well
+as generated clients. Full stage-B release evidence still requires all three slices.

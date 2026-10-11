@@ -30,7 +30,9 @@ services, hours and appointments. Public pages expose customer booking.
 | Stage | Scope | Demonstrable done criterion | Status |
 | --- | --- | --- | --- |
 | A | Platform #11 then Identity #1/#2/#4/#5/#6/#7; retarget/rebase as required | All stages on canonical main with successful CI after each base change | Draft stack prepared, not merged |
-| B | Same-origin BFF host, account UI, protected development inbox | Playwright browser flow registration -> login -> BFF refresh -> logout -> reset -> new-password login, with recovery enrollment | Not implemented |
+| B1 | Contract-first host/proxy, seeded login/me/logout, csrf and fa/en shell | Browser session/CSRF/Origin and two-host single-flight tests | Not implemented |
+| B2 | Registration and protected OTP inbox | Browser registration Ready then login; proof/inbox rejection checks | Not implemented |
+| B3 | Recovery enrollment/reset/password change | Complete Playwright journey through new-password login and replacement enrollment | Not implemented |
 | C | Real-user release controls, SMS, operations and deployment | Closed beta after all evidence in RELEASE_GATES.md is accepted | Open |
 | D | Business registration: one-page blueprint, backend, owner dashboard | Owner creates a business from start to finish; correct Organization/Membership ownership | Future |
 | E | Availability, booking, SMS confirmation, owner calendar, cancellation | Example service business receives a real reservation with tested conflict/cancellation behavior | Future |
@@ -65,7 +67,8 @@ client components call /bff directly; Next.js does not perform authenticated SSR
 for the three surfaces, not an assumption about owner/team familiarity. Keep the
 existing ASP.NET Core BFF and Identity; do not duplicate refresh/session ownership
 in Next.js. A single HTTPS origin routes page requests to Next.js and /bff requests
-to ASP.NET Core. Next.js receives no auth cookie in this slice; the proxy strips it on page requests.
+to ASP.NET Core. Next.js receives only an allowlisted, validated locale cookie; all other cookies
+are omitted on page requests.
 Authenticated responses and one-time recovery material must never enter shared caches. Browser mutations retain BFF CSRF/Origin checks.
 
 Tradeoff: an additional Node.js runtime and explicit proxy/session/cache isolation

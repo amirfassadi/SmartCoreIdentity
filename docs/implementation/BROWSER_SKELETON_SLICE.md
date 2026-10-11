@@ -20,8 +20,12 @@ refresh and logout recovery. Its opaque cookie is stable across core refresh tod
 parallel requests are already serialized by that core. The client-only account
 boundary avoids SSR cookie-response plumbing; it does not claim that parallel calls
 bypass the existing BFF lock. BFF alone creates/deletes the authentication cookie.
-The reverse proxy strips the auth cookie before page requests reach Next.js, since
-this slice needs only the optional non-secret locale preference there.
+The reverse proxy reconstructs page-request Cookie from an allowlist containing
+only smartcore-locale (validated fa/en). Every other cookie, including unknown future
+cookies, is omitted before Next.js. Duplicate/invalid locale entries are discarded;
+never forward the original Cookie header. BFF request cookies have their own explicit
+allowlist: __Host-smartcore-session and __Host-smartcore-antiforgery. Next.js cannot
+set authentication/antiforgery cookies; proxy response policy enforces this boundary.
 
 ## Planned folders
 
@@ -43,8 +47,12 @@ this slice needs only the optional non-secret locale preference there.
 
 These are proposed paths to create, not existing artifacts. Generate the trusted
 server-side Identity adapter from registration/authentication OpenAPI separately;
-never reuse that trusted adapter as the browser client. Generated output is checked
-against committed contracts; drift fails build. Compile/build both runtimes in CI.
+never reuse that trusted adapter as the browser client. Before writing any host code,
+commit contracts/bff-browser.openapi.yaml for B1, review it, then generate the browser
+client. That same file validates actual host response bodies/statuses/headers in CI,
+not just client generation. Unknown fields and missing required response fields fail.
+B2/B3 extend the contract before their host code. Generated output is checked against
+committed contracts; drift fails build. Compile/build both runtimes in CI.
 
 ## Proxy and cookie contract
 
@@ -66,10 +74,71 @@ anonymous login/register/reset (login CSRF matters), require exact approved Orig
 and ASP.NET antiforgery cookie/header validation before forwarding or side effects.
 Reject missing/null/wrong Origin for these browser routes. No credentials in URL.
 
-GET /bff/csrf issues the non-secret request token (session binding handled by the
-antiforgery framework); the browser submits X-CSRF-Token on POST. No-store on all
-account/BFF material; no shared cache, logs or tracing payload capture for password,
-OTP, recovery code or cookies. A locale cookie is separate and is not authentication.
+### Explicit CSRF/session binding
+
+Implement an ASP.NET Core authentication handler for the custom opaque session cookie.
+Before antiforgery generation/validation it resolves the cookie MAC against the BFF
+store and populates HttpContext.User only from a valid, unexpired server-side session.
+Its authenticated identity uses authentication type BffOpaque and a unique
+ClaimTypes.NameIdentifier equal to the BFF session row UUID, not Person ID, raw cookie
+or Identity access token. This identity is stable during refresh but fresh for every
+new login. Invalid/closed/expired cookies never create an authenticated principal;
+LogoutRequested is denied ordinary access, with narrowly scoped identity handling for
+idempotent logout recovery. Resolution performs no refresh or upstream HTTP. Host
+principal lookup does not replace final core state checks when requests race logout.
+
+ASP.NET antiforgery now binds its token to that authenticated per-session identity;
+it cannot infer a custom opaque cookie on its own. Anonymous bootstrap tokens bind
+only to their antiforgery cookie, not to an authenticated session. GET /bff/csrf
+uses the already established principal, returns the request token with no-store, and
+does not authenticate anonymous users or refresh. Do not log the request token.
+
+Configure antiforgery cookie __Host-smartcore-antiforgery: Secure=Always, HttpOnly,
+SameSite=Lax, Path=/, no Domain. Request token travels in X-CSRF-Token; the browser
+never reads that HttpOnly cookie. On successful login (new BFF session) and committed
+logout/terminal session loss, invalidate the previous antiforgery cookie. Frontend
+clears its in-memory request token and fetches /bff/csrf again before the next POST.
+Pre-authentication tokens must not be reused after login; previous-session tokens
+must fail after logout/login even for the same Person. Fresh GET responses are tied
+to the current session, never a caller-supplied ID. Startup must register authentication
+before antiforgery, and both BFF hosts share a durable protected ASP.NET Data Protection
+key ring and application name; otherwise cross-host CSRF tokens will fail. These keys
+are separate from Identity/BFF MAC/material keys.
+
+No-store on all account/BFF material; no shared cache, logs or tracing payload capture
+for passwords, OTP, recovery code, cookies or CSRF tokens. A locale cookie is separate
+and is not authentication. Antiforgery validation failures return a stable code
+CSRF_REJECTED (403) with no upstream dispatch; Origin failures use ORIGIN_REJECTED.
+
+## Security headers and rendering decision
+
+For B1–B3 all HTML, including the small public/localized shells, is dynamically
+rendered with a fresh cryptographic CSP nonce per response and Cache-Control:
+no-store. No ISR/static HTML/shared HTML cache in this slice. This deliberately pays
+the nonce rendering cost; future cacheable business sites need a separate reviewed
+CSP/cache strategy before stage F. Hashed static JS/CSS/font assets may still be
+cached; the HTML nonce/header pair must never be reused from a shared cache.
+
+Next.js creates the nonce itself (never trusts public x-nonce/CSP request headers)
+and applies the identical nonce to framework/custom scripts and CSP. The ingress
+strips those public headers; the response header remains paired with the rendered
+HTML. Production baseline: default-src 'self'; script-src 'self' 'nonce-{fresh}'
+'strict-dynamic'; style-src 'self' 'nonce-{fresh}'; img-src 'self' data:; font-src
+'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self';
+frame-ancestors 'none'. No script unsafe-inline/unsafe-eval in the production build.
+Any required style/library exception is explicit, minimal and reviewed before merge;
+B1 must demonstrate hydration works under this policy, not silently disable CSP.
+Development HMR exceptions stay separate; browser acceptance builds Next in production
+mode and tests CSP violations, not just presence of the header.
+
+At the public HTTPS ingress apply Referrer-Policy: no-referrer,
+Permissions-Policy: camera=(), microphone=(), geolocation=(), X-Content-Type-Options:
+nosniff and X-Frame-Options: DENY (alongside CSP frame-ancestors). Production HSTS:
+max-age=31536000 after TLS acceptance; no includeSubDomains/preload until the future
+domain rollout is decided. Local development must not set sticky HSTS on user hosts;
+CI can exercise the production-header policy on its isolated HTTPS test origin.
+Test headers on pages, BFF responses and failure responses as applicable; avoid
+conflicting duplicate CSP headers at Next/proxy layers.
 
 ## Proposed browser routes
 
@@ -118,9 +187,18 @@ Iran-only (+98) delivery allowlist remains independent of the UI locale. Existin
 Identity normalization/idempotency binding must remain consistent. Strip only approved
 recovery-code display separators, invariant uppercase and enforce exact remaining
 hex length. Do not normalize/rewrite passwords or treat arbitrary Unicode as an OTP.
-UTC storage; fa Persian calendar and en Gregorian display; timezone explicitly
-Asia/Tehran for initial-market appointment/account display, not inferred from server.
-Font files are local and licensed. Adding a third language also requires routing,
+UTC storage; fa Persian calendar with numberingSystem=arabext, en Gregorian with
+numberingSystem=latn explicitly. Use IANA Asia/Tehran, not host timezone or a hand-coded
+DST rule. Pin/update supported runtime/container tzdata and test identical Node/.NET/
+browser results for known winter and summer 2026 instants (both +03:30); a mismatching
+runtime fails acceptance rather than silently falling back. Account/appointment
+timezone is explicit and independent of locale.
+Forms use password autocomplete=current-password for login/current proof and
+new-password for new/repeated passwords; OTP uses type=text, inputmode=numeric,
+autocomplete=one-time-code and preserves leading zeroes. Phone input uses type=tel
+and autocomplete=tel; normalize server-side as already specified. Do not disable
+password-manager paste/autofill. Numeric display localization never rewrites password
+values. Font files are local and licensed. Adding a third language also requires routing,
 dir/format/font configuration and acceptance checks, not just a message file.
 
 Notification locale is a separate persistence/blueprint decision before real delivery:
@@ -129,6 +207,49 @@ registration needs a validated locale before Person exists. Define a profile pre
 owner before adding a Person field. Do not mutate the current Person schema speculatively.
 Measure Persian/Arabic encoding/segment count in SMS spend estimates. Multilingual
 business content remains a later business-model decision; no automatic translation.
+
+## Cross-tab session transitions
+
+Use BroadcastChannel with event types only (login/logout/session-lost); never send
+cookies, CSRF tokens, proof or profile data. After committed logout, the initiating
+tab clears private UI state and broadcasts; listeners immediately clear private state,
+cancel obsolete reads and invalidate their in-memory CSRF token. Discard responses
+from a previous UI auth generation so a slow /me cannot restore logged-out UI. Login
+listeners reread current session and fetch fresh CSRF instead of trusting the event.
+Recheck on focus/visibility/pageshow and use a non-secret storage event fallback if
+BroadcastChannel is unavailable. A tab event is UX coordination, not server revocation:
+the BFF row state is authoritative. Pre-intent BFF_BUSY must not claim logout succeeded.
+
+## B1–B3 delivery order
+
+| Slice | Included | Done criterion |
+| --- | --- | --- |
+| B1 | Contract first, HTTPS proxy, two BFF hosts, csrf/login/me/logout, precreated test account, fa/en shell, security headers | Browser tests prove session isolation, Origin/CSRF rebinding, two-host single-flight, multi-tab logout and healthy localized UI |
+| B2 | Registration/setup/OTP and protected inbox fixture | Real browser registration reaches Ready then login; expired/wrong OTP and inbox isolation controls pass |
+| B3 | Recovery enrollment/reset/password change and one-time code UX | Full browser account journey below passes, including post-reset replacement enrollment |
+
+B1 does not wait for OTP UI/provider fixtures. Seed its account through existing
+trusted test fixtures outside the browser/public origin, never via a public bypass.
+B2 builds the OTP fixture before its browser flows; B3 reuses it. Overall stage B is
+complete only after B3, but each slice has a separate demonstrable CI outcome.
+
+### Ordered B1 work and acceptance
+
+| Order | Work | Acceptance |
+| --- | --- | --- |
+| 1 | Commit/review bff-browser.openapi.yaml with csrf/login/me/me-action/logout, cookies and machine errors | Examples and negative schemas pass; browser generation plus host-response validation consume this exact file |
+| 2 | Set up pinned Next/TypeScript/next-intl shell and .NET host project | Reproducible builds; no trusted Identity keys/code in frontend; fa/en message-key parity |
+| 3 | Wire private Identity, PostgreSQL 17 and existing BFF core/maintenance into two hosts | Isolated seeded account works; shared Data Protection keys; no new refresh/journal ownership |
+| 4 | Configure HTTPS ingress and cookie/header allowlists | Only locale reaches Next; session/antiforgery reach BFF; unknown cookies and spoofed trust headers are dropped |
+| 5 | Add custom cookie authentication, antiforgery and Origin checks | Bootstrap anonymous token, login-bound new token, logout then second login: all old session/prelogin tokens rejected; rejected requests dispatch nothing |
+| 6 | Add contract-driven login/me/logout handlers | Safe DTOs/no tokens, correct cookies, local logout intent and maintenance semantics; response-schema checks pass |
+| 7 | Build fa/en client forms/session shell and cross-tab handling | Locale/dir, autofill and error codes correct; second tab immediately clears private UI; delayed /me cannot resurrect it |
+| 8 | Apply CSP/header policy and deterministic time formatting | Production Next hydration works with nonce CSP; fresh header/HTML nonce pair; winter/summer Tehran and explicit en Latin digits pass |
+| 9 | Run Playwright through real HTTPS ingress across two hosts | Exactly one rotation for parallel reads; negative CSRF/Origin/cookie tests and outage/busy behavior pass; publish safe evidence |
+
+No host code precedes task 1. Contract review is a concrete implementation prerequisite,
+not a requirement to ask for another permission. Tasks 1–9 are implementation work still
+open; this edit runs documentary checks only.
 
 ## Browser CI acceptance
 
@@ -143,7 +264,11 @@ Named fault fixtures must be development/testing-only and not proxy accessible.
 | Full account journey | Registration Ready, login, enroll/acknowledge recovery code, BFF-triggered rotation, logout, reset, new-password login and replacement enrollment |
 | Single-flight | Parallel session reads routed across two BFF hosts produce exactly one Identity rotation; consumed predecessor is not sent again |
 | Session boundary | No Identity access/refresh token in browser response/storage/HTML; HttpOnly __Host cookie attributes correct; Next public render causes no authenticated call |
-| CSRF/Origin | Missing/incorrect token and missing/null/foreign Origin reject login and authenticated mutations before upstream work |
+| CSRF/Origin (B1) | Missing/incorrect token and missing/null/foreign Origin reject before upstream work; login -> logout -> login rejects previous anonymous/session tokens, even for the same Person |
+| Antiforgery cookie (B1) | __Host-smartcore-antiforgery Secure/HttpOnly/Path=/ and no Domain; token minted by one host accepted on the other |
+| Cookie allowlist (B1) | Inject an unknown future cookie alongside session/antiforgery: Next receives only validated locale |
+| Headers/CSP (B1) | Header values on success/error match policy, fresh nonces differ across HTML responses, iframe embedding blocked and production hydration has no CSP violations |
+| Multiple tabs (B1) | Logout clears second-tab private state; old in-flight response discarded, old CSRF rejected and no server access restored |
 | Busy/ambiguous outcomes | Verified NotProcessed preserves session, Retry-After bounded handling; uncertain refresh denies reuse and requests login; no frontend status-based retry |
 | Logout outage | Durable local intent blocks ordinary access, cookie cleared after intent, cookie-free maintenance completes later; pre-intent busy does not claim success |
 | One-time code | Code displayed once, acknowledgment required to proceed, no code in persistence/logs; lost enrollment response requires a new operation, not replay display |
@@ -161,6 +286,9 @@ images, CI tooling and asset access must be checked separately before deployment
 no VPS access or connectivity success is presumed. Self-host assets and use no
 Vercel-exclusive services in this slice.
 
-Sources consulted 2026-10-11: https://next-intl.dev/docs/getting-started and
+Sources consulted 2026-10-11:
+https://learn.microsoft.com/aspnet/core/security/anti-request-forgery (identity-bound
+antiforgery) and https://nextjs.org/docs/app/guides/content-security-policy (nonce
+requires dynamic rendering); https://next-intl.dev/docs/getting-started and
 https://next-intl.dev/ (routing and ICU support). Existing runtime scope/evidence:
 [PR_STACK.md](PR_STACK.md). Public-user gates: [RELEASE_GATES.md](RELEASE_GATES.md).
