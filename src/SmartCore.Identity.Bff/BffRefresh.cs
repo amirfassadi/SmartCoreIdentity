@@ -31,6 +31,8 @@ public sealed class IdentityRefreshHttp:IIdentityRefresh,IIdentityLogout,IDispos
         request.Headers.Add("X-Bff-Client-Key",bffKey);request.Headers.Add("X-Bff-Subject",subject);
         request.Content=JsonContent.Create(new RefreshRequest(token,foreground));
         using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancellation);
+        try
+        {
         await using var stream=await response.Content.ReadAsStreamAsync(cancellation);
         var bytes=new byte[32769];var used=0;
         while(used<bytes.Length)
@@ -52,6 +54,9 @@ public sealed class IdentityRefreshHttp:IIdentityRefresh,IIdentityLogout,IDispos
         }
         return JsonSerializer.Deserialize<SessionTokens>(bytes.AsSpan(0,used),new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow})??throw new InvalidOperationException("Missing successor");
+        }
+        catch(Exception failure) when(response.StatusCode==System.Net.HttpStatusCode.Forbidden && failure is not RefreshNotProcessed && failure is not HttpRequestException)
+        {throw new HttpRequestException("Unverifiable BFF credential rejection",failure,response.StatusCode);}
     }
     public async Task Logout(string accessToken,Guid session,string subject,CancellationToken cancellation)
     {

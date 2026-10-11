@@ -16,7 +16,7 @@ public sealed record RefreshRejection(string Code,string Disposition,Guid Reques
     }
     public bool Verify(string key,int status,Guid reference)
     {
-        if(!Allowed(status,Code) || Disposition!="NotProcessed" || reference==Guid.Empty || RequestReference!=reference || RetryAfterSeconds is <1 or >60)return false;
+        if(!Allowed(status,Code) || Disposition!="NotProcessed" || reference==Guid.Empty || RequestReference!=reference || RetryAfterSeconds is <1 or >60 || Proof is null || Proof.Length!=44)return false;
         try{return CryptographicOperations.FixedTimeEquals(Convert.FromBase64String(Proof),Mac(key,status,Code,reference,RetryAfterSeconds));}
         catch(FormatException){return false;}
     }

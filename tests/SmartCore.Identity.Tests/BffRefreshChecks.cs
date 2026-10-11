@@ -176,6 +176,12 @@ internal static class BffRefreshChecks
                     context.Response.StatusCode=403;
                     await context.Response.WriteAsJsonAsync(RefreshRejection.Create(receiptKey,403,"BFF_CREDENTIALS_REJECTED",Guid.Parse(context.Request.Headers["X-Refresh-Request"].ToString()),2));return;
                 }
+                if(httpMode=="null-proof403")
+                {
+                    context.Response.StatusCode=403;
+                    var invalid=RefreshRejection.Create(receiptKey,403,"BFF_CREDENTIALS_REJECTED",Guid.Parse(context.Request.Headers["X-Refresh-Request"].ToString()),2) with {Proof=null!};
+                    await context.Response.WriteAsJsonAsync(invalid);return;
+                }
                 if(httpMode=="raw401"){context.Response.StatusCode=401;return;}
                 if(httpMode=="random-kill")await Task.Delay(Random.Shared.Next(20,100));
                 if(httpMode=="redirect"){context.Response.StatusCode=307;context.Response.Headers.Location="/trap";return;}
@@ -289,6 +295,12 @@ internal static class BffRefreshChecks
                 "both credential and receipt key mismatch quarantines material and durable dispatch instead of clearing or retrying");
             await circuit.Reset();await Reauth(async()=>{await networkB.RefreshIfDue(keyMismatch.Cookie,BffActivity.UserAction);});
             Check(httpCalls==beforeMismatch+1,"operator circuit reset does not retry a rejection without verified non-consumption");
+            await circuit.Reset();httpMode="null-proof403";
+            var malformed403=await Fixture();advance(TimeSpan.FromMinutes(13));
+            try{await networkA.RefreshIfDue(malformed403.Cookie,BffActivity.UserAction);throw new Exception("Expected invalid receipt quarantine");}
+            catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            Check((await State(malformed403.Tokens)).Has("sealed_tokens") && await circuit.IsOpen(),
+                "malformed 403 receipt with null proof preserves material and opens circuit without clearing dispatch");
             await circuit.Reset();httpMode="raw401";
             var cohort=new List<(string Cookie,SessionTokens Tokens)>();
             for(var n=0;n<6;n++){cohort.Add(await Fixture());advance(TimeSpan.FromMinutes(13));}
