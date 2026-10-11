@@ -191,3 +191,59 @@ The browser host must call Identity logout before token erasure and terminalize
 its session on Identity 401. Those browser handlers remain unimplemented.
 Platform merge/canonical pin verification must precede Identity merge/release;
 both PRs remain drafts.
+
+
+## BFF configuration protection, upstream logout and random process kills — 2026-10-11
+
+Verified runtime source: `4edc2c392a4413b72865e2c9361fa507721133e1`, tree
+`6c6a7affa5dc5697634c5bf59a6b327dce6b282d`. Native PostgreSQL 17
+[run 38123254599](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38123254599),
+job `114422189289`, completed SUCCESS: **263 C# checks**, including **65 BFF
+checks**, **296 emitted events** matching the pinned Platform schema, all five
+API HTTP smokes, and zero build warnings. Documentary run `38123254595` also
+completed SUCCESS. The subsequent evidence update changes documentation only.
+
+Executable checks cover independent receipt-key validation, wrong client key and
+subject configuration rejection without token erasure, per-session admission
+subjects on a shared adapter, cross-pool latched rejection circuit and trusted
+reset, invalid receipt quarantine without predecessor replay, upstream-first
+idempotent logout including lost response after Identity commit, and trusted
+resource Session-401 handling. In addition to twenty decisions across two actual
+processes producing one rotation and the five named kill boundaries, six random
+real process kills ran without stage probes. Latest seed: `1208417327`; delays
+75, 63, 133, 36, 9 and 33 ms. Recovery checked at most one rotation, no consumed
+predecessor resend, and committed cleanup or terminal reconciliation of each
+marker. This is sampled interleaving coverage, not exhaustive or replicated
+failover certification.
+
+The first candidate `bbae3b4a9212217c8623e9c02d91c6e9822b59ff`
+([run 38122102541](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38122102541),
+job `114418780270`) passed native checks but failed the existing recovery HTTP
+timing maximum: a decoy completion took 359.66 ms against the unchanged 350 ms
+bound. Its cause was not established. Added protected Development/loopback
+server timing diagnostics and separate wire measurements; floor, maximum and
+median/tail spread gates were not widened, and no automatic retry was added.
+The diagnostic revision `871edb2` passed run `38122506072`.
+A subsequent absent/wrong-diagnostic-key smoke in `d9f88dc` failed run
+`38122911693` because its fixture reused an already exhausted admission subject
+and received 429. Each privacy check now uses a fresh subject. The verified
+4edc2c3 run passes both checks: no Server-Timing without the valid protected key.
+The original timing outlier remains an unresolved observation, not a proven fix.
+
+Latest HTTP completion p90 real/decoy/suppressed: 218.46/220.77/217.80 ms;
+initiation: 218.89/220.07/221.87 ms. Twelve samples per group are regression
+evidence only; production load/timing acceptance remains required. Diagnostic
+work latency can reveal account-path differences and must not be enabled for
+public traffic.
+
+Deployment requires an independent Identity:RefreshReceiptKey, distinct from
+the client credential and shared with the trusted BFF adapter. The circuit uses
+durable state and a metric; metrics export, alert delivery and a private operator
+HTTP host are not supplied. Its heuristic may also trip on legitimate bulk
+revocation, and cannot restore sessions closed before its threshold. Browser
+host/cookie/CSRF/Origin handlers, replicated database failover durability, actual
+notification providers and contact-release policy remain release work. Upstream
+logout and Session-401 core methods are now implemented, superseding that earlier
+limitation; browser integration still must call them correctly. Platform PR #11
+merge and canonical pin verification must precede Identity merge/release. Both
+PRs remain drafts; no main merge or production change was performed.

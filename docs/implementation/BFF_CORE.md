@@ -2,7 +2,7 @@
 
 The class library src/SmartCore.Identity.Bff implements the token-store/refresh-coordination slice of [BFF_REFRESH_DESIGN.md](BFF_REFRESH_DESIGN.md). It is called only by trusted server code. It does not expose HTTP/browser endpoints, serialize BffAccess to browsers, set browser cookies or implement CSRF/Origin routing. No production host or public onboarding is enabled. The opaque cookie value returned by Create is the future cookie secret, not a refresh token.
 
-BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql and 002_refresh_admission.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
+BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql, 002_refresh_admission.sql and 003_refresh_circuit.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
 
 Create seals the trusted login token bundle by BFF session/version, stores only a keyed opaque-cookie verifier and creates the fixed FK journal row in one transaction. GetAccess reads committed active access without row locking. It returns a RefreshDue signal for the host's bounded proactive scheduler; the library never starts detached background tasks. The host must call RefreshIfDue with its trusted activity classification around 80% of the issued access lifetime and for due foreground activity, even when cached access is still valid. Expired-access callers wait for a current successor; they cannot fall back to an expired token.
 
@@ -20,7 +20,7 @@ The transport seam calls the actual Identity service directly. Additional contro
 
 ## Admission rejection contract (authentication subset 0.8.0)
 
-Identity issues a `NotProcessed` receipt only for authenticated refresh requests
+Identity issues a `NotProcessed` receipt only for refresh requests
 rejected before invoking `AuthenticationService.Refresh`: `429 RATE_LIMITED`, or
 reserved pre-invocation `503 AUTHENTICATION_BUSY`. Refresh presently performs no
 KDF, so its current overload rejection is the admission/rate boundary. Dependency
@@ -131,3 +131,23 @@ It feeds the same distinct-session rejection circuit; an open/triggered circuit
 preserves the local state. This must never be called for BFF credential 403 or an
 untrusted browser assertion. The core provides the methods; HTTP browser routes,
 CSRF/Origin protection and operator/alert hosting remain pending.
+
+Reset acceptance timing keeps its original whole-call floor/max and median/tail
+spread bounds. After an observed 359.66 ms decoy sample exceeded the unchanged
+350 ms bound, recovery-smoke adds wire time plus opt-in server diagnostics before
+asserting the same bounds. Server-Timing includes reset work/total/deadline and
+pipeline durations only when Development, Identity:ResetTimingDiagnostics=true,
+loopback peer and the X-Reset-Timing-Key check against DevInboxKey all
+hold. No unauthenticated/default request receives it. This diagnostic capability
+is for isolated tests; it must not be enabled for public traffic because work
+latency can disclose account-path differences. The earlier outlier cannot be
+attributed retrospectively; new observations do not erase the failed run or prove
+that CI tail variability is eliminated. There is no automatic test retry.
+
+Current verified runtime `4edc2c3` passes 65 BFF checks within 263 C# checks,
+296 emitted-event validations and all five API HTTP smokes on PostgreSQL 17.
+The exact source, successful run and earlier failed candidates are recorded in
+[VERIFICATION.md](VERIFICATION.md). A legitimate bulk session revocation can also
+trip the rejection circuit; its threshold is an operational heuristic, not proof
+of misconfiguration. Operators must inspect the cause before reset and calibrate
+its behavior before real traffic.
