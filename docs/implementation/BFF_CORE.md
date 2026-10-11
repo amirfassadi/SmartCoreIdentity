@@ -2,7 +2,7 @@
 
 The class library src/SmartCore.Identity.Bff implements the token-store/refresh-coordination slice of [BFF_REFRESH_DESIGN.md](BFF_REFRESH_DESIGN.md). It is called only by trusted server code. It does not expose HTTP/browser endpoints, serialize BffAccess to browsers, set browser cookies or implement CSRF/Origin routing. No production host or public onboarding is enabled. The opaque cookie value returned by Create is the future cookie secret, not a refresh token.
 
-BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
+BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql and 002_refresh_admission.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
 
 Create seals the trusted login token bundle by BFF session/version, stores only a keyed opaque-cookie verifier and creates the fixed FK journal row in one transaction. GetAccess reads committed active access without row locking. It returns a RefreshDue signal for the host's bounded proactive scheduler; the library never starts detached background tasks. The host must call RefreshIfDue with its trusted activity classification around 80% of the issued access lifetime and for due foreground activity, even when cached access is still valid. Expired-access callers wait for a current successor; they cannot fall back to an expired token.
 
@@ -16,7 +16,7 @@ BffActivity is a trusted server enum, never a raw browser assertion. Background 
 
 BffRefreshChecks is part of the native PostgreSQL C# harness. It uses two independent BffStore data sources/pools, actual Identity authentication/refresh transactions and a transport fault seam. It checks 20 parallel foreground decisions for exactly one rotation and no reuse, valid-access reads while rotation is paused, expired-access waiting longer than two seconds, five owner-loss stages, server-side PostgreSQL termination of the owning BFF connection, lost/malformed/timed-out responses, cancellation after dispatch, foreground after fresh background rotation, thirty-minute polling expiry, token erasure, definitive revocation excluded from uncertainty, and distinct-session uncertainty aggregation.
 
-The transport seam calls the actual Identity service directly. Additional controlled loopback HTTP bridge checks exercise the concrete adapter: twenty parallel decisions on two instances send one authenticated HTTP refresh, an HTTP abort after the real Identity commit is never retried, and a redirect never forwards secrets. This bridge is not the complete Identity middleware pipeline. These tests do not prove browser cookie/CSRF endpoints, process-kill behavior, database failover durability, pool exhaustion or production load. Those remain the ordered acceptance work before adjacent browser features and real users. The core has no autonomous purge or production retention decision. Runtime 779c6ab passed native PostgreSQL CI with 25 BFF checks within 224 total C# checks, 230 emitted-event validations and five existing API HTTP smokes. Exact SHA/run/job evidence and limits are in [VERIFICATION.md](VERIFICATION.md).
+The transport seam calls the actual Identity service directly. Additional controlled loopback HTTP bridge checks exercise the concrete adapter: twenty parallel decisions on two instances send one authenticated HTTP refresh, an HTTP abort after the real Identity commit is never retried, and a redirect never forwards secrets. This bridge is not the complete Identity middleware pipeline. The initial runtime 779c6ab did not test OS process death. The admission follow-up below adds independent process peers and actual kill coverage. Browser cookie/CSRF endpoints, database failover durability, pool exhaustion and production load remain acceptance work before real users. The core has no autonomous purge or production retention decision. Runtime 779c6ab passed native PostgreSQL CI with 26 BFF checks within 224 total C# checks, 230 emitted-event validations and five existing API HTTP smokes. Exact SHA/run/job evidence and limits are in [VERIFICATION.md](VERIFICATION.md).
 
 ## Admission rejection contract (authentication subset 0.7.0)
 
@@ -59,3 +59,12 @@ Browser orchestration must invoke idempotent Identity logout before erasing the
 access token locally. Identity 401 on a cached access resource call must close the
 BFF session; neither upstream logout nor that resource-call handler exists in
 this core-only slice. They must precede exposing browser routes.
+
+Verified runtime `9a9da68b203036c2beaf8bb37cccc5c1c5616a01` passed native
+PostgreSQL 17 CI with **44 BFF checks within 242 total C# checks**, 256
+emitted-event validations and all five existing API HTTP smoke scripts.
+Both independent-process contention and all five explicit OS-kill boundaries
+passed. The real Identity middleware smoke also verified a signed rate-rejection
+receipt and subsequent rotation of the unconsumed token. See VERIFICATION.md for
+run/job provenance, the initial test teardown failure and the corrected historical
+BFF subcount (26, previously reported as 25).
