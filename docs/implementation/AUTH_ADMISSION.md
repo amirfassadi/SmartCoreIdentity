@@ -7,7 +7,7 @@ Migrations 006/007 preserve 001–005 and adds shared PostgreSQL caller windows 
 | Category | Per BFF subject / minute | Per authenticated BFF / minute |
 |---|---|---|
 | Login | 12 | 600 |
-| Password change, including replay | 6 | 120 |
+| Password change/replay, recovery enrollment and reset initiation | 6 | 120 |
 | Self, refresh and logout together | 120 | 6000 |
 
 These are development presets, not measured production capacity. PostgreSQL upserts serialize each client's and subject's window across host instances. Client reservation precedes source allocation, so rotating subjects after client exhaustion cannot allocate unbounded partitions. The stored keys are purpose-bound HMACs of client/category/subject; contacts are not partition keys. Counters saturate, windows last one minute and request-driven bounded cleanup removes partitions older than two minutes after releasing admission locks. Dormant rows remain until traffic resumes, but allocation is capped by the finite client budgets. Session traffic no longer shares registration's 30/minute IP bucket. Registration retains that policy. A separate high 12000/minute process/IP transport ceiling bounds malformed/unauthenticated authentication traffic; it is not the end-user budget behind a BFF.
@@ -46,4 +46,8 @@ Never configure a reverse proxy upstream to the operator socket. A proxy must ru
 
 Only after its own accepted change may a BFF briefly retry fresh login using the new password (for example, three attempts with bounded jittered delays around 250/500/1000 ms). Show a short pending message and stop after the budget; a generic 401 alone does not authorize indefinite retry or prove recovery is running. Respect caller limits and keep this distinct from refresh single-flight: zero-grace refresh predecessors must never be automatically retried after an uncertain result. Real BFF behavior is a remaining deliverable, not implemented by these backend changes.
 
-Actual CI results are recorded in [verification](VERIFICATION.md). Reset, irreversible eligibility transitions, browser/BFF flows and production release remain separate work.
+Actual CI results are recorded in [verification](VERIFICATION.md). Reset completion is implemented in PASSWORD_RESET.md. Eligibility transitions remain deferred under the owner-selected Active-only MVP. Browser/BFF flows and production release remain separate work; the concrete refresh and foreground protocol is in [BFF_REFRESH_DESIGN.md](BFF_REFRESH_DESIGN.md).
+
+## Reset timing and abuse-control candidate, 2026-10-10
+
+Migration 010 / OpenAPI 0.6.0 add eight-digit fresh reset OTP, escalating Person cooldown and bounded proof-limit alerts. Both reset endpoints use a common response deadline after disposing locks/connections; service/HTTP timing acceptance covers real/decoy/suppressed branches, with privacy-safe overrun telemetry and explicit load limits. Recovery-code ASCII case and surrounding whitespace are normalized by the API before verifier/receipt binding; passwords are never normalized. Platform merge precedes Identity merge/release. See [PASSWORD_RESET.md](PASSWORD_RESET.md). Runtime `16ca5dc8f9074ee92752269397618f41bd51a9f3` passed native PostgreSQL 17 CI: 195 C# checks, 188 emitted-event schema checks and five HTTP smokes, including timing acceptance on both reset routes. See VERIFICATION.md for exact revisions, measurements and load limits.

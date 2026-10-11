@@ -19,6 +19,19 @@ internal static class AuthenticationStorageChecks
             catch(PostgresException e) when(e.SqlState==state) {return;}
             throw new Exception("Expected storage constraint "+state);
         }
+        // Check the actual PostgreSQL predicate, not only a documentation promise.
+        await using(var constraints=await db.Source.OpenConnectionAsync())
+        {
+            foreach(var table in new[]{"persons","credentials"})
+            {
+                var constraint=await constraints.One("""
+                    SELECT pg_get_expr(conbin,conrelid) AS predicate FROM pg_constraint
+                    WHERE conrelid=to_regclass(@table) AND conname=@name AND contype='c' AND convalidated
+                    """,("table",table),("name",table+"_status_check"));
+                Check(constraint is not null && constraint.Get<string>("predicate").Replace(" ","",StringComparison.Ordinal)=="(status='Active'::text)",
+                    table+" validated status CHECK permits only Active in the selected MVP");
+            }
+        }
         IAuthenticationIssuanceGate gate=new PostgresAuthenticationIssuanceGate();
         await db.Migrate();
         await using var sql=await db.Source.OpenConnectionAsync();
