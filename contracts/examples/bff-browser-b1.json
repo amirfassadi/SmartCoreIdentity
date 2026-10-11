@@ -1561,5 +1561,50 @@
       "Cache-Control": "no-store"
     },
     "valid": false
+  },
+  {
+    "name": "unimplemented route /bff/register",
+    "kind": "response",
+    "path": "/bff/register",
+    "method": "post",
+    "status": 404,
+    "body": {
+      "code": "NOT_FOUND"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    },
+    "valid": true
+  },
+  {
+    "name": "unimplemented route /bff/password/reset/start",
+    "kind": "response",
+    "path": "/bff/password/reset/start",
+    "method": "post",
+    "status": 404,
+    "body": {
+      "code": "NOT_FOUND"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    },
+    "valid": true
+  },
+  {
+    "name": "unimplemented route /bff/password/reset/complete",
+    "kind": "response",
+    "path": "/bff/password/reset/complete",
+    "method": "post",
+    "status": 404,
+    "body": {
+      "code": "NOT_FOUND"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    },
+    "valid": true
   }
 ]

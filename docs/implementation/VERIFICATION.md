@@ -447,3 +447,32 @@ they require explicit contract review without truncating a longer wait.
 Existing documentary checks passed (20 archives, 16 documents, 59 relative links);
 backend preparation candidate checks passed (2 positive / 17 negative).
 No browser host, generated client, live proxy, load or failover evidence is added.
+
+### B1 infrastructure after contract review 0.1.1
+
+Prior reviewed contract commit 574ef27b5524daf9eab3c8c1c93c0d163244e96e:
+Documentary candidate checks run 38141728086 and Registration backend run
+38141728068 both completed successfully. This is workflow status evidence;
+no new runtime test count is inferred from it.
+
+Local infrastructure evidence:
+- Next production build and TypeScript check passed using pinned package lock.
+- fa/en message parity and winter/summer Asia/Tehran 15:30 formatting passed.
+- Next production HTTP smoke passed: fa/en direction, unique response nonce on
+  every emitted script, no style attributes, security headers, locale cookie
+  attributes and JSON/no-store rejection of misrouted B2/B3 requests.
+- .NET 10 Release host build passed with zero warnings/errors (single build node).
+- Configuration-only host smoke passed: Production/public bind/missing certificate/
+  equal receipt-client keys rejected; two distinct processes protected/unprotected
+  the proof using the same encrypted shared ring; XML has no plaintext masterKey.
+- Candidate browser checks now have 111 positive checks, 38 negative controls,
+  15 model precedence pairs and 5 raw-envelope competing-error fixtures. The raw
+  model injects CSRF validity; it does not prove live middleware order.
+- Documentary checks: 20 archives, 17 current documents, 63 relative links.
+
+The new Browser B1 infrastructure workflow adds actual two-host PostgreSQL 17
+startup and contract-based routing tests. That fresh CI must pass before claiming
+this runtime evidence. No real HTTPS ingress, authenticated browser flow, session
+principal/CSRF validation, seeded Identity integration or hydration claim yet.
+Tasks 2/3 infrastructure is documented in BFF_BROWSER_HOST.md; task 3 is partial
+until the seeded account crosses the real task-6 login handler. Tasks 4–9 remain.
