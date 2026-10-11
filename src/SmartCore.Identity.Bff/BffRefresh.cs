@@ -78,7 +78,7 @@ public sealed record BffBudgets(TimeSpan Http,TimeSpan Owner,TimeSpan LockWait)
 {
     public static BffBudgets Development {get;}=new(TimeSpan.FromSeconds(5),TimeSpan.FromSeconds(15),TimeSpan.FromSeconds(17));
     public void Validate()
-    {if(Http<=TimeSpan.Zero || TimeSpan.FromTicks(Owner.Ticks*4/5)<=Http || LockWait<=Owner)throw new ArgumentException("HTTP must fit owner budget; contenders need owner budget plus margin.");}
+    {if(Http<=TimeSpan.Zero || TimeSpan.FromTicks(Owner.Ticks*4/5)<=Http || LockWait<=Owner || Owner>=TimeSpan.FromSeconds(60))throw new ArgumentException("HTTP must fit owner budget below the 60-second recovery interval; contenders need owner budget plus margin.");}
 }
 // Server-to-server value. Browser routes must never serialize it.
 public sealed record BffAccess(string AccessToken,Guid SessionId,long Version,bool RefreshDue);
@@ -189,12 +189,12 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             await Observe(RefreshStage.DispatchCommitted,ct);
             using var http=CancellationTokenSource.CreateLinkedTokenSource(ct);http.CancelAfter(limits.Http);
             var successor=await identity.Refresh(Tokens(row).RefreshToken,activity==BffActivity.UserAction,Subject(row.Get<Guid>("identity_session_id")),http.Token).WaitAsync(http.Token);
-            await new BffCircuit(store,clock).Record(id,200,false,ct);
             await Observe(RefreshStage.ResponseReceived,ct);
             if(successor.SessionId!=row.Get<Guid>("identity_session_id") || successor.ExpiresAt!=row.Time("expires_at")
                 || successor.AccessExpiresAt<=Now.AddSeconds(2) || successor.AccessExpiresAt>successor.ExpiresAt
                 || successor.RefreshToken is not {Length:>=1 and <=180} || successor.RefreshToken==Tokens(row).RefreshToken
                 || successor.AccessToken is not {Length:>=1 and <=4096})throw new InvalidOperationException("Invalid successor");
+            await new BffCircuit(store,clock).Record(id,200,false,ct);
             await BffStore.Execute(c,"""
                 UPDATE bff_sessions SET version=@next,sealed_tokens=@tokens,access_issued_at=@now,access_expires_at=@access,
                  last_foreground_at=CASE WHEN @fg THEN @now ELSE last_foreground_at END,completed_attempt_id=@op WHERE id=@id

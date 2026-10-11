@@ -23,6 +23,9 @@ internal static class BffRefreshChecks
         try{BffStore.RequireServerVersion(new Version(16,9));throw new Exception("Accepted PostgreSQL 16");}
         catch(InvalidOperationException e)when(e.Message.Contains("PostgreSQL 17",StringComparison.Ordinal)){}
         BffStore.RequireServerVersion(new Version(17,0));
+        try{new BffBudgets(TimeSpan.FromSeconds(5),TimeSpan.FromSeconds(60),TimeSpan.FromSeconds(65)).Validate();throw new Exception("Accepted overlapping probe budget");}
+        catch(ArgumentException){}
+        Check(true,"owner budget cannot overlap the next recovery probe interval");
         Check(true,"PostgreSQL 16 is rejected with an explicit startup error and 17 is accepted");
         var aConfig=new NpgsqlConnectionStringBuilder(connection){ApplicationName="bff-a-test"};
         var bConfig=new NpgsqlConnectionStringBuilder(connection){ApplicationName="bff-b-test"};

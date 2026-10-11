@@ -2,7 +2,7 @@
 
 The class library src/SmartCore.Identity.Bff implements the token-store/refresh-coordination slice of [BFF_REFRESH_DESIGN.md](BFF_REFRESH_DESIGN.md). It is called only by trusted server code. It does not expose HTTP/browser endpoints, serialize BffAccess to browsers, set browser cookies or implement CSRF/Origin routing. No production host or public onboarding is enabled. The opaque cookie value returned by Create is the future cookie secret, not a refresh token.
 
-BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql, 002_refresh_admission.sql and 003_refresh_circuit.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
+BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql, 002_refresh_admission.sql and 003_refresh_circuit.sql and 004_circuit_recovery_logout.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
 
 Create seals the trusted login token bundle by BFF session/version, stores only a keyed opaque-cookie verifier and creates the fixed FK journal row in one transaction. GetAccess reads committed active access without row locking. It returns a RefreshDue signal for the host's bounded proactive scheduler; the library never starts detached background tasks. The host must call RefreshIfDue with its trusted activity classification around 80% of the issued access lifetime and for due foreground activity, even when cached access is still valid. Expired-access callers wait for a current successor; they cannot fall back to an expired token.
 
@@ -78,9 +78,9 @@ preserves tokens and opens the deployment circuit. An unverifiable 403 opens it
 but retains the unmatched journal; it does not authorize retry. In both cases
 callers receive BFF_UNAVAILABLE, with a suggested 60-second retry delay.
 
-Migration 003 stores one latched circuit per shared BFF database/deployment and
+Migration 003 stores one shared circuit per shared BFF database/deployment and
 recent samples keyed by distinct BFF session. It opens immediately on a
-configuration receipt/unverifiable 403, or on at least five distinct 400/401/403
+verified configuration receipt, three distinct unverified 403 responses, or at least five distinct 400/401/403
 rejections making up at least 50% of the last 30-second session samples. Repeated
 errors from one session cannot fill that threshold. The triggering and later
 sessions retain tokens; unmatched dispatches are quarantined. Before threshold,
@@ -88,14 +88,15 @@ individual definitive 401 still closes that session; the circuit cannot restore
 sessions already closed. In-flight results already committed before opening also
 remain committed. Ordinary cached valid access is still available.
 
-The circuit is latched, not a timer-based permission to replay. A trusted operator
-must repair configuration/investigate rejection cause, then call BffCircuit.Reset
-from an authenticated operator host. Reset clears only circuit samples/state,
-never journal evidence, Identity fences or tokens; subsequent reconciliation of
-an unmatched marker still requires login. A response claiming NotProcessed whose nonce/MAC cannot be verified also opens the circuit and retains dispatch evidence (including receipt-key mismatch alone under 429); it cannot CAS-clear or permit retry. The durable opened_at/reason and
+Migration 004 enables one recovery probe per minute across instances. A successful
+elected probe closes the circuit; no timer authorizes replay of uncertain dispatch
+evidence. Trusted Reset can accelerate recovery after investigation but clears
+only circuit samples/state, never journal evidence, Identity fences or tokens.
+A NotProcessed claim with unverifiable nonce/MAC keeps its session's dispatch
+quarantined; unverified 403 needs the distinct-session threshold, whereas other
+unverifiable receipt claims open immediately. The durable opened_at/reason and
 bff.refresh.circuit_opened metric are operational signals. Actual metrics export,
 alert delivery and a private operator endpoint are not implemented in this core.
-Receipt-key mismatch is thus quarantined conservatively, not silently retried.
 
 The coordinator derives X-Bff-Subject from the stable Identity session id using
 the BFF MAC key and a separate purpose. An adapter shared by all requests no
@@ -115,13 +116,13 @@ random sample, not exhaustive interleavings or replicated database failover.
 ## Upstream-first logout
 
 IdentityRefreshHttp implements IIdentityLogout without redirects or automatic
-retries. BffRefresh.Logout holds the session row lock, reads current token material,
+retries. BffRefresh.Logout commits local LogoutRequested first, then holds the session row lock and reads current token material,
 calls the bound Identity logout with that access proof and session, then erases
 tokens and commits local Closed state. HTTP response loss/timeout/dependency
-failure keeps local material and returns BFF_UNAVAILABLE; another instance can
+failure keeps locally unusable intent/material and returns BFF_UNAVAILABLE; another instance can
 retry the same idempotent logout. A local terminal replay sends no HTTP request.
 The existing Close method remains local-only cleanup and must not serve explicit
-browser logout. Logout 403 preserves tokens and opens the configuration circuit.
+browser logout. Logout 403 preserves intent/tokens and contributes to the unverified distinct-session threshold.
 A logout 401 closes the local user session; it does not certify upstream revocation
 when the access proof is expired. The documented bounded Identity expiry remains.
 
@@ -158,7 +159,7 @@ its behavior before real traffic.
 Migration 004 adds next_probe_at/probe_session and LogoutRequested. The refresh
 circuit no longer depends on an operator reset to recover: after 60 seconds, a
 conditional database update elects exactly one session for a recovery attempt
-across all instances. A successful elected refresh closes the circuit; failure
+across all instances. The owner budget must remain below the 60-second probe interval. A validated successful elected refresh closes the circuit; failure
 or process death leaves the next opportunity at least another minute away.
 Normal in-flight successes cannot close another session's probe. Dispatch journal
 reconciliation still precedes any send: permission never clears an unmatched
