@@ -1,5 +1,8 @@
 # Registration implementation work plan
 
+> **Implementation update — 2026-10-09:** Explicit owner direction now authorizes backend work. See [phase 1 baseline](../implementation/BASELINE.md), [execution guide](../implementation/RUNBOOK.md) and [verification evidence](../implementation/VERIFICATION.md). Prior blocked/no-code statements below remain historical review evidence, not a description of the new executable phase. No full MVP/generation/production PASS is implied.
+
+
 Version: 0.1.1 — DRAFT — 2026-10-04
 Scope: first delivery milestone in SmartCoreIdentity. This is a work breakdown, not an accepted ADR, active machine specification, or readiness certificate.
 
@@ -51,3 +54,7 @@ The owner decides architectural/policy options; this plan does not choose an ope
 ## Current review clarification — 2026-10-04
 
 [Integrated review status](platform-review-status.md) separates latest proposals from accepted sources. Slice order is delivery order inside Identity MVP, not permission to exclude its required behavior. Select final accepted wire/service/machine versions before using the historical schemas above. All applicable 064 gates precede code. Runtime verification is later evidence, never passed by documents. The active Draft still describes static refresh and unchanged Sessions after password change; S2/fence changes remain pending acceptance/propagation.
+
+### Registration setup implementation follow-up — 2026-10-10
+
+The recovered runtime baseline is now published as b4e1407; native PostgreSQL CI passed for that baseline. The active development revision adds distinct setup proof, immutable candidate acceptance, truthful completion outcome and durable worker recovery. See [phase baseline](../implementation/BASELINE.md) and [verification](../implementation/VERIFICATION.md) for actual scope/evidence; historical no-code/source-request statements are superseded. Full-MVP architectural/readiness/production gates remain separate.
