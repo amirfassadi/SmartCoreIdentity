@@ -46,7 +46,11 @@ public sealed class IdentityRefreshHttp:IIdentityRefresh,IIdentityLogout,IDispos
                 {
                     var rejection=JsonSerializer.Deserialize<RefreshRejection>(bytes.AsSpan(0,used),new JsonSerializerOptions(JsonSerializerDefaults.Web)
                         {UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow});
-                    if(rejection is not null && rejection.Verify(receiptKey,(int)response.StatusCode,reference))throw new RefreshNotProcessed(rejection.RetryAfterSeconds,response.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.BadRequest);
+                    if(rejection is not null && rejection.Disposition=="NotProcessed" && RefreshRejection.Allowed((int)response.StatusCode,rejection.Code))
+                    {
+                        if(rejection.Verify(receiptKey,(int)response.StatusCode,reference))throw new RefreshNotProcessed(rejection.RetryAfterSeconds,response.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.BadRequest);
+                        throw new RefreshReceiptUnverified((int)response.StatusCode);
+                    }
                 }
                 catch(JsonException) { /* Generic proxy/malformed response has no admission proof. */ }
             }
@@ -81,6 +85,7 @@ public sealed record BffAccess(string AccessToken,Guid SessionId,long Version,bo
 // Trusted adapters only: HTTP creates this after verifying the nonce-bound receipt.
 public sealed class RefreshNotProcessed(int retryAfterSeconds,bool configuration=false):Exception("Refresh not processed")
 {public bool Configuration {get;}=configuration;public int RetryAfterSeconds {get;}=Math.Clamp(retryAfterSeconds,1,60);}
+public sealed class RefreshReceiptUnverified(int status):Exception("Refresh receipt cannot be verified") {public int Status {get;}=status;}
 public sealed class BffError(string code,int? retryAfterSeconds=null):Exception(code)
 {public string Code {get;}=code;public int? RetryAfterSeconds {get;}=retryAfterSeconds;}
 
@@ -220,6 +225,12 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
                 throw new BffError("BFF_UNAVAILABLE",60);
             }
             throw new BffError("BFF_BUSY",retry);
+        }
+        catch(RefreshReceiptUnverified rejection) when(dispatched && !commitAttempted)
+        {
+            using var cleanup=new CancellationTokenSource(cleanupBudget);
+            await new BffCircuit(store,clock).Record(id,rejection.Status,true,cleanup.Token);
+            throw new BffError("BFF_UNAVAILABLE",60); // Unproven receipt: preserve/quarantine, never CAS-clear.
         }
         catch(Exception failure) when(dispatched)
         {

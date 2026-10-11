@@ -261,9 +261,21 @@ internal static class BffRefreshChecks
             foreach(var mode in new[]{"unsigned","wrong-nonce","bad-proof","proxy502","proxy504"})
             {
                 httpMode=mode;var untrusted=await Fixture();advance(TimeSpan.FromMinutes(13));var before=httpCalls;
-                await Reauth(async()=>{await networkA.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);});
-                await Reauth(async()=>{await networkB.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);});
-                Check(httpCalls==before+1 && (await State(untrusted.Tokens)).Has("uncertain_at"),mode+" rejection remains uncertain and is never retried");
+                if(mode is "wrong-nonce" or "bad-proof")
+                {
+                    try{await networkA.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);throw new Exception("Expected receipt quarantine");}
+                    catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+                    Check(httpCalls==before+1 && (await State(untrusted.Tokens)).Has("sealed_tokens") && await new BffCircuit(storeA,clock).IsOpen(),
+                        mode+" receipt stays uncertain under a shared circuit without immediate token erasure");
+                    await new BffCircuit(storeA,clock).Reset();
+                    await Reauth(async()=>{await networkB.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);});
+                }
+                else
+                {
+                    await Reauth(async()=>{await networkA.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);});
+                    await Reauth(async()=>{await networkB.RefreshIfDue(untrusted.Cookie,BffActivity.UserAction);});
+                    Check(httpCalls==before+1 && (await State(untrusted.Tokens)).Has("uncertain_at"),mode+" rejection remains uncertain and is never retried");
+                }
             }
             httpMode="normal";
             var circuit=new BffCircuit(storeA,clock);
@@ -284,6 +296,17 @@ internal static class BffRefreshChecks
             Check(subjects.Count>1 && subjects.All(Input.Secret) && subjects.Distinct().Count()>1,
                 "one HTTP adapter derives opaque admission subjects per session rather than per instance");
             await circuit.Reset();
+            httpMode="rate";var receiptMismatch=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeReceiptMismatch=httpCalls;
+            using(var mismatchedReceipt=new IdentityRefreshHttp(new Uri(address+"/"),httpKey,Secrets.Token(),true))
+            {
+                try{await new BffRefresh(storeA,secrets,clock,mismatchedReceipt).RefreshIfDue(receiptMismatch.Cookie,BffActivity.UserAction);throw new Exception("Expected receipt key guard");}
+                catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            }
+            Check((await State(receiptMismatch.Tokens)).Has("sealed_tokens") && await circuit.IsOpen(),
+                "receipt key mismatch alone under rate rejection latches circuit and preserves uncertain dispatch material");
+            await circuit.Reset();httpMode="normal";
+            await Reauth(async()=>{await networkB.RefreshIfDue(receiptMismatch.Cookie,BffActivity.UserAction);});
+            Check(httpCalls==beforeReceiptMismatch+1,"receipt key repair never authorizes reuse without a verified original receipt");
             var keyMismatch=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeMismatch=httpCalls;
             using(var mismatched=new IdentityRefreshHttp(new Uri(address+"/"),Secrets.Token(),Secrets.Token(),true))
             {

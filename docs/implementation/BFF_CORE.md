@@ -92,7 +92,7 @@ The circuit is latched, not a timer-based permission to replay. A trusted operat
 must repair configuration/investigate rejection cause, then call BffCircuit.Reset
 from an authenticated operator host. Reset clears only circuit samples/state,
 never journal evidence, Identity fences or tokens; subsequent reconciliation of
-an unmatched marker still requires login. The durable opened_at/reason and
+an unmatched marker still requires login. A response claiming NotProcessed whose nonce/MAC cannot be verified also opens the circuit and retains dispatch evidence (including receipt-key mismatch alone under 429); it cannot CAS-clear or permit retry. The durable opened_at/reason and
 bff.refresh.circuit_opened metric are operational signals. Actual metrics export,
 alert delivery and a private operator endpoint are not implemented in this core.
 Receipt-key mismatch is thus quarantined conservatively, not silently retried.
