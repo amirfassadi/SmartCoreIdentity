@@ -426,3 +426,24 @@ B1 policy specifies style-src-attr 'none' and Tailwind classes, an explicit boun
 smartcore-locale next-intl cookie, certificate-encrypted shared Data Protection keys
 on Linux, and optional Sec-Fetch-Site rejection in addition to mandatory Origin/CSRF.
 These remain implementation/acceptance requirements, not newly executed host tests.
+
+### B1 contract review revision 0.1.1
+
+Local candidate checks: OpenAPI 3.1 validation; 108 positive schema/wire checks,
+38 rejected negative controls, and 15 pairwise competing-guard precedence controls.
+These counts are not C# runtime tests. Guard classification is a contract model;
+live middleware order and session-bound CSRF cryptography still require B1 host tests.
+POST order: raw size, media type, Origin/Fetch-Site, CSRF, JSON/DTO, then
+authentication/business handling. Cross-site is a 403 rather than a schema enum error.
+Known-route wrong-method 405 requires Allow; unknown /bff paths use JSON 404;
+both preserve cookies and send no-store. Busy codes are narrowed by route, browser
+Person omits personId, and login enforces Identity's 128 UTF-16-unit ceiling as well
+as the JSON Schema bound. Terminal logout 401 is UI success.
+
+B1 Retry-After remains at most 60 seconds: authentication admission and transport
+windows are one minute, password-failure backoff caps at 30 seconds, and BFF
+backoff/circuit responses cap at 60. B3 reset cooldowns are outside this candidate;
+they require explicit contract review without truncating a longer wait.
+Existing documentary checks passed (20 archives, 16 documents, 59 relative links);
+backend preparation candidate checks passed (2 positive / 17 negative).
+No browser host, generated client, live proxy, load or failover evidence is added.
