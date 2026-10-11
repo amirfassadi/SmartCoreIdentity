@@ -12,8 +12,7 @@ business-owner dashboard, and public booking site. Keep it same-origin with BFF;
 use an opaque __Host- session cookie with Secure, HttpOnly, Path=/ and no Domain,
 and explicit CSRF/Origin controls for state-changing actions. The browser never
 receives Identity refresh tokens and never runs refresh itself. The shared core owns
-layout, localization, validation and error presentation. Mobile-first; provide RTL
-and i18n from the start if the selected market is Persian-speaking.
+layout, localization, validation and error presentation. Mobile-first; fa/en localization with RTL/LTR is included from the first slice.
 
 Generate the server-side Identity client from authentication.openapi.yaml and the
 registration contract. The browser consumes the BFF's browser contract, which must
@@ -48,7 +47,7 @@ must cover tenant resolution and cookie isolation before publishing multiple sit
 
 | Decision | Required input | Current position |
 | --- | --- | --- |
-| Frontend framework | Owner decision; team familiarity is not a constraint | Proposed: Next.js App Router + React + TypeScript; existing ASP.NET Core BFF remains session owner |
+| Frontend framework | Owner decision; team familiarity is not a constraint | Accepted: Next.js App Router + React + TypeScript; existing ASP.NET Core BFF remains session owner |
 | Business-site domains | Initial hosting/domain plan and tenant isolation | Subdomain vs custom-domain rollout undecided |
 | Initial users' country | Owner's initial market | Iran, confirmed 2026-10-11; provider selection remains open |
 | OTP channels | Agreed product policy | SMS first for real users; email remains valid; both use test inbox in development |
@@ -58,23 +57,22 @@ Release requirements and SMS ambiguity/abuse policy have one current source:
 [PR_STACK.md](PR_STACK.md). CI counts are cumulative historical evidence, not proof
 that future stages or browser/provider paths are implemented.
 
-## Frontend recommendation (proposed, not yet implemented)
+## Frontend choice (accepted, not yet implemented)
 
 Next.js App Router with React and TypeScript, with Tailwind CSS for the shared
-responsive design system. Use server rendering for public sites and limited client
-components for the calendar, booking flow and owner tools. This is a product choice
+responsive design system. Use server rendering for public sites without session reads. Account/dashboard
+client components call /bff directly; Next.js does not perform authenticated SSR. This is a product choice
 for the three surfaces, not an assumption about owner/team familiarity. Keep the
 existing ASP.NET Core BFF and Identity; do not duplicate refresh/session ownership
 in Next.js. A single HTTPS origin routes page requests to Next.js and /bff requests
-to ASP.NET Core. Server-rendered account reads call the BFF over the internal route
-with the session cookie; authenticated responses and one-time recovery material
-must never enter shared caches. Browser mutations retain BFF CSRF/Origin checks.
+to ASP.NET Core. Next.js receives no auth cookie in this slice; the proxy strips it on page requests.
+Authenticated responses and one-time recovery material must never enter shared caches. Browser mutations retain BFF CSRF/Origin checks.
 
-Tradeoff: an additional Node.js runtime and explicit SSR cookie forwarding/cache
-isolation to operate. Pin supported dependency versions when implementation starts.
-Razor Pages would simplify hosting, but Next.js is the proposed basis for the future
-interactive owner dashboard and customizable public site. This proposal awaits owner
-acceptance and creates no frontend files or new runtime evidence.
+Tradeoff: an additional Node.js runtime and explicit proxy/session/cache isolation
+to operate. Pin supported dependency versions when implementation starts.
+Razor Pages would simplify hosting, but Next.js is the accepted basis for the future
+interactive owner dashboard and customizable public site. The owner accepted this choice on 2026-10-11. It creates no frontend files or new
+runtime evidence.
 
 Primary references consulted 2026-10-11:
 https://nextjs.org/docs/app/getting-started/server-and-client-components and
@@ -84,3 +82,6 @@ Persian/Arabic digits in phone/OTP inputs; store timestamps canonically and loca
 date/calendar presentation separately. Provider selection must now assess Iranian
 operator coverage and sender/template requirements without assuming any vendor's
 idempotency/status support.
+
+Stage B folder/proxy/browser-contract and fa/en test specification:
+[BROWSER_SKELETON_SLICE.md](BROWSER_SKELETON_SLICE.md).
