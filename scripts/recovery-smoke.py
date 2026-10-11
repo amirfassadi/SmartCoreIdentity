@@ -141,9 +141,10 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   # Actual reset failures must expose no service timings without the diagnostic key.
   diagnostic_probe={**complete,'challengeId':unknown['challengeId'],'recoveryCode':'0'*32}
   no_diagnostic={k:v for k,v in bff.items() if k!='X-Reset-Timing-Key'}
+  no_diagnostic['X-Bff-Subject']=secrets.token_urlsafe(32)
   assert call('/auth/password/reset/complete',diagnostic_probe,no_diagnostic)[0]==401
   assert 'reset-total' not in last_timing
-  assert call('/auth/password/reset/complete',diagnostic_probe,{**no_diagnostic,'X-Reset-Timing-Key':'incorrect'})[0]==401
+  assert call('/auth/password/reset/complete',diagnostic_probe,{**no_diagnostic,'X-Bff-Subject':secrets.token_urlsafe(32),'X-Reset-Timing-Key':'incorrect'})[0]==401
   assert 'reset-total' not in last_timing
   diagnostic_timings={'real':[],'decoy':[],'suppressed':[]}
   failure_timings={'real':[],'decoy':[],'suppressed':[]}
