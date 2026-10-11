@@ -207,3 +207,42 @@ Latest verified runtime `6fe9d69` passes 82 BFF checks within 280 C# checks,
 singleton circuit row was held FOR UPDATE. This measures only sample writes,
 not full refresh throughput or production capacity. Exact evidence is in
 [VERIFICATION.md](VERIFICATION.md).
+
+
+## Dispatch-only probes and cookie-free maintenance (migration 005)
+
+Refresh reconciles committed journal evidence, returns non-due valid access and
+checks admission backoff before acquiring a probe permit, immediately before
+creating the durable dispatch marker. Non-due and backoff calls spend no permit.
+Unmatched dispatch during an open circuit remains quarantined without acquiring
+a permit; an uncertain predecessor is never reused.
+
+Logout intent now replaces the full token bundle with separately sealed access-only
+material in the same transaction. No refresh token remains in a new intent.
+CompleteLogout accepts a trusted BFF session id, so cookie deletion cannot strand
+completion. SweepLogout selects at most twenty due/expired intents per tick; each
+row is locked with SKIP LOCKED and rechecked. Failed attempts persist exponential
+1, 2, 4, 8, 16, 32, 60-second capped backoff. At expires_at, remaining material
+is erased and the intent closes without a network call. Old migration-004 intents
+can still contain bundles: completion converts them to access-only storage before
+HTTP, and expired legacy intents are erased directly. The new CHECK permits that
+legacy form solely for migration compatibility; current intent creation does not
+produce it.
+
+BffMaintenance is a BackgroundService: register it with the trusted BFF host,
+sharing its BffRefresh/BffCircuit and keys. It ticks every two seconds, bounds
+each tick to ninety seconds, catches non-shutdown failures for subsequent retry,
+and prunes up to one thousand samples older than thirty seconds before sweeping.
+Sample retention therefore works during success-only traffic as well as failure.
+A missing host registration still means no worker runs; browser hosting remains
+a release gate. No browser cookie, token or secret is an input to the worker.
+
+A probe is a real eligible user's rotation, not a synthetic health request.
+Ambiguous delivery can cost that user's session under zero grace. The dispatch
+journal durably records probe_dispatch and probe_loss_recorded; a terminal
+uncertain probe increments bff.refresh.probe_sessions_lost only after committing
+its loss flag. BffStore.ProbeLossCount is the durable distinct-session total;
+repeated terminal requests do not increment it. Restart can lose an in-memory
+metric emission, so the persisted count is authoritative. A quarantined attempt
+is counted only when it becomes terminal. Alert delivery and a full production
+load test remain release requirements.

@@ -97,6 +97,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     private static readonly Counter<long> Fast=Meter.CreateCounter<long>("bff.refresh.fast_access");
     private static readonly Counter<long> Dispatches=Meter.CreateCounter<long>("bff.refresh.dispatches");
     private static readonly Counter<long> Unknown=Meter.CreateCounter<long>("bff.refresh.uncertain_sessions");
+    private static readonly Counter<long> ProbeLost=Meter.CreateCounter<long>("bff.refresh.probe_sessions_lost");
     private static readonly Counter<long> Coalesced=Meter.CreateCounter<long>("bff.refresh.coalesced");
     private static readonly Counter<long> Busy=Meter.CreateCounter<long>("bff.refresh.lock_timeout");
     private DateTimeOffset Now=>Timestamps.Now(clock);
@@ -153,7 +154,6 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         using var owner=CancellationTokenSource.CreateLinkedTokenSource(cancellation);owner.CancelAfter(limits.Owner-cleanupBudget);
         var ct=owner.Token;
         if(row is null || !Live(row))throw new BffError("REAUTHENTICATION_REQUIRED");
-        if(!await new BffCircuit(store,clock).Allow(row.Get<Guid>("id"),ct))throw new BffError("BFF_UNAVAILABLE",60);
         var id=row.Get<Guid>("id");var version=row.Get<long>("version");
         // Read journal without locking it in A: B must be able to update it independently.
         var journal=(await BffStore.One(c,"SELECT * FROM bff_refresh_journal WHERE session_id=@id",ct,("id",id)))!;
@@ -164,8 +164,10 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
                 await Clear(id,attempt,source,ct);
             else
             {
+                if(await new BffCircuit(store,clock).IsOpen(ct))throw new BffError("BFF_UNAVAILABLE",60);
                 await BffStore.Execute(c,"UPDATE bff_sessions SET status='ReauthenticationRequired',sealed_tokens=NULL,uncertain_at=@now WHERE id=@id AND status='Active'",ct,("now",Now),("id",id));
-                await tx.CommitAsync(ct);Unknown.Add(1);throw new BffError("REAUTHENTICATION_REQUIRED");
+                var lost=await CountProbeLoss(c,id,ct);
+                await tx.CommitAsync(ct);if(lost)ProbeLost.Add(1);Unknown.Add(1);throw new BffError("REAUTHENTICATION_REQUIRED");
             }
         }
         if(!Due(row,activity)){Coalesced.Add(1);await tx.CommitAsync(ct);return Access(row);}
@@ -175,14 +177,16 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         try
         {
             await Observe(RefreshStage.BeforeDispatch,ct);
+            var permit=await new BffCircuit(store,clock).Acquire(id,ct);
+            if(!permit.Allowed)throw new BffError("BFF_UNAVAILABLE",60);
             await using(var marker=await store.Source.OpenConnectionAsync(ct))
             {
                 await using var markerTx=await marker.BeginTransactionAsync(ct);
                 var changed=await BffStore.Execute(marker,"""
-                    UPDATE bff_refresh_journal SET attempt_id=@op,source_version=@version,
+                    UPDATE bff_refresh_journal SET attempt_id=@op,source_version=@version,probe_dispatch=@probe,probe_loss_recorded=false,
                      first_dispatched_at=coalesce(first_dispatched_at,@now),last_dispatched_at=@now
                     WHERE session_id=@id AND attempt_id IS NULL
-                    """,ct,("op",operation),("version",version),("now",Now),("id",id));
+                    """,ct,("op",operation),("version",version),("now",Now),("id",id),("probe",permit.Probe));
                 if(changed!=1)throw new InvalidOperationException("Dispatch journal mismatch");
                 await markerTx.CommitAsync(ct);dispatched=true;Dispatches.Add(1);
             }
@@ -258,7 +262,8 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
                         && failure is not ApiError {Status:401};
                     await BffStore.Execute(c,"UPDATE bff_sessions SET status='ReauthenticationRequired',sealed_tokens=NULL,uncertain_at=@unknown WHERE id=@id AND status='Active'",
                         cleanup.Token,("unknown",uncertain?Now:null),("id",id));
-                    await tx.CommitAsync(cleanup.Token);if(uncertain)Unknown.Add(1);
+                    var lost=await CountProbeLoss(c,id,cleanup.Token);
+                    await tx.CommitAsync(cleanup.Token);if(lost)ProbeLost.Add(1);if(uncertain)Unknown.Add(1);
                 }
                 catch(Exception) { /* Broken/aborted transaction: durable journal is the fallback. */ }
             }
@@ -272,36 +277,85 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         await using var c=await store.Source.OpenConnectionAsync(cancellation);
         await BffStore.Execute(c,"UPDATE bff_refresh_journal SET attempt_id=NULL,source_version=NULL,retry_not_before=NULL,admission_rejections=0 WHERE session_id=@id AND attempt_id=@op AND source_version=@version",cancellation,("id",id),("op",attempt),("version",version));
     }
-    // Explicit user logout: keep material until an idempotent upstream outcome is known.
+    private static async Task<bool> CountProbeLoss(NpgsqlConnection c,Guid id,CancellationToken cancellation)=>
+        await BffStore.Execute(c,"UPDATE bff_refresh_journal SET probe_loss_recorded=true WHERE session_id=@id AND probe_dispatch AND NOT probe_loss_recorded",cancellation,("id",id))==1;
+    private static string LogoutPurpose(Guid id,long version)=>"bff-logout-access:"+id+":"+version.ToString(System.Globalization.CultureInfo.InvariantCulture);
     public async Task Logout(string cookie,CancellationToken cancellation=default)
     {
-        if(identity is not IIdentityLogout logout)throw new InvalidOperationException("Identity logout adapter required");
+        if(identity is not IIdentityLogout)throw new InvalidOperationException("Identity logout adapter required");
         using var budget=CancellationTokenSource.CreateLinkedTokenSource(cancellation);budget.CancelAfter(limits.LockWait+limits.Owner);
-        await using var c=await store.Source.OpenConnectionAsync(budget.Token);await using var tx=await c.BeginTransactionAsync(budget.Token);
-        await BffStore.Execute(c,"SELECT set_config('lock_timeout',@wait,true)",budget.Token,("wait",((long)limits.LockWait.TotalMilliseconds).ToString()+"ms"));
-        var row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",budget.Token,("cookie",Cookie(cookie)));
-        if(row is null || row.Get<string>("status") is not ("Active" or "LogoutRequested")){await tx.CommitAsync(budget.Token);return;}
-        var id=row.Get<Guid>("id");var session=row.Get<Guid>("identity_session_id");
-        // Commit user intent before any network call. Cached access and refresh now reject this cookie.
-        if(row.Get<string>("status")=="Active")
-            await BffStore.Execute(c,"UPDATE bff_sessions SET status='LogoutRequested' WHERE id=@id",budget.Token,("id",id));
-        await tx.CommitAsync(budget.Token);
-        await using var completion=await c.BeginTransactionAsync(budget.Token);
-        row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE id=@id FOR UPDATE",budget.Token,("id",id));
-        if(row is null || row.Get<string>("status")!="LogoutRequested"){await completion.CommitAsync(budget.Token);return;}
-        // Logout is idempotent and independent of the refresh circuit; retries cannot consume predecessors.
-        using var http=CancellationTokenSource.CreateLinkedTokenSource(budget.Token);http.CancelAfter(limits.Http);
-        try{await logout.Logout(Tokens(row).AccessToken,session,Subject(session),http.Token).WaitAsync(http.Token);}
-        catch(HttpRequestException e) when(e.StatusCode==System.Net.HttpStatusCode.Unauthorized)
-        { /* Identity rejects the access proof: user logout still closes the local session. */ }
-        catch(Exception failure)
+        Guid id;
+        await using(var c=await store.Source.OpenConnectionAsync(budget.Token))
         {
-            if(failure is HttpRequestException {StatusCode:System.Net.HttpStatusCode.Forbidden})
-                await new BffCircuit(store,clock).Record(id,403,false,budget.Token);
-            throw new BffError("BFF_UNAVAILABLE",1); // No local token erasure; same logout request can be retried safely.
+            await using var tx=await c.BeginTransactionAsync(budget.Token);
+            var row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",budget.Token,("cookie",Cookie(cookie)));
+            if(row is null || row.Get<string>("status") is not ("Active" or "LogoutRequested")){await tx.CommitAsync(budget.Token);return;}
+            id=row.Get<Guid>("id");
+            if(row.Get<string>("status")=="Active")
+                await BffStore.Execute(c,"UPDATE bff_sessions SET status='LogoutRequested',sealed_tokens=NULL,sealed_logout_access=@access,logout_retry_at=@now WHERE id=@id",budget.Token,
+                    ("id",id),("now",Now),("access",secrets.Seal(Tokens(row).AccessToken,LogoutPurpose(id,row.Get<long>("version")))));
+            await tx.CommitAsync(budget.Token);
         }
-        await BffStore.Execute(c,"UPDATE bff_sessions SET status='Closed',sealed_tokens=NULL WHERE id=@id AND status='LogoutRequested'",budget.Token,("id",id));
-        await completion.CommitAsync(budget.Token);
+        await CompleteLogout(id,budget.Token);
+    }
+    // Trusted server/session id, not a browser assertion. Cookie is unnecessary after durable intent.
+    public async Task CompleteLogout(Guid id,CancellationToken cancellation=default)
+    {
+        if(identity is not IIdentityLogout logout)throw new InvalidOperationException("Identity logout adapter required");
+        using var budget=CancellationTokenSource.CreateLinkedTokenSource(cancellation);budget.CancelAfter(limits.Owner);
+        await using var c=await store.Source.OpenConnectionAsync(budget.Token);await using var tx=await c.BeginTransactionAsync(budget.Token);
+        await BffStore.Execute(c,"SELECT set_config('transaction_timeout',@owner,true)",budget.Token,("owner",((long)limits.Owner.TotalMilliseconds).ToString()+"ms"));
+        var row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE id=@id FOR UPDATE SKIP LOCKED",budget.Token,("id",id));
+        if(row is null || row.Get<string>("status")!="LogoutRequested"){await tx.CommitAsync(budget.Token);return;}
+        if(row.Time("expires_at")<=Now)
+        {
+            await FinishLogout(c,id,budget.Token);await tx.CommitAsync(budget.Token);return;
+        }
+        // Convert legacy 004 intents before network work, permanently removing their refresh token.
+        if(!row.Has("sealed_logout_access"))
+        {
+            var access=secrets.Seal(Tokens(row).AccessToken,LogoutPurpose(id,row.Get<long>("version")));
+            await BffStore.Execute(c,"UPDATE bff_sessions SET sealed_tokens=NULL,sealed_logout_access=@access WHERE id=@id",budget.Token,("id",id),("access",access));
+            await tx.CommitAsync(budget.Token);
+            await CompleteLogout(id,budget.Token);return;
+        }
+        if(row.Has("logout_retry_at") && row.Time("logout_retry_at")>Now){await tx.CommitAsync(budget.Token);return;}
+        using var http=CancellationTokenSource.CreateLinkedTokenSource(budget.Token);http.CancelAfter(limits.Http);
+        try
+        {
+            var access=secrets.Open(row.Get<byte[]>("sealed_logout_access"),LogoutPurpose(id,row.Get<long>("version")));
+            var session=row.Get<Guid>("identity_session_id");
+            await logout.Logout(access,session,Subject(session),http.Token).WaitAsync(http.Token);
+        }
+        catch(HttpRequestException e) when(e.StatusCode==System.Net.HttpStatusCode.Unauthorized)
+        { /* Local closure does not certify upstream revocation with expired proof. */ }
+        catch(Exception)
+        {
+            // Commit retry state even if the caller/network deadline has elapsed. Never restore ordinary access.
+            using var cleanup=new CancellationTokenSource(TimeSpan.FromTicks(limits.Owner.Ticks/5));
+            var attempts=Math.Min(30,row.Get<int>("logout_attempts")+1);var delay=Math.Min(60,1<<Math.Min(6,attempts-1));
+            await BffStore.Execute(c,"UPDATE bff_sessions SET logout_attempts=@attempts,logout_retry_at=@retry WHERE id=@id",cleanup.Token,("attempts",attempts),("retry",Now.AddSeconds(delay)),("id",id));
+            await tx.CommitAsync(cleanup.Token);throw new BffError("BFF_UNAVAILABLE",delay);
+        }
+        await FinishLogout(c,id,budget.Token);await tx.CommitAsync(budget.Token);
+    }
+    private static Task<int> FinishLogout(NpgsqlConnection c,Guid id,CancellationToken cancellation)=>
+        BffStore.Execute(c,"UPDATE bff_sessions SET status='Closed',sealed_tokens=NULL,sealed_logout_access=NULL,logout_retry_at=NULL WHERE id=@id",cancellation,("id",id));
+    public async Task<int> SweepLogout(CancellationToken cancellation=default)
+    {
+        var ids=new List<Guid>();
+        await using(var c=await store.Source.OpenConnectionAsync(cancellation))
+        await using(var command=new NpgsqlCommand("SELECT id FROM bff_sessions WHERE status='LogoutRequested' AND (expires_at<=@now OR logout_retry_at IS NULL OR logout_retry_at<=@now) ORDER BY expires_at,id LIMIT 20",c))
+        {
+            command.Parameters.AddWithValue("now",Now);await using var reader=await command.ExecuteReaderAsync(cancellation);
+            while(await reader.ReadAsync(cancellation))ids.Add(reader.GetGuid(0));
+        }
+        foreach(var id in ids)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            try{await CompleteLogout(id,cancellation);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+        }
+        return ids.Count;
     }
     // Host calls this only for a verified Identity Session 401, never for BFF credential 403.
     public async Task RejectAccess(string cookie,Guid expectedSession,CancellationToken cancellation=default)

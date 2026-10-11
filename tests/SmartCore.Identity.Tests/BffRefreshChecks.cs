@@ -296,6 +296,9 @@ internal static class BffRefreshChecks
             try{await networkB.RefreshIfDue(badConfig.Cookie,BffActivity.UserAction);throw new Exception("Expected open circuit");}
             catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
             Check(httpCalls==beforeBad+1,"configuration circuit prevents dispatch from another pool");
+            var notDue=await Fixture();var beforeNotDue=httpCalls;
+            for(var n=0;n<5;n++)Check((await networkB.RefreshIfDue(notDue.Cookie,BffActivity.Background)).Version==0,"open circuit returns valid non-due access without spending a probe: "+n);
+            Check(httpCalls==beforeNotDue && !(await sql.One("SELECT probe_session FROM bff_refresh_circuit WHERE id=1"))!.Has("probe_session"),"non-due decisions do not acquire probe permission");
             advance(TimeSpan.FromSeconds(61));await networkB.RefreshIfDue(badConfig.Cookie,BffActivity.UserAction);
             Check(await Generation(badConfig.Tokens)==1 && !await circuit.IsOpen(),"automatic half-open probe after credential repair rotates known non-consumed predecessor once and closes circuit");
             Check(subjects.Count>1 && subjects.All(Input.Secret) && subjects.Distinct().Count()>1,
@@ -421,8 +424,8 @@ internal static class BffRefreshChecks
             var logoutFixture=await Fixture();logoutMode="lost";var beforeLogout=logoutCalls;
             try{await networkA.Logout(logoutFixture.Cookie);throw new Exception("Expected lost logout response");}
             catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
-            Check((await State(logoutFixture.Tokens)).Has("sealed_tokens") && (await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",logoutFixture.Tokens.SessionId)))!.Get<string>("status")=="Closed",
-                "lost real HTTP logout response preserves BFF material after Identity has closed the session");
+            Check(!(await State(logoutFixture.Tokens)).Has("sealed_tokens") && (await State(logoutFixture.Tokens)).Has("sealed_logout_access") && (await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",logoutFixture.Tokens.SessionId)))!.Get<string>("status")=="Closed",
+                "lost real HTTP logout response preserves only BFF access material after Identity has closed the session");
             Check((await State(logoutFixture.Tokens)).Get<string>("status")=="LogoutRequested","lost logout response commits durable local LogoutRequested before returning");
             try{await sql.Execute("UPDATE bff_sessions SET status='Active' WHERE identity_session_id=@id",("id",logoutFixture.Tokens.SessionId));throw new Exception("Reactivated logout intent");}
             catch(PostgresException e)when(e.SqlState=="23514"){}
@@ -431,12 +434,47 @@ internal static class BffRefreshChecks
             await Reauth(async()=>{await networkB.RefreshIfDue(logoutFixture.Cookie,BffActivity.UserAction);});
             Check(true,"logout intent immediately denies cached access and refresh on another instance");
             await circuit.Record(Guid.NewGuid(),403,true,CancellationToken.None);
-            logoutMode="normal";await networkB.Logout(logoutFixture.Cookie);await networkA.Logout(logoutFixture.Cookie);
+            logoutMode="normal";advance(TimeSpan.FromSeconds(1));await networkB.SweepLogout();await networkA.Logout(logoutFixture.Cookie);
             var logoutEvents=(await sql.One("SELECT count(*) AS n FROM auth_domain_event_outbox WHERE event_type='LogoutCompleted' AND session_id=@id",("id",logoutFixture.Tokens.SessionId)))!.Get<long>("n");
             Check(logoutCalls==beforeLogout+2 && logoutEvents==1 && !(await State(logoutFixture.Tokens)).Has("sealed_tokens"),
                 "retry of idempotent upstream logout commits one Identity event before BFF erasure; terminal local replay sends nothing");
             Check(await circuit.IsOpen(),"idempotent logout completes even while refresh circuit remains open");
+            Check(!(await State(logoutFixture.Tokens)).Has("sealed_logout_access"),"cookie-free sweeper erases logout-only access material after completion");
             await circuit.Reset();
+            var retryLogout=await Fixture();logoutMode="lost";var beforeRetries=logoutCalls;
+            try{await networkA.Logout(retryLogout.Cookie);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            await networkB.SweepLogout();
+            Check(logoutCalls==beforeRetries+1,"cookie-free logout sweep obeys persisted initial backoff");
+            advance(TimeSpan.FromSeconds(1));await networkB.SweepLogout();
+            var retryState=await State(retryLogout.Tokens);
+            Check(retryState.Get<int>("logout_attempts")==2 && retryState.Time("logout_retry_at")==Timestamps.Now(clock).AddSeconds(2),"failed logout sweep persists increasing retry backoff");
+            logoutMode="normal";advance(TimeSpan.FromSeconds(2));
+            using(var worker=new BffMaintenance(networkB,circuit,Microsoft.Extensions.Logging.Abstractions.NullLogger<BffMaintenance>.Instance))
+            {
+                await worker.StartAsync(CancellationToken.None);
+                using var completed=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                while((await State(retryLogout.Tokens)).Get<string>("status")!="Closed")await Task.Delay(20,completed.Token);
+                await worker.StopAsync(CancellationToken.None);
+            }
+            Check(!(await State(retryLogout.Tokens)).Has("sealed_logout_access"),"actual hosted maintenance completes durable logout without the deleted cookie");
+            var expiredLogout=await Fixture();logoutMode="lost";
+            try{await networkA.Logout(expiredLogout.Cookie);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            var beforeExpiry=logoutCalls;advance(TimeSpan.FromHours(25));await networkB.SweepLogout();
+            Check(logoutCalls==beforeExpiry && (await State(expiredLogout.Tokens)).Get<string>("status")=="Closed" && !(await State(expiredLogout.Tokens)).Has("sealed_logout_access"),"expired logout intent purges access material without an upstream request");
+            await circuit.Record(Guid.NewGuid(),200,false,CancellationToken.None);advance(TimeSpan.FromSeconds(31));
+            await circuit.Prune();
+            Check((await sql.One("SELECT count(*) AS n FROM bff_refresh_samples"))!.Get<long>("n")==0,"periodic maintenance prunes stale success-only samples without any failure");
+            await circuit.Reset();
+            // An elected probe remains a real user rotation; ambiguity can terminalize it after circuit repair.
+            var lostProbe=await Fixture();advance(TimeSpan.FromMinutes(13));await circuit.Record(Guid.NewGuid(),403,true,CancellationToken.None);advance(TimeSpan.FromSeconds(61));
+            var beforeProbeLoss=await storeA.ProbeLossCount();httpMode="lost";
+            try{await networkA.RefreshIfDue(lostProbe.Cookie,BffActivity.UserAction);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            await circuit.Reset();httpMode="normal";
+            await Reauth(async()=>{await networkB.RefreshIfDue(lostProbe.Cookie,BffActivity.UserAction);});
+            Check(await storeA.ProbeLossCount()==beforeProbeLoss+1,"uncertain elected probe records exactly one durable lost-session count on reconciliation");
+            await Reauth(async()=>{await networkB.RefreshIfDue(lostProbe.Cookie,BffActivity.UserAction);});
+            Check(await storeA.ProbeLossCount()==beforeProbeLoss+1,"repeated terminal reads never double-count a lost probe session");
+            logoutMode="normal";
             var raceLogout=await Fixture();advance(TimeSpan.FromMinutes(13));
             async Task RaceRefresh(){try{await networkA.RefreshIfDue(raceLogout.Cookie,BffActivity.UserAction);}catch(BffError e)when(e.Code=="REAUTHENTICATION_REQUIRED"){}}
             await Task.WhenAll(RaceRefresh(),networkB.Logout(raceLogout.Cookie));

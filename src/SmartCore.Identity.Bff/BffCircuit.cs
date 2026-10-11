@@ -14,14 +14,22 @@ public sealed class BffCircuit(BffStore store,TimeProvider clock)
         return (await BffStore.One(c,"SELECT opened_at FROM bff_refresh_circuit WHERE id=1",cancellation))!.Has("opened_at");
     }
     // The session row remains owned by the caller. Probe permission never clears dispatch evidence.
-    public async Task<bool> Allow(Guid session,CancellationToken cancellation=default)
+    public async Task<bool> Allow(Guid session,CancellationToken cancellation=default)=>
+        (await Acquire(session,cancellation)).Allowed;
+    public async Task<(bool Allowed,bool Probe)> Acquire(Guid session,CancellationToken cancellation=default)
     {
         await using var c=await store.Source.OpenConnectionAsync(cancellation);
-        if(!(await OneState(c,cancellation)).Has("opened_at"))return true;
-        return await BffStore.Execute(c,"""
+        if(!(await OneState(c,cancellation)).Has("opened_at"))return(true,false);
+        var won=await BffStore.Execute(c,"""
             UPDATE bff_refresh_circuit SET probe_session=@session,next_probe_at=@next
             WHERE id=1 AND opened_at IS NOT NULL AND next_probe_at<=@now
             """,cancellation,("session",session),("next",Timestamps.Now(clock).AddSeconds(60)),("now",Timestamps.Now(clock)))==1;
+        return(won,won);
+    }
+    public async Task<int> Prune(CancellationToken cancellation=default)
+    {
+        await using var c=await store.Source.OpenConnectionAsync(cancellation);
+        return await BffStore.Execute(c,"DELETE FROM bff_refresh_samples WHERE session_id IN (SELECT session_id FROM bff_refresh_samples WHERE observed_at<@since LIMIT 1000)",cancellation,("since",Timestamps.Now(clock).AddSeconds(-30)));
     }
     private static async Task<Row> OneState(Npgsql.NpgsqlConnection c,CancellationToken cancellation)=>
         (await BffStore.One(c,"SELECT opened_at FROM bff_refresh_circuit WHERE id=1",cancellation))!;

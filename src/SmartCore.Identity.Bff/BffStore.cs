@@ -21,6 +21,8 @@ public sealed class BffStore(string connectionString):IAsyncDisposable
             if(!circuit)await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","003_refresh_circuit.sql"),cancellation));
             var recovery=(await c.One("SELECT EXISTS(SELECT 1 FROM bff_schema_versions WHERE version=4) AS present"))!.Get<bool>("present");
             if(!recovery)await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","004_circuit_recovery_logout.sql"),cancellation));
+            var logout=(await c.One("SELECT EXISTS(SELECT 1 FROM bff_schema_versions WHERE version=5) AS present"))!.Get<bool>("present");
+            if(!logout)await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","005_logout_completion.sql"),cancellation));
         }
         finally {await c.Execute("SELECT pg_advisory_unlock(640902)");}
     }
@@ -51,6 +53,11 @@ public sealed class BffStore(string connectionString):IAsyncDisposable
             FROM bff_sessions s JOIN bff_refresh_journal j ON j.session_id=s.id WHERE j.last_dispatched_at>=@since
             """,cancellation,("since",since)))!;
         return(r.Get<long>("dispatched"),r.Get<long>("uncertain"));
+    }
+    public async Task<long> ProbeLossCount(CancellationToken cancellation=default)
+    {
+        await using var c=await Source.OpenConnectionAsync(cancellation);
+        return (await One(c,"SELECT count(*) AS n FROM bff_refresh_journal WHERE probe_loss_recorded",cancellation))!.Get<long>("n");
     }
     public ValueTask DisposeAsync()=>Source.DisposeAsync();
 }
