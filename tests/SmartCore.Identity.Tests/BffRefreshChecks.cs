@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -17,6 +18,17 @@ internal static class BffRefreshChecks
     public static async Task<int> Run(Database db,Secrets identitySecrets,TimeProvider clock,Action<TimeSpan> advance,string connection)
     {
         var count=0;
+        long localOnly=0,maintenanceFailures=0;
+        var metricReasons=new ConcurrentQueue<string>();
+        using var listener=new MeterListener();
+        listener.InstrumentPublished=(instrument,meterListener)=>
+        {if(instrument.Name is "bff.logout_local_only" or "bff.maintenance.failures")meterListener.EnableMeasurementEvents(instrument);};
+        listener.SetMeasurementEventCallback<long>((instrument,value,tags,state)=>
+        {
+            if(instrument.Name=="bff.logout_local_only")Interlocked.Add(ref localOnly,value);
+            else Interlocked.Add(ref maintenanceFailures,value);
+            foreach(var tag in tags)metricReasons.Enqueue(instrument.Name+":"+tag.Key+":"+tag.Value);
+        });listener.Start();
         void Check(bool value,string label){if(!value)throw new Exception("FAIL: "+label);Console.WriteLine("PASS: BFF "+label);count++;}
         async Task Reauth(Func<Task> work)
         {try{await work();}catch(BffError e)when(e.Code=="REAUTHENTICATION_REQUIRED"){return;}throw new Exception("Expected BFF reauthentication");}
@@ -410,6 +422,17 @@ internal static class BffRefreshChecks
                         && !(await State(killed.Tokens)).Has("sealed_tokens"),
                         "actual process kill at "+stage+" releases row lock but retains durable marker; survivor never resends");
             }
+            var lockLogout=await Fixture();var beforeLockLogout=logoutCalls;
+            await using(var held=await storeA.Source.OpenConnectionAsync())
+            {
+                await using var heldTx=await held.BeginTransactionAsync();
+                await held.Execute("SELECT id FROM bff_sessions WHERE identity_session_id=@id FOR UPDATE",("id",lockLogout.Tokens.SessionId));
+                var shortLogout=new BffRefresh(storeB,secrets,clock,http,new BffBudgets(TimeSpan.FromMilliseconds(100),TimeSpan.FromMilliseconds(500),TimeSpan.FromMilliseconds(800)));
+                try{await shortLogout.Logout(lockLogout.Cookie);throw new Exception("Expected logout lock timeout");}
+                catch(BffError e)when(e.Code=="BFF_BUSY"){}
+                Check(logoutCalls==beforeLockLogout && (await State(lockLogout.Tokens)).Get<string>("status")=="Active","logout lock_timeout returns busy without intent or upstream dispatch while another owner holds the row");
+                await heldTx.RollbackAsync();
+            }
             var pausedLogout=await Fixture();logoutMode="paused";
             var logoutPending=networkA.Logout(pausedLogout.Cookie);
             await logoutEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -470,10 +493,28 @@ internal static class BffRefreshChecks
             var legacyIntent=await State(legacyLogout.Tokens);
             Check(!legacyIntent.Has("sealed_tokens") && legacyIntent.Has("sealed_logout_access"),"sweeper converts legacy bundle intent to access-only storage before a lost upstream response");
             logoutMode="normal";advance(TimeSpan.FromSeconds(1));await networkA.SweepLogout();
+            var expiredProofLogout=await Fixture();var beforeLocalOnly=Interlocked.Read(ref localOnly);advance(TimeSpan.FromMinutes(16));
+            await networkA.Logout(expiredProofLogout.Cookie);await networkB.Logout(expiredProofLogout.Cookie);
+            Check((await State(expiredProofLogout.Tokens)).Get<string>("status")=="Closed" && (await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",expiredProofLogout.Tokens.SessionId)))!.Get<string>("status")=="Active"
+                && Interlocked.Read(ref localOnly)==beforeLocalOnly+1 && metricReasons.Contains("bff.logout_local_only:reason:access_proof_rejected"),"expired access proof closes only locally and emits one reason-tagged metric; terminal replay does not count again");
             var expiredLogout=await Fixture();logoutMode="lost";
             try{await networkA.Logout(expiredLogout.Cookie);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
-            var beforeExpiry=logoutCalls;advance(TimeSpan.FromHours(25));await networkB.SweepLogout();
+            var beforeExpiry=logoutCalls;var beforeExpiryMetric=Interlocked.Read(ref localOnly);advance(TimeSpan.FromHours(25));await networkB.SweepLogout();
             Check(logoutCalls==beforeExpiry && (await State(expiredLogout.Tokens)).Get<string>("status")=="Closed" && !(await State(expiredLogout.Tokens)).Has("sealed_logout_access"),"expired logout intent purges access material without an upstream request");
+            Check(Interlocked.Read(ref localOnly)==beforeExpiryMetric+1 && metricReasons.Contains("bff.logout_local_only:reason:absolute_expiry"),"absolute-expiry cleanup records a separate local-only outcome reason");
+            await using(var brokenStore=new BffStore(connection))
+            {
+                await brokenStore.DisposeAsync();
+                var warnings=new MaintenanceLogger();var beforeFailures=Interlocked.Read(ref maintenanceFailures);
+                using var brokenWorker=new BffMaintenance(new BffRefresh(brokenStore,secrets,clock,http),new BffCircuit(brokenStore,clock),warnings);
+                await brokenWorker.StartAsync(CancellationToken.None);
+                using var failedTick=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                while(warnings.Messages.IsEmpty)await Task.Delay(20,failedTick.Token);
+                await brokenWorker.StopAsync(CancellationToken.None);
+                Check(Interlocked.Read(ref maintenanceFailures)>beforeFailures && warnings.Messages.Any(x=>x.Contains("ObjectDisposedException",StringComparison.Ordinal))
+                    && metricReasons.Contains("bff.maintenance.failures:exception_type:System.ObjectDisposedException"),"failed hosted maintenance records an exception-type warning and failure counter");
+                Check(warnings.Messages.All(x=>!x.Contains(connection,StringComparison.Ordinal) && !x.Contains(httpKey,StringComparison.Ordinal) && !x.Contains(receiptKey,StringComparison.Ordinal)),"maintenance operational logs exclude connection strings and transport keys");
+            }
             await circuit.Record(Guid.NewGuid(),200,false,CancellationToken.None);advance(TimeSpan.FromSeconds(31));
             await circuit.Prune();
             Check((await sql.One("SELECT count(*) AS n FROM bff_refresh_samples"))!.Get<long>("n")==0,"periodic maintenance prunes stale success-only samples without any failure");
@@ -532,6 +573,14 @@ internal static class BffRefreshChecks
         var summary=await storeA.UncertaintySummary(clock.GetUtcNow().AddDays(-7));
         Check(summary.Dispatched>summary.Uncertain && summary.Uncertain>=7,"uncertainty ratio counts distinct dispatched sessions rather than repeated attempts");
         return count;
+    }
+    private sealed class MaintenanceLogger:ILogger<BffMaintenance>
+    {
+        public ConcurrentQueue<string> Messages {get;}=new();
+        public IDisposable? BeginScope<TState>(TState state)where TState:notnull=>null;
+        public bool IsEnabled(LogLevel level)=>true;
+        public void Log<TState>(LogLevel level,EventId id,TState state,Exception? exception,Func<TState,Exception?,string> formatter)
+        {Messages.Enqueue(formatter(state,exception));}
     }
     private sealed class Probe(RefreshStage chosen,Func<RefreshStage,CancellationToken,Task> callback):IRefreshProbe
     {

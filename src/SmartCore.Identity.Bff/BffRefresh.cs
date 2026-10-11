@@ -97,6 +97,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     private static readonly Counter<long> Fast=Meter.CreateCounter<long>("bff.refresh.fast_access");
     private static readonly Counter<long> Dispatches=Meter.CreateCounter<long>("bff.refresh.dispatches");
     private static readonly Counter<long> Unknown=Meter.CreateCounter<long>("bff.refresh.uncertain_sessions");
+    private static readonly Counter<long> LogoutLocalOnly=Meter.CreateCounter<long>("bff.logout_local_only");
     private static readonly Counter<long> ProbeLost=Meter.CreateCounter<long>("bff.refresh.probe_sessions_lost");
     private static readonly Counter<long> Coalesced=Meter.CreateCounter<long>("bff.refresh.coalesced");
     private static readonly Counter<long> Busy=Meter.CreateCounter<long>("bff.refresh.lock_timeout");
@@ -294,7 +295,11 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         await using(var c=await store.Source.OpenConnectionAsync(budget.Token))
         {
             await using var tx=await c.BeginTransactionAsync(budget.Token);
-            var row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",budget.Token,("cookie",Cookie(cookie)));
+            await BffStore.Execute(c,"SELECT set_config('lock_timeout',@wait,true)",budget.Token,("wait",((long)limits.LockWait.TotalMilliseconds).ToString()+"ms"));
+            Row? row;
+            try{row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",budget.Token,("cookie",Cookie(cookie)));}
+            catch(Exception e)when(e is PostgresException {SqlState:"55P03"} || e is OperationCanceledException && !cancellation.IsCancellationRequested)
+            {Busy.Add(1);throw new BffError("BFF_BUSY",1);}
             if(row is null || row.Get<string>("status") is not ("Active" or "LogoutRequested")){await tx.CommitAsync(budget.Token);return;}
             id=row.Get<Guid>("id");
             if(row.Get<string>("status")=="Active")
@@ -315,7 +320,8 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         if(row is null || row.Get<string>("status")!="LogoutRequested"){await tx.CommitAsync(budget.Token);return;}
         if(row.Time("expires_at")<=Now)
         {
-            await FinishLogout(c,id,budget.Token);await tx.CommitAsync(budget.Token);return;
+            await FinishLogout(c,id,budget.Token);await tx.CommitAsync(budget.Token);
+            LogoutLocalOnly.Add(1,new KeyValuePair<string,object?>("reason","absolute_expiry"));return;
         }
         // Convert legacy 004 intents before network work, permanently removing their refresh token.
         if(!row.Has("sealed_logout_access"))
@@ -327,6 +333,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         }
         if(row.Has("logout_retry_at") && row.Time("logout_retry_at")>Now){await tx.CommitAsync(budget.Token);return;}
         using var http=CancellationTokenSource.CreateLinkedTokenSource(budget.Token);http.CancelAfter(limits.Http);
+        var localOnly=false;
         try
         {
             var access=secrets.Open(row.Get<byte[]>("sealed_logout_access"),LogoutPurpose(id,row.Get<long>("version")));
@@ -334,7 +341,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             await logout.Logout(access,session,Subject(session),http.Token).WaitAsync(http.Token);
         }
         catch(HttpRequestException e) when(e.StatusCode==System.Net.HttpStatusCode.Unauthorized)
-        { /* Local closure does not certify upstream revocation with expired proof. */ }
+        {localOnly=true; /* Local closure does not certify upstream revocation with expired proof. */ }
         catch(Exception)
         {
             // Commit retry state even if the caller/network deadline has elapsed. Never restore ordinary access.
@@ -344,6 +351,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             await tx.CommitAsync(cleanup.Token);throw new BffError("BFF_UNAVAILABLE",delay);
         }
         await FinishLogout(c,id,budget.Token);await tx.CommitAsync(budget.Token);
+        if(localOnly)LogoutLocalOnly.Add(1,new KeyValuePair<string,object?>("reason","access_proof_rejected"));
     }
     private static Task<int> FinishLogout(NpgsqlConnection c,Guid id,CancellationToken cancellation)=>
         BffStore.Execute(c,"UPDATE bff_sessions SET status='Closed',sealed_tokens=NULL,sealed_logout_access=NULL,logout_retry_at=NULL WHERE id=@id",cancellation,("id",id));

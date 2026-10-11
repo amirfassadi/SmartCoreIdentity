@@ -252,3 +252,25 @@ BffMaintenance hosted service, race two cookie-free sweepers, exercise legacy
 intent conversion and expiry cleanup, prune success-only samples, and check durable
 probe ambiguity loss without counting definitive 401. Exact evidence is recorded
 in [VERIFICATION.md](VERIFICATION.md).
+
+
+## Logout wait budget and maintenance telemetry
+
+Logout intent acquisition again sets transaction-local lock_timeout to the
+contender budget (17 seconds by default); lock timeout returns BFF_BUSY before
+any intent or network dispatch. The total cancellation deadline remains the
+outer limit, not the normal row-lock wait allowance. Completion still uses
+SKIP LOCKED and its separate owner budget.
+
+BffMaintenance records bff.maintenance.failures with exception_type and logs the
+exception type when a non-shutdown tick fails. The diagnostic uses type only,
+not exception message/stack, connection strings or token material. Shutdown
+cancellation is excluded. Logging/metrics are measurable signals; delivered
+alerts still require the future host/exporter.
+
+After a committed local-only close, bff.logout_local_only records reason
+access_proof_rejected (Identity 401) or absolute_expiry (no upstream request).
+These outcomes do not certify upstream revocation. Normal known-204 logout and
+terminal replay do not count. This process metric can miss an emission if the
+process dies after commit; it is operational telemetry, not the durable probe
+loss total.
