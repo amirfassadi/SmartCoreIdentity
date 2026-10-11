@@ -19,6 +19,8 @@ public sealed class BffStore(string connectionString):IAsyncDisposable
             if(!updated)await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","002_refresh_admission.sql"),cancellation));
             var circuit=(await c.One("SELECT EXISTS(SELECT 1 FROM bff_schema_versions WHERE version=3) AS present"))!.Get<bool>("present");
             if(!circuit)await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","003_refresh_circuit.sql"),cancellation));
+            var recovery=(await c.One("SELECT EXISTS(SELECT 1 FROM bff_schema_versions WHERE version=4) AS present"))!.Get<bool>("present");
+            if(!recovery)await c.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"bff-database","004_circuit_recovery_logout.sql"),cancellation));
         }
         finally {await c.Execute("SELECT pg_advisory_unlock(640902)");}
     }

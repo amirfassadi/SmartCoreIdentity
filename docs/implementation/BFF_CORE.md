@@ -151,3 +151,51 @@ The exact source, successful run and earlier failed candidates are recorded in
 trip the rejection circuit; its threshold is an operational heuristic, not proof
 of misconfiguration. Operators must inspect the cause before reset and calibrate
 its behavior before real traffic.
+
+
+## Recovery circuit and durable logout intent (supersedes latched-core behavior)
+
+Migration 004 adds next_probe_at/probe_session and LogoutRequested. The refresh
+circuit no longer depends on an operator reset to recover: after 60 seconds, a
+conditional database update elects exactly one session for a recovery attempt
+across all instances. A successful elected refresh closes the circuit; failure
+or process death leaves the next opportunity at least another minute away.
+Normal in-flight successes cannot close another session's probe. Dispatch journal
+reconciliation still precedes any send: permission never clears an unmatched
+marker or retries a possibly consumed predecessor. A probe used for reconciliation
+without an HTTP send can consume that minute's permit; this conservative delay
+is preferable to replay. No permanent latch mode is enabled in this core.
+
+A verified configuration NotProcessed receipt can open immediately. Unverified
+403 responses, including WAF/proxy or malformed receipts, need three distinct
+sessions in 30 seconds before opening the deployment circuit. One such response
+quarantines only its session/marker. The existing five-session, 50-percent rule
+for 400/401 remains. Non-403 unverifiable receipt claims still open immediately
+as a receipt-integrity configuration signal. No unverified response authorizes
+marker clearing or predecessor retry. Ordinary successful refresh records only
+a per-session sample and reads committed circuit state; it does not lock the
+singleton row. Only failures and elected recovery write that row. Samples make
+the success denominator observational rather than an exact synchronized counter.
+Controlled concurrency evidence is not a production load certification.
+
+Explicit Logout first commits LogoutRequested while retaining sealed tokens.
+GetAccess/RefreshIfDue now reject that cookie, even if Identity is unavailable.
+A second transaction locks the intent row and calls idempotent Identity logout;
+only a known completion (or access-proof 401 with the previously documented
+revocation limitation) closes and erases material. Concurrent instances serialize
+completion; lost responses leave durable intent for explicit retry. Refresh circuit
+state does not block logout. Intent cannot revert to Active, and refresh cannot
+rotate it. The browser host must expire its cookie immediately and schedule bounded
+logout retries from retained server-side intent; autonomous retry worker/host and
+retention are not implemented by the library. Unfinished intent can be safely
+retried with the same cookie by trusted server code and has no ordinary access.
+
+Operational investigation: inspect bff_refresh_circuit opened_at/reason and
+next_probe_at plus the circuit metric; compare credential/receipt key configuration,
+Identity health and proxy/WAF responses without logging secrets. For organic bulk
+revocation, let the minute probe recover against a live eligible session; for
+configuration failure, repair deployment configuration first. Never delete a
+journal or force-retry its predecessor. Trusted Reset accelerates eligibility
+for a fresh decision only; unmatched dispatch still requires reauthentication.
+Metrics export and alert delivery remain release gates. Permanent lock policy
+requires a separately delivered operator host, alert and accepted runbook.

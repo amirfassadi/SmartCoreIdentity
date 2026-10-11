@@ -153,7 +153,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         using var owner=CancellationTokenSource.CreateLinkedTokenSource(cancellation);owner.CancelAfter(limits.Owner-cleanupBudget);
         var ct=owner.Token;
         if(row is null || !Live(row))throw new BffError("REAUTHENTICATION_REQUIRED");
-        if(await new BffCircuit(store,clock).IsOpen(ct))throw new BffError("BFF_UNAVAILABLE",60);
+        if(!await new BffCircuit(store,clock).Allow(row.Get<Guid>("id"),ct))throw new BffError("BFF_UNAVAILABLE",60);
         var id=row.Get<Guid>("id");var version=row.Get<long>("version");
         // Read journal without locking it in A: B must be able to update it independently.
         var journal=(await BffStore.One(c,"SELECT * FROM bff_refresh_journal WHERE session_id=@id",ct,("id",id)))!;
@@ -229,7 +229,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         catch(RefreshReceiptUnverified rejection) when(dispatched && !commitAttempted)
         {
             using var cleanup=new CancellationTokenSource(cleanupBudget);
-            await new BffCircuit(store,clock).Record(id,rejection.Status,true,cleanup.Token);
+            await new BffCircuit(store,clock).Record(id,rejection.Status,rejection.Status!=403,cleanup.Token);
             throw new BffError("BFF_UNAVAILABLE",60); // Unproven receipt: preserve/quarantine, never CAS-clear.
         }
         catch(Exception failure) when(dispatched)
@@ -238,8 +238,9 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             {
                 using var circuitBudget=new CancellationTokenSource(cleanupBudget);
                 var code=(int)status.Value;
-                if(await new BffCircuit(store,clock).Record(id,code,code==403,circuitBudget.Token))
+                if(await new BffCircuit(store,clock).Record(id,code,false,circuitBudget.Token))
                     throw new BffError("BFF_UNAVAILABLE",60); // Keep unmatched marker and tokens quarantined, never retry.
+                if(code==403)throw new BffError("BFF_UNAVAILABLE",60);
             }
             if(!commitAttempted)
             {
@@ -279,9 +280,16 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         await using var c=await store.Source.OpenConnectionAsync(budget.Token);await using var tx=await c.BeginTransactionAsync(budget.Token);
         await BffStore.Execute(c,"SELECT set_config('lock_timeout',@wait,true)",budget.Token,("wait",((long)limits.LockWait.TotalMilliseconds).ToString()+"ms"));
         var row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",budget.Token,("cookie",Cookie(cookie)));
-        if(row is null || row.Get<string>("status")!="Active"){await tx.CommitAsync(budget.Token);return;}
-        if(await new BffCircuit(store,clock).IsOpen(budget.Token))throw new BffError("BFF_UNAVAILABLE",60);
+        if(row is null || row.Get<string>("status") is not ("Active" or "LogoutRequested")){await tx.CommitAsync(budget.Token);return;}
         var id=row.Get<Guid>("id");var session=row.Get<Guid>("identity_session_id");
+        // Commit user intent before any network call. Cached access and refresh now reject this cookie.
+        if(row.Get<string>("status")=="Active")
+            await BffStore.Execute(c,"UPDATE bff_sessions SET status='LogoutRequested' WHERE id=@id",budget.Token,("id",id));
+        await tx.CommitAsync(budget.Token);
+        await using var completion=await c.BeginTransactionAsync(budget.Token);
+        row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE id=@id FOR UPDATE",budget.Token,("id",id));
+        if(row is null || row.Get<string>("status")!="LogoutRequested"){await completion.CommitAsync(budget.Token);return;}
+        // Logout is idempotent and independent of the refresh circuit; retries cannot consume predecessors.
         using var http=CancellationTokenSource.CreateLinkedTokenSource(budget.Token);http.CancelAfter(limits.Http);
         try{await logout.Logout(Tokens(row).AccessToken,session,Subject(session),http.Token).WaitAsync(http.Token);}
         catch(HttpRequestException e) when(e.StatusCode==System.Net.HttpStatusCode.Unauthorized)
@@ -289,11 +297,11 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         catch(Exception failure)
         {
             if(failure is HttpRequestException {StatusCode:System.Net.HttpStatusCode.Forbidden})
-                await new BffCircuit(store,clock).Record(id,403,true,budget.Token);
+                await new BffCircuit(store,clock).Record(id,403,false,budget.Token);
             throw new BffError("BFF_UNAVAILABLE",1); // No local token erasure; same logout request can be retried safely.
         }
-        await BffStore.Execute(c,"UPDATE bff_sessions SET status='Closed',sealed_tokens=NULL WHERE id=@id AND status='Active'",budget.Token,("id",id));
-        await tx.CommitAsync(budget.Token);
+        await BffStore.Execute(c,"UPDATE bff_sessions SET status='Closed',sealed_tokens=NULL WHERE id=@id AND status='LogoutRequested'",budget.Token,("id",id));
+        await completion.CommitAsync(budget.Token);
     }
     // Host calls this only for a verified Identity Session 401, never for BFF credential 403.
     public async Task RejectAccess(string cookie,Guid expectedSession,CancellationToken cancellation=default)
