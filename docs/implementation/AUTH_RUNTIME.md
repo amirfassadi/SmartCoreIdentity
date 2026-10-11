@@ -4,7 +4,7 @@ Architecture A: Credential evidence is read without locks; Session commits acqui
 
 ## Opt-in surface
 
-`Identity__AuthenticationEnabled=true` enables POST `/auth/login`, GET `/me`, POST `/auth/refresh` and POST `/auth/logout`. Default is disabled. All four require `X-Bff-Client-Key` matching `Identity__BffClientKey` and a trusted opaque `X-Bff-Subject`; self/logout additionally require signed access Bearer. This is an authenticated **test BFF adapter**, not a browser cookie/CSRF implementation or production confidential-client authorization. No token is intended for browser JavaScript. The app continues to refuse Production startup. Recovery enrollment, reset initiation and dual-factor reset completion are available only under the additional recovery-enrollment flag; see PASSWORD_RESET.md. Password change and development operator recovery require the additional flag described below.
+`Identity__AuthenticationEnabled=true` enables POST `/auth/login`, GET `/me`, POST `/auth/refresh` and POST `/auth/logout`. Default is disabled. When enabled, startup also requires a distinct `Identity__RefreshReceiptKey` (at least 32 characters, not the BFF client key); the BFF HTTP adapter shares this independent receipt-verification key. All four require `X-Bff-Client-Key` matching `Identity__BffClientKey` and a trusted opaque `X-Bff-Subject`; self/logout additionally require signed access Bearer. This is an authenticated **test BFF adapter**, not a browser cookie/CSRF implementation or production confidential-client authorization. No token is intended for browser JavaScript. The app continues to refuse Production startup. Recovery enrollment, reset initiation and dual-factor reset completion are available only under the additional recovery-enrollment flag; see PASSWORD_RESET.md. Password change and development operator recovery require the additional flag described below.
 
 Set a separate 32-byte base64 `Identity__AccessSigningKey`, distinct from the existing MAC/material keys, and a BFF client secret at least 32 characters. No values are committed. This development issuer uses standard IdentityModel JWT signing/validation (HS256 only, fixed issuer/audience, signature and lifetime checks, zero clock tolerance). The current key-version identifier is development-v1; managed rotation/JWKS/resource-server integration is still release work. The JWT package is pinned in dependency locks. [Microsoft JWT validation guidance](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication?view=aspnetcore-10.0) is an implementation reference, not security approval of this custom development protocol.
 
@@ -43,3 +43,16 @@ Platform schema 1.2.2 is pinned from `49ea40a50854c447b18afbdd7c2f3116dbee3136` 
 ## Owner continuation disposition — 2026-10-10
 
 After reviewing the one-hour reset cooldown follow-up, the owner selected **retain the current MVP scope**: Person remains Active and suspend/resume/revoke commands are deferred. No administrative eligibility transition is added by this PR. The epoch/revocation acceptance requirements above are mandatory before any such writer is introduced. The next release work is a real BFF with distributed refresh single-flight and recovery onboarding; then actual notification delivery and an explicit contact-release policy. This disposition is not an approval of production rollout.
+
+
+BFF key/subject rejection is now 403 BFF_CREDENTIALS_REJECTED, distinct from
+Session/proof 401. Authentication subset 0.8.0 defines nonce-bound non-consumption
+receipts for pre-invocation configuration/validation failures as well as admission
+rate/busy rejection. The BFF derives its subject from the Identity session using
+its own purpose-bound MAC, not a singleton adapter constant. Shared BFF migration
+003 implements the latched operational circuit; see BFF_CORE.md for thresholds,
+quarantine and operator-reset requirements. A circuit reset never permits reuse
+of an unmatched dispatch predecessor. Core Logout calls Identity before erasing
+tokens and permits safe retry of idempotent logout after response loss. Browser
+route wiring, private BFF operator hosting, alert export/delivery and replicated
+failover acceptance remain release work.

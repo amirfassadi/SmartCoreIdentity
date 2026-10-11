@@ -277,6 +277,18 @@ internal static class BffRefreshChecks
             Check(await Generation(badConfig.Tokens)==1,"operator reset after credential repair safely rotates known non-consumed predecessor");
             Check(subjects.Count>1 && subjects.All(Input.Secret) && subjects.Distinct().Count()>1,
                 "one HTTP adapter derives opaque admission subjects per session rather than per instance");
+            await circuit.Reset();
+            var keyMismatch=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeMismatch=httpCalls;
+            using(var mismatched=new IdentityRefreshHttp(new Uri(address+"/"),Secrets.Token(),Secrets.Token(),true))
+            {
+                try{await new BffRefresh(storeA,secrets,clock,mismatched).RefreshIfDue(keyMismatch.Cookie,BffActivity.UserAction);throw new Exception("Expected mismatched receipt quarantine");}
+                catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            }
+            var mismatchState=await State(keyMismatch.Tokens);
+            Check(mismatchState.Has("sealed_tokens") && (await sql.One("SELECT attempt_id FROM bff_refresh_journal WHERE session_id=@id",("id",mismatchState.Get<Guid>("id"))))!.Has("attempt_id"),
+                "both credential and receipt key mismatch quarantines material and durable dispatch instead of clearing or retrying");
+            await circuit.Reset();await Reauth(async()=>{await networkB.RefreshIfDue(keyMismatch.Cookie,BffActivity.UserAction);});
+            Check(httpCalls==beforeMismatch+1,"operator circuit reset does not retry a rejection without verified non-consumption");
             await circuit.Reset();httpMode="raw401";
             var cohort=new List<(string Cookie,SessionTokens Tokens)>();
             for(var n=0;n<6;n++){cohort.Add(await Fixture());advance(TimeSpan.FromMinutes(13));}
@@ -341,12 +353,15 @@ internal static class BffRefreshChecks
             await Reauth(async()=>{await networkA.GetAccess(access401.Cookie);});
             Check(!(await State(access401.Tokens)).Has("sealed_tokens"),"Identity Session 401 from fast-path access terminalizes the matching BFF session");
             httpMode="random-kill";
+            var fuzzSeed=RandomNumberGenerator.GetInt32(int.MaxValue);var fuzzRandom=new Random(fuzzSeed);
+            Console.WriteLine("BFF RANDOM KILL SEED: "+fuzzSeed);
             for(var n=0;n<6;n++)
             {
+                var killDelay=fuzzRandom.Next(5,160);
                 var fuzz=await Fixture();advance(TimeSpan.FromMinutes(13));var beforeFuzz=httpCalls;
                 await using(var victim=await BffProcessPeer.Peer.Start(Config(fuzz.Cookie) with {HoldAfterDone=true}))
                 {
-                    await victim.Go();await Task.Delay(Random.Shared.Next(5,160));await victim.Kill();
+                    await victim.Go();await Task.Delay(killDelay);await victim.Kill();
                 }
                 using(var settled=new CancellationTokenSource(TimeSpan.FromSeconds(5)))
                     while(Volatile.Read(ref httpActive)!=0)await Task.Delay(10,settled.Token);
@@ -356,7 +371,7 @@ internal static class BffRefreshChecks
                 var reuse=(await sql.One("SELECT count(*) AS n FROM auth_refresh_security_events WHERE session_id=@id AND type='RefreshTokenReuseDetected'",("id",fuzz.Tokens.SessionId)))!.Get<long>("n");
                 Check(httpCalls<=beforeFuzz+1 && await Generation(fuzz.Tokens)<=1 && reuse==0
                     && (outcome.StartsWith("DONE:",StringComparison.Ordinal) && !marker.Has("attempt_id") || outcome=="ERROR:REAUTHENTICATION_REQUIRED" && !fuzzState.Has("sealed_tokens")),
-                    "random real process kill during ten parallel decisions preserves no-reuse and single-rotation invariants");
+                    "random real process kill trial "+n+" delay "+killDelay+"ms seed "+fuzzSeed+" preserves no-reuse and single-rotation invariants");
             }
             await host.StopAsync();
         }
