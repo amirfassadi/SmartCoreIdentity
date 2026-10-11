@@ -301,3 +301,62 @@ forbids deleting journals or force-retrying predecessors. A future permanent lat
 policy needs the operator host, delivered alert and an accepted operational runbook.
 Platform PR #11 merge/canonical pin verification still precedes Identity release;
 no main merge or production/VPS change was performed.
+
+
+## Dispatch-only probe election and cookie-free logout maintenance — 2026-10-11
+
+Verified runtime `af2704cd6088229448b7502bf7508ff082cfe230`, tree
+`22034ef64f8511f2480b26c7603bfef28ae612aa`: native PostgreSQL 17
+[run 38125504097](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38125504097),
+job `114428918204`, completed SUCCESS: **298 C# checks**, including **100 BFF
+checks**, **323 emitted-event validations**, all five API HTTP smokes, and zero
+build warnings. Documentary run `38125504091` passed. The subsequent evidence
+commit is documentation-only.
+
+Probe acquisition now follows journal reconciliation, due and admission-backoff
+checks, immediately before durable dispatch. Five non-due refresh calls with an
+open circuit return valid access without acquiring a probe or making HTTP requests.
+The first candidate `197e004` failed run `38125173635`, job `114427924457`, at an
+old expectation: immediate retry expected BFF_UNAVAILABLE but now correctly received
+BFF_BUSY from persisted admission backoff before probe election. The expectation
+was corrected; revision `1fbc05b` passed complete run `38125416118`. No runtime
+acceptance threshold was relaxed or failed run retried in place.
+
+Migration 005 replaces each new logout intent's full sealed bundle with separately
+sealed access-only proof in the same transaction. Native tests decrypt the intent
+proof to verify it is exactly the access token and confirm sealed_tokens is NULL.
+CompleteLogout/SweepLogout use trusted session ids, never a cookie. Tests verify
+initial and increasing persisted backoff, actual hosted-service completion after
+cookie deletion, two independent pools racing a single idempotent completion,
+conversion of legacy intents before network work, and expires_at cleanup with no
+upstream request. Logout intent still cannot restore ordinary access.
+
+BffMaintenance ticks every two seconds and prunes up to one thousand old samples
+per tick before sweeping at most twenty due/expired intents; each tick is bounded
+to ninety seconds. Success-only sample pruning passed without triggering a failure
+path. It is supplied and tested as a BackgroundService, not automatically running
+in a nonexistent browser host: that future host must register the service and
+provide matching BFF store/keys and trusted Identity adapter. Broader retention and
+production maintenance capacity remain release work.
+
+Probe dispatch and ambiguity are durably identified in the journal. One uncertain
+probe terminalization adds exactly one ProbeLossCount and repeated terminal reads
+do not add another; a definitive Identity 401 is excluded. The process metric
+bff.refresh.probe_sessions_lost is emitted after the loss flag commit; the database
+count is authoritative across restart. A real user session may be lost when its
+probe rotation has an ambiguous outcome under zero grace; no synthetic session or
+unsafe retry is introduced. Aggregate persisted counts before future journal purge.
+
+Latest controlled sample-write contention result: twenty distinct sessions across
+two pools completed in 4.28 ms while the circuit singleton was held FOR UPDATE.
+This is not a full refresh load benchmark. Six random real process kills passed
+with seed `1225063783`, as did named-boundary kills and two-process single-flight.
+Reset completion p90 real/decoy/suppressed: 219.99/219.81/220.96 ms; initiation:
+219.79/220.05/222.46 ms. Twelve samples per group remain regression evidence only;
+all original timing gates are unchanged.
+
+Release gates remain alert/metrics delivery, full production load/timing acceptance,
+replicated database failover, browser cookie/CSRF/Origin integration with registered
+maintenance, notification delivery and contact-release policy. Platform PR #11 merge
+and canonical provenance verification precede Identity release. No main merge or
+production/VPS change was performed.

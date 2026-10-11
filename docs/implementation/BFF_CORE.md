@@ -200,7 +200,7 @@ for a fresh decision only; unmatched dispatch still requires reauthentication.
 Metrics export and alert delivery remain release gates. Permanent lock policy
 requires a separately delivered operator host, alert and accepted runbook.
 
-Latest verified runtime `6fe9d69` passes 82 BFF checks within 280 C# checks,
+Previous verified runtime `6fe9d69` passes 82 BFF checks within 280 C# checks,
 305 event-schema validations and all five API HTTP smokes. The controlled
 20-session sample-write test completed in 3.14 ms across two pools while the
 singleton circuit row was held FOR UPDATE. This measures only sample writes,
@@ -245,3 +245,10 @@ repeated terminal requests do not increment it. Restart can lose an in-memory
 metric emission, so the persisted count is authoritative. A quarantined attempt
 is counted only when it becomes terminal; a definitive Identity 401 is excluded. Alert delivery and a full production
 load test remain release requirements.
+
+Latest verified runtime `af2704c` passes 100 BFF checks within 298 C# checks,
+323 emitted-event validations and all five API HTTP smokes. Tests start the actual
+BffMaintenance hosted service, race two cookie-free sweepers, exercise legacy
+intent conversion and expiry cleanup, prune success-only samples, and check durable
+probe ambiguity loss without counting definitive 401. Exact evidence is recorded
+in [VERIFICATION.md](VERIFICATION.md).
