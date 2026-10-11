@@ -6,7 +6,7 @@ BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.
 
 Create seals the trusted login token bundle by BFF session/version, stores only a keyed opaque-cookie verifier and creates the fixed FK journal row in one transaction. GetAccess reads committed active access without row locking. It returns a RefreshDue signal for the host's bounded proactive scheduler; the library never starts detached background tasks. The host must call RefreshIfDue with its trusted activity classification around 80% of the issued access lifetime and for due foreground activity, even when cached access is still valid. Expired-access callers wait for a current successor; they cannot fall back to an expired token.
 
-RefreshIfDue locks the session row, re-reads version/deadlines and journal, and uses the committed successor when another instance already satisfies the decision. A second connection commits the journal before exactly one Identity call. The owner stores the successor and attempt/version in its original transaction; cleanup uses attempt/version CAS. A crash, malformed/lost response, HTTP timeout or cancellation after dispatch leaves the durable marker. The current owner marks ReauthenticationRequired when it can commit within its reserved cleanup time; otherwise a later refresh owner recognizes exact committed success or irreversibly marks ReauthenticationRequired, erases tokens and never calls Identity with the abandoned predecessor. Already-valid cached access may still be used until that terminal state is committed or its remaining lifetime expires; this is the explicitly accepted bounded fast-path race, not permission to retry refresh. Full upstream logout orchestration is not delivered; Close only closes the local BFF cookie state and erases tokens.
+RefreshIfDue locks the session row, re-reads version/deadlines and journal, and uses the committed successor when another instance already satisfies the decision. A second connection commits the journal before exactly one Identity call. The owner stores the successor and attempt/version in its original transaction; cleanup uses attempt/version CAS. A crash, malformed/lost response, HTTP timeout or cancellation after dispatch leaves the durable marker. The current owner marks ReauthenticationRequired when it can commit within its reserved cleanup time; otherwise a later refresh owner recognizes exact committed success or irreversibly marks ReauthenticationRequired, erases tokens and never calls Identity with the abandoned predecessor. Already-valid cached access may still be used until that terminal state is committed or its remaining lifetime expires; this is the explicitly accepted bounded fast-path race, not permission to retry refresh. Logout now calls Identity before local erasure; Close remains local cleanup only. Browser hosting is not delivered.
 
 The concrete IdentityRefreshHttp adapter owns a non-redirecting, non-retrying HttpClient, bounds response bytes and uses caller deadline cancellation. HTTPS is required; explicit development loopback HTTP is available for future native HTTP acceptance. The coordinator applies 5-second HTTP, 15-second owner (including a reserved 20% cleanup budget) and 17-second contender budgets; a PostgreSQL transaction cap covers wait plus owner time. Production transport credentials, signing/JWKS validation and hosting isolation remain release work.
 
@@ -55,10 +55,7 @@ This exercises OS death/connection release, not a thrown simulated crash. It
 still uses one PostgreSQL server and a controlled Identity HTTP bridge: replicated
 failover, browser host, production load and pool saturation remain release gates.
 
-Browser orchestration must invoke idempotent Identity logout before erasing the
-access token locally. Identity 401 on a cached access resource call must close the
-BFF session; neither upstream logout nor that resource-call handler exists in
-this core-only slice. They must precede exposing browser routes.
+The core Logout/RejectAccess methods below supply upstream-first logout and Session-401 closure. A browser host must wire them before exposing routes.
 
 Verified runtime `9a9da68b203036c2beaf8bb37cccc5c1c5616a01` passed native
 PostgreSQL 17 CI with **44 BFF checks within 242 total C# checks**, 256
@@ -113,3 +110,24 @@ at most one rotation, zero predecessor reuse, and either committed-success
 cleanup or terminal reconciliation of every unmatched marker. A terminal marker
 is retained as audit evidence; it is resolved, not retryable. Trials cover a small
 random sample, not exhaustive interleavings or replicated database failover.
+
+
+## Upstream-first logout
+
+IdentityRefreshHttp implements IIdentityLogout without redirects or automatic
+retries. BffRefresh.Logout holds the session row lock, reads current token material,
+calls the bound Identity logout with that access proof and session, then erases
+tokens and commits local Closed state. HTTP response loss/timeout/dependency
+failure keeps local material and returns BFF_UNAVAILABLE; another instance can
+retry the same idempotent logout. A local terminal replay sends no HTTP request.
+The existing Close method remains local-only cleanup and must not serve explicit
+browser logout. Logout 403 preserves tokens and opens the configuration circuit.
+A logout 401 closes the local user session; it does not certify upstream revocation
+when the access proof is expired. The documented bounded Identity expiry remains.
+
+RejectAccess accepts a trusted host's Identity Session-401 result and checks the
+expected Identity session id under the row lock before local terminalization.
+It feeds the same distinct-session rejection circuit; an open/triggered circuit
+preserves the local state. This must never be called for BFF credential 403 or an
+untrusted browser assertion. The core provides the methods; HTTP browser routes,
+CSRF/Origin protection and operator/alert hosting remain pending.

@@ -161,7 +161,7 @@ internal static class BffRefreshChecks
             "definitive Identity revocation requires login but is excluded from uncertain-outcome ratio");
         // Exercise the concrete non-redirecting HTTP adapter through a loopback Identity bridge.
         // This is not the complete Identity middleware/BFF browser host.
-        var httpActive=0;var subjects=new ConcurrentQueue<string>();var httpCalls=0;var trapCalls=0;var httpMode="normal";var httpKey=Secrets.Token();var receiptKey=Secrets.Token();
+        var logoutCalls=0;var logoutMode="normal";var httpActive=0;var subjects=new ConcurrentQueue<string>();var httpCalls=0;var trapCalls=0;var httpMode="normal";var httpKey=Secrets.Token();var receiptKey=Secrets.Token();
         var httpBuilder=WebApplication.CreateSlimBuilder(new WebApplicationOptions {EnvironmentName="Development"});
         httpBuilder.Logging.ClearProviders();httpBuilder.WebHost.ConfigureKestrel(k=>k.Listen(IPAddress.Loopback,0));
         await using(var host=httpBuilder.Build())
@@ -199,6 +199,20 @@ internal static class BffRefreshChecks
                     await context.Response.WriteAsJsonAsync(rotated,cancellationToken:context.RequestAborted);
                 }
                 catch(ApiError error){context.Response.StatusCode=error.Status;}
+            });
+            host.MapPost("/auth/logout",async(HttpContext context)=>
+            {
+                Interlocked.Increment(ref logoutCalls);
+                if(context.Request.Headers["X-Bff-Client-Key"]!=httpKey || !Input.Secret(context.Request.Headers["X-Bff-Subject"].ToString()))
+                {context.Response.StatusCode=403;return;}
+                var header=context.Request.Headers.Authorization.ToString();
+                try
+                {
+                    var proof=signer.Read(header[7..],client);await auth.Logout(proof);
+                    if(logoutMode=="lost"){context.Abort();return;}
+                    context.Response.StatusCode=204;
+                }
+                catch(ApiError e){context.Response.StatusCode=e.Status;}
             });
             host.MapPost("/trap",()=>{Interlocked.Increment(ref trapCalls);return Results.NoContent();});
             await host.StartAsync();
@@ -307,6 +321,25 @@ internal static class BffRefreshChecks
                         && !(await State(killed.Tokens)).Has("sealed_tokens"),
                         "actual process kill at "+stage+" releases row lock but retains durable marker; survivor never resends");
             }
+            var logoutFixture=await Fixture();logoutMode="lost";var beforeLogout=logoutCalls;
+            try{await networkA.Logout(logoutFixture.Cookie);throw new Exception("Expected lost logout response");}
+            catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            Check((await State(logoutFixture.Tokens)).Has("sealed_tokens") && (await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",logoutFixture.Tokens.SessionId)))!.Get<string>("status")=="Closed",
+                "lost real HTTP logout response preserves BFF material after Identity has closed the session");
+            logoutMode="normal";await networkB.Logout(logoutFixture.Cookie);await networkA.Logout(logoutFixture.Cookie);
+            var logoutEvents=(await sql.One("SELECT count(*) AS n FROM auth_domain_event_outbox WHERE event_type='LogoutCompleted' AND session_id=@id",("id",logoutFixture.Tokens.SessionId)))!.Get<long>("n");
+            Check(logoutCalls==beforeLogout+2 && logoutEvents==1 && !(await State(logoutFixture.Tokens)).Has("sealed_tokens"),
+                "retry of idempotent upstream logout commits one Identity event before BFF erasure; terminal local replay sends nothing");
+            var raceLogout=await Fixture();advance(TimeSpan.FromMinutes(13));
+            async Task RaceRefresh(){try{await networkA.RefreshIfDue(raceLogout.Cookie,BffActivity.UserAction);}catch(BffError e)when(e.Code=="REAUTHENTICATION_REQUIRED"){}}
+            await Task.WhenAll(RaceRefresh(),networkB.Logout(raceLogout.Cookie));
+            Check(!(await State(raceLogout.Tokens)).Has("sealed_tokens") && await Generation(raceLogout.Tokens)<=1
+                && (await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",raceLogout.Tokens.SessionId)))!.Get<string>("status")=="Closed",
+                "logout and refresh serialize across pools and close Identity before local erasure without reuse");
+            var access401=await Fixture();var accessSnapshot=await networkA.GetAccess(access401.Cookie);
+            await networkB.RejectAccess(access401.Cookie,accessSnapshot.SessionId);
+            await Reauth(async()=>{await networkA.GetAccess(access401.Cookie);});
+            Check(!(await State(access401.Tokens)).Has("sealed_tokens"),"Identity Session 401 from fast-path access terminalizes the matching BFF session");
             httpMode="random-kill";
             for(var n=0;n<6;n++)
             {

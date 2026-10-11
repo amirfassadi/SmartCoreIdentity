@@ -11,8 +11,9 @@ public enum RefreshStage {BeforeDispatch,DispatchCommitted,ResponseReceived,Succ
 // Development fault seam, never an HTTP request field.
 public interface IRefreshProbe {Task Observe(RefreshStage stage,CancellationToken cancellation);}
 public interface IIdentityRefresh {Task<SessionTokens> Refresh(string token,bool foreground,string subject,CancellationToken cancellation);}
+public interface IIdentityLogout {Task Logout(string accessToken,Guid session,string subject,CancellationToken cancellation);}
 // Own the handler: no redirect or automatic retry may expose/reuse refresh secrets.
-public sealed class IdentityRefreshHttp:IIdentityRefresh,IDisposable
+public sealed class IdentityRefreshHttp:IIdentityRefresh,IIdentityLogout,IDisposable
 {
     private readonly HttpClient client;private readonly string bffKey;private readonly string receiptKey;
     public IdentityRefreshHttp(Uri identity,string bffKey,string receiptKey,bool developmentLoopback=false)
@@ -51,6 +52,16 @@ public sealed class IdentityRefreshHttp:IIdentityRefresh,IDisposable
         }
         return JsonSerializer.Deserialize<SessionTokens>(bytes.AsSpan(0,used),new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow})??throw new InvalidOperationException("Missing successor");
+    }
+    public async Task Logout(string accessToken,Guid session,string subject,CancellationToken cancellation)
+    {
+        using var request=new HttpRequestMessage(HttpMethod.Post,"auth/logout");
+        request.Headers.Add("X-Bff-Client-Key",bffKey);request.Headers.Add("X-Bff-Subject",subject);
+        request.Headers.Authorization=new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",accessToken);
+        request.Content=JsonContent.Create(new {sessionId=session});
+        using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancellation);
+        if(response.StatusCode!=System.Net.HttpStatusCode.NoContent)
+            throw new HttpRequestException("Identity logout rejected",null,response.StatusCode);
     }
     public void Dispose()=>client.Dispose();
 }
@@ -244,7 +255,43 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         await using var c=await store.Source.OpenConnectionAsync(cancellation);
         await BffStore.Execute(c,"UPDATE bff_refresh_journal SET attempt_id=NULL,source_version=NULL,retry_not_before=NULL,admission_rejections=0 WHERE session_id=@id AND attempt_id=@op AND source_version=@version",cancellation,("id",id),("op",attempt),("version",version));
     }
-    // Local cookie closure only; Identity logout orchestration is a later browser slice.
+    // Explicit user logout: keep material until an idempotent upstream outcome is known.
+    public async Task Logout(string cookie,CancellationToken cancellation=default)
+    {
+        if(identity is not IIdentityLogout logout)throw new InvalidOperationException("Identity logout adapter required");
+        using var budget=CancellationTokenSource.CreateLinkedTokenSource(cancellation);budget.CancelAfter(limits.LockWait+limits.Owner);
+        await using var c=await store.Source.OpenConnectionAsync(budget.Token);await using var tx=await c.BeginTransactionAsync(budget.Token);
+        await BffStore.Execute(c,"SELECT set_config('lock_timeout',@wait,true)",budget.Token,("wait",((long)limits.LockWait.TotalMilliseconds).ToString()+"ms"));
+        var row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",budget.Token,("cookie",Cookie(cookie)));
+        if(row is null || row.Get<string>("status")!="Active"){await tx.CommitAsync(budget.Token);return;}
+        if(await new BffCircuit(store,clock).IsOpen(budget.Token))throw new BffError("BFF_UNAVAILABLE",60);
+        var id=row.Get<Guid>("id");var session=row.Get<Guid>("identity_session_id");
+        using var http=CancellationTokenSource.CreateLinkedTokenSource(budget.Token);http.CancelAfter(limits.Http);
+        try{await logout.Logout(Tokens(row).AccessToken,session,Subject(session),http.Token).WaitAsync(http.Token);}
+        catch(HttpRequestException e) when(e.StatusCode==System.Net.HttpStatusCode.Unauthorized)
+        { /* Identity rejects the access proof: user logout still closes the local session. */ }
+        catch(Exception failure)
+        {
+            if(failure is HttpRequestException {StatusCode:System.Net.HttpStatusCode.Forbidden})
+                await new BffCircuit(store,clock).Record(id,403,true,budget.Token);
+            throw new BffError("BFF_UNAVAILABLE",1); // No local token erasure; same logout request can be retried safely.
+        }
+        await BffStore.Execute(c,"UPDATE bff_sessions SET status='Closed',sealed_tokens=NULL WHERE id=@id AND status='Active'",budget.Token,("id",id));
+        await tx.CommitAsync(budget.Token);
+    }
+    // Host calls this only for a verified Identity Session 401, never for BFF credential 403.
+    public async Task RejectAccess(string cookie,Guid expectedSession,CancellationToken cancellation=default)
+    {
+        await using var c=await store.Source.OpenConnectionAsync(cancellation);await using var tx=await c.BeginTransactionAsync(cancellation);
+        var row=await BffStore.One(c,"SELECT id,identity_session_id,status FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",cancellation,("cookie",Cookie(cookie)));
+        if(row is not null && row.Get<string>("status")=="Active" && row.Get<Guid>("identity_session_id")==expectedSession)
+        {
+            if(await new BffCircuit(store,clock).Record(row.Get<Guid>("id"),401,false,cancellation))throw new BffError("BFF_UNAVAILABLE",60);
+            await BffStore.Execute(c,"UPDATE bff_sessions SET status='ReauthenticationRequired',sealed_tokens=NULL WHERE id=@id AND status='Active'",cancellation,("id",row.Get<Guid>("id")));
+        }
+        await tx.CommitAsync(cancellation);
+    }
+    // Local-only cleanup; browser explicit logout must call Logout instead.
     public async Task Close(string cookie,CancellationToken cancellation=default)
     {
         await using var c=await store.Source.OpenConnectionAsync(cancellation);await using var tx=await c.BeginTransactionAsync(cancellation);
