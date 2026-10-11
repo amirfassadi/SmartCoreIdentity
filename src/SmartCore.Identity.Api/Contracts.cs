@@ -30,16 +30,20 @@ public static class Input
         Require(Id(idempotencyKey) && Secret(request.BindingSecret));
         Require(request.Password is { Length: >= 15 and <= 128 });
         Require(!string.IsNullOrWhiteSpace(request.DisplayName) && request.DisplayName.Length <= 100);
-        Require((request.Email is null) != (request.Mobile is null));
-        if (request.Email is not null)
+        return Contact(request.Email,request.Mobile);
+    }
+    public static (string Kind,string Contact) Contact(string? emailInput,string? mobileInput)
+    {
+        Require((emailInput is null) != (mobileInput is null));
+        if (emailInput is not null)
         {
-            var email = request.Email.Trim().ToLowerInvariant();
+            var email = emailInput.Trim().ToLowerInvariant();
             Require(email.Length <= 254 && MailAddress.TryCreate(email, out var parsed)
                 && parsed.Address == email && email.Contains('@') && !email.Any(char.IsWhiteSpace));
             return ("email", email);
         }
-        Require(Regex.IsMatch(request.Mobile!, @"\A\+[1-9][0-9]{1,14}\z"));
-        return ("mobile", request.Mobile!);
+        Require(Regex.IsMatch(mobileInput!, @"\A\+[1-9][0-9]{1,14}\z"));
+        return ("mobile", mobileInput!);
     }
     public static void Validate(VerifyRegistration request)
     {

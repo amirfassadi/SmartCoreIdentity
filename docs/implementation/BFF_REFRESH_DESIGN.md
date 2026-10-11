@@ -1,0 +1,59 @@
+# BFF refresh and foreground contract — implementation design, 2026-10-10
+
+Status: development design for the next slice, **not implemented BFF behavior**. Identity zero-grace refresh, 900-second access lifetime, fixed 86400-second Session lifetime and 1800-second foreground idle remain unchanged. Person eligibility stays Active-only in the selected MVP. Native Identity race coverage does not prove this BFF protocol.
+
+## Browser and server custody
+
+The browser receives only a random opaque BFF session cookie (at least 256 random bits), with Secure, HttpOnly, SameSite=Lax, Path=/ and __Host- naming under HTTPS. Identity access/refresh tokens stay in the shared server-side BFF store, encrypted with purpose/session/version binding. Store only a purpose-bound cookie verifier, never raw cookies in logs. Redact authorization/cookie/token material from transport, tracing and errors. BFF session absolute expiry cannot exceed Identity Session expiry; it cannot revive idle-expired or revoked Identity Sessions. CSRF protection and exact Origin validation apply to user-action and session-changing routes, including login/logout; GET routes must not assert user activity or mutate business state.
+
+The BFF authenticates itself to Identity and derives its stable subject from its own trusted browser/session context, never from a client-supplied X-Bff-Subject. Unauthenticated enrollment/reset flow bindings require their own bounded secure cookie state. Backend tokens, binding secrets and one-time recovery codes must not enter URLs, analytics or persistent browser storage. Recovery-code UI strips display spaces/hyphens and normalizes ASCII case before sending the 32 hex characters; passwords are never normalized.
+
+## Shared store and single-flight
+
+Use the same PostgreSQL store for all BFF instances. Lock the BFF session row with SELECT ... FOR UPDATE, then re-read status, version, current encrypted tokens and both deadlines under that lock. There is no TTL lock or expiring ownership lease. A contending lock-acquisition timeout must not mutate another instance's state or call Identity: return bounded server-busy behavior. All token users, logout and token erasure obey this row serialization.
+
+After the lock, re-evaluate whether refresh is due. If another instance committed a sufficient successor and foreground evidence, use that successor without a second rotation. Never submit the pre-lock snapshot. Store the response's successor, access deadline, original absolute deadline, incremented BFF version and completed attempt ID in the same session transaction while retaining the row lock; release only after commit. No HTTP retry handler, reverse proxy or failover policy may retry Identity refresh after dispatch.
+
+A row lock **alone is insufficient**. Identity can commit rotation before the BFF transaction rolls back or its instance crashes. That rollback would expose the spent predecessor again. Persist dispatch evidence independently before HTTP:
+
+1. Login creates a separate, pre-existing refresh journal row alongside its BFF session. It binds BFF session ID, current token version and one attempt ID, and contains no token or raw proof. Any foreign-key relationship is fixed at creation, not rewritten during refresh.
+2. Connection A retains the session row lock. Connection B updates the existing journal row to Dispatched with attempt ID and source version in a short independent transaction, and durably commits it **before** calling Identity. Updating this non-key journal row must not take the parent's session lock; do not INSERT a new FK-referencing journal row under SELECT FOR UPDATE, which would wait for parent key-share access. All writers take session-row then journal-row order, never the reverse. Budget two connections per active refresh and test pool saturation.
+3. If dispatch-marker commit is uncertain, do not call Identity. Fail closed; the next owner treats an existing marker conservatively. Once dispatch is acknowledged, send exactly one request with the current token.
+4. On verified success, validate the response/session/client/deadlines, write successor and completed attempt ID in connection A, then commit. Only afterwards may the matching journal marker be cleared, using an attempt-ID/source-version compare-and-set so an old cleanup cannot clear a newer dispatch. Never clear dispatch evidence before successor commit.
+5. On timeout, connection loss, malformed response, cancellation after dispatch, non-success without a successor, or BFF commit uncertainty: never resend that predecessor. If the session transaction can commit, mark ReauthenticationRequired and erase tokens. If it cannot, the durable journal marker prevents a later instance from retrying.
+6. On failover/restart, acquire the session lock first. A marker whose exact attempt ID is already recorded as completed with the advanced session version is committed success; safely clear that stale marker and use the successor. An unmatched dispatched marker means OutcomeUnknown: mark ReauthenticationRequired and erase tokens, without an Identity call. Do not resume an abandoned dispatch even when it might never have been sent.
+
+This deliberately loses availability for crashes between marker commit and HTTP, and for lost successful responses; zero grace cannot recover those successors. Database failover must preserve acknowledged journal and successor commits (including synchronous durability requirements); async failover that loses acknowledged writes does not satisfy this protocol. No timer clears dispatch evidence to retry a predecessor. Retention/purge must remove unusable cookie state and journal together, never resurrect a token-bearing session.
+
+## Foreground and proactive refresh
+
+The BFF, not an arbitrary browser boolean, is the authority for Identity's foreground field. Classify each route explicitly:
+
+| Source | Identity foreground | Rule |
+|---|---|---|
+| CSRF-protected, allowlisted user-action route | true when a refresh is actually needed | A UI action such as submitting a form or deliberate navigation/search invokes this route |
+| Polling, prefetch, background sync or scheduled token work | false | Never updates foreground idle evidence |
+| Generic proxy, arbitrary headers/query/body assertions | false | No caller-controlled foreground override |
+
+The UI chooses the user-action route from its interaction handler; BFF route metadata, Origin/CSRF admission and server session binding determine the forwarded assertion. This is an application activity contract, **not proof of a human**: an authenticated client can automate an allowed action. XSS prevention remains essential. Focus/visibility alone, a timer and ordinary GET polling are not user actions. Background refresh cannot queue an automatic foreground heartbeat.
+
+Start access refresh around 80% of each access token's **actual issued lifetime**, using persisted issuance/access-expiry timestamps and bounded earlier jitter, not a fixed 720-second delay that can cross clipped absolute expiry. Perform it when work requires a token; an idle browser does not need an unconditional timer. Re-read due times after the row lock. Respect Session/idle expiry before dispatch and never extend the absolute deadline.
+
+Foreground due-ness is separate from access due-ness. For an allowlisted user action, refresh when access is due **or** the last successful foreground refresh is at least 12 minutes old (or the idle deadline is close). This allows foreground activity to reach Identity even if polling recently obtained a fresh access token. If a foreground contender follows a background rotation, the background successor alone does not satisfy its foreground requirement; re-evaluate against the persisted foreground timestamp. N equivalent parallel foreground requests must still coalesce to one rotation. Update the BFF foreground mirror only after a committed success with foreground=true; a click without refresh, a failed refresh or polling never advances it. Identity remains the authoritative idle clock. Preserve the current semantic: 30 minutes since a successful foreground refresh, not exactly since the last browser click.
+
+## Time budgets, uncertainty and metrics
+
+Choose a short Identity HTTP deadline strictly inside the remaining BFF transaction budget, leaving time for journal commit, successor persistence or fail-closed persistence. Initial development targets are 5 seconds HTTP, 15 seconds total session transaction and 2 seconds contender lock wait; these require measured capacity review, not production SLO claims. Bound journal SQL and pool wait too. Request cancellation after dispatch cannot erase the marker; the durable evidence is the recovery mechanism. PostgreSQL row locks have no TTL, but statement/transaction timeout or disconnection can release them and must be treated as uncertainty once HTTP was dispatched.
+
+Record low-cardinality counters for refresh dispatch, coalesced request, lock timeout, journal failure, HTTP timeout, uncertain successor commit, unmatched dispatch and reauthentication. Never use session/cookie/person IDs as metric labels. Measure Identity's separate reuse count/latency without deliberately retrying a spent token to manufacture measurement. An abandoned successor may produce no reuse event, so BFF uncertainty counters are necessary alongside Identity reuse metrics. Failure-overrun monitoring on reset remains separate; 12 timing samples/group are a regression gate, not statistical channel evidence. Keep declared thresholds and investigate flakes rather than hiding them with automatic test retries or threshold widening; representative load acceptance is still required.
+
+## Required executable acceptance before real BFF release
+
+- N parallel requests against two independent BFF instances sharing a PostgreSQL session produce exactly one Identity rotation and the same committed successor; cover both foreground and background, and mixed ordering.
+- Kill/lose the owner before marker commit, after marker commit before HTTP, after Identity commit before response, and after response before successor commit. An unmatched dispatched version never calls Identity again, and login is required.
+- Lose the BFF successor commit acknowledgment and crash after successor commit before journal cleanup. Exact committed attempt/version recognition uses the successor without retrying the predecessor.
+- Exercise DB failover with preserved acknowledged writes, connection/pool exhaustion, lock/HTTP/transaction timeouts and caller cancellation. A timed-out contender never disrupts the owner. Measure lock wait and dispatch limits under load.
+- Poll beyond 30 minutes and prove it never renews foreground idle. An allowlisted user action must send true when foreground refresh is due even after a fresh background rotation; arbitrary client flags cannot override classification.
+- Cover clipped access/absolute deadlines, stale cookie/logout races, CSRF/Origin/cookie boundaries, token and trace redaction, replacement-code onboarding and secret erasure. No token is returned to browser JavaScript.
+
+These are acceptance requirements, not reported test results. The next implementation must provide its actual multi-instance PostgreSQL/HTTP evidence. Real confidential-client authorization, production key/role/retention choices, notification delivery and contact-release policy remain independent release dependencies.
