@@ -293,8 +293,8 @@ internal static class BffRefreshChecks
             var safeBad=await State(badConfig.Tokens);
             Check(safeBad.Get<string>("status")=="Active" && safeBad.Has("sealed_tokens") && await Generation(badConfig.Tokens)==0,
                 "wrong BFF credential with independent receipt key preserves active tokens and opens shared circuit");
-            try{await networkB.RefreshIfDue(badConfig.Cookie,BffActivity.UserAction);throw new Exception("Expected open circuit");}
-            catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            try{await networkB.RefreshIfDue(badConfig.Cookie,BffActivity.UserAction);throw new Exception("Expected admission backoff");}
+            catch(BffError e)when(e.Code=="BFF_BUSY"){}
             Check(httpCalls==beforeBad+1,"configuration circuit prevents dispatch from another pool");
             var notDue=await Fixture();var beforeNotDue=httpCalls;
             for(var n=0;n<5;n++)Check((await networkB.RefreshIfDue(notDue.Cookie,BffActivity.Background)).Version==0,"open circuit returns valid non-due access without spending a probe: "+n);
