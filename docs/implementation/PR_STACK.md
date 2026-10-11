@@ -40,17 +40,21 @@ its successor to the canonical branch, resolve any ancestry conflicts and rerun 
 Registration's parent is 0cec3994077b63990a9d0c2d69656e1294e5e33c (PR #2).
 Each following stage's parent is the previous stage's verified runtime commit.
 The identical final BFF/integration trees prove that extraction omitted no files.
-Subsequent documentary/contract commits add this manifest, candidate browser
-contract and verification evidence to both final branches with the same complete
-tree; runtime evidence
-above remains tied to the explicitly listed runtime revisions.
+Subsequent commits add this manifest, browser contract and B1 shell/host
+infrastructure to both final branches with the same complete tree. Historical
+runtime evidence above remains tied to those explicitly listed revisions;
+new browser infrastructure evidence is tracked separately in
+[BFF_BROWSER_HOST.md](BFF_BROWSER_HOST.md) and VERIFICATION.md.
 
 The single current release checklist and SMS ambiguity/abuse requirements are in
 [RELEASE_GATES.md](RELEASE_GATES.md). Product stages A–G and demonstrable completion
 criteria are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md). Core tests do not certify
-these future release gates. Country, SMS provider, framework and domain strategy
-remain open; these documents add no new runtime/browser CI evidence.
+these future release gates. The initial country is Iran and the frontend framework is Next.js; the real SMS
+provider and business-domain strategy remain open. The release-gate documents
+themselves do not certify runtime/browser behavior.
 
-The B1 browser contract (Draft 0.1.0) now exists before host code. Its OpenAPI/schema
-checks are distinct from the historical C# runtime evidence above. The host,
-generated client and Playwright acceptance remain open.
+The B1 browser contract (Draft 0.1.1) was reviewed before host code. A Next fa/en
+shell and a private two-host .NET scaffold now exist; account handlers remain
+unavailable. Schema checks, infrastructure HTTP checks and full Playwright
+acceptance are separate evidence. The generated client, opaque-cookie principal,
+CSRF guards, real HTTPS ingress and full account browser acceptance remain open.

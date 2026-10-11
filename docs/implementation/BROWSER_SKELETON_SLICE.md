@@ -1,7 +1,8 @@
 # Stage B — bilingual browser account skeleton
 
-Status: agreed architecture direction, implementation slice specification; no host,
-frontend, generated BFF client or browser E2E is delivered by this document.
+Status: agreed architecture direction and implementation slice specification.
+The Next shell and private .NET infrastructure scaffold now exist; generated
+client, account handlers and complete browser E2E remain open. See BFF_BROWSER_HOST.md.
 Framework: Next.js App Router, React, TypeScript, Tailwind CSS. Initial UI locales:
 fa and en. Initial market remains Iran; adding a language does not authorize sending
 SMS to another country. Scope: account UI and a dashboard shell. Business domains,
@@ -321,7 +322,8 @@ https://next-intl.dev/ (routing and ICU support). Existing runtime scope/evidenc
 
 B1 draft contract is now [bff-browser.openapi.yaml](../../contracts/bff-browser.openapi.yaml).
 It covers exactly five paths, before any host code. Schema/example checks are
-documentary candidate evidence; live response validation is still a B1 host task.
+documentary candidate evidence. Infrastructure HTTP checks validate scaffold
+responses against this file; authenticated handler/browser validation remains open.
 Primary configuration references:
 https://next-intl.dev/docs/routing/configuration and
 https://learn.microsoft.com/aspnet/core/security/data-protection/configuration/overview .

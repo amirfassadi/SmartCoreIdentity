@@ -78,3 +78,12 @@ controls are a precedence model, not 15 live requests.
 
 B2 must review OTP/register Retry-After again; B3 must review reset cooldowns.
 Do not silently clamp longer upstream cooldowns into the B1 60-second schema.
+
+## Verified infrastructure CI
+
+Code revision `d3bae2be0ac4289af724cadbd3b561664f1e3ee9` passed
+[Browser B1 infrastructure run 38142922769](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38142922769).
+Both job logs were inspected: production Next HTTP checks and actual two-host
+PostgreSQL 17 routing/shared encrypted key-ring checks passed. Integration revision
+`135bdafcef525d7f872d7da8c12067660e72ada9` has the same complete code tree and passed
+run 38142923724. This is not a completed login/CSRF/browser acceptance result.
