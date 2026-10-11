@@ -487,6 +487,11 @@ internal static class BffRefreshChecks
             Check(await storeA.ProbeLossCount()==beforeProbeLoss+1,"uncertain elected probe records exactly one durable lost-session count on reconciliation");
             await Reauth(async()=>{await networkB.RefreshIfDue(lostProbe.Cookie,BffActivity.UserAction);});
             Check(await storeA.ProbeLossCount()==beforeProbeLoss+1,"repeated terminal reads never double-count a lost probe session");
+            var revokedProbe=await Fixture();advance(TimeSpan.FromMinutes(13));await circuit.Record(Guid.NewGuid(),403,true,CancellationToken.None);advance(TimeSpan.FromSeconds(61));
+            var beforeDefinitive=await storeA.ProbeLossCount();httpMode="raw401";
+            try{await networkA.RefreshIfDue(revokedProbe.Cookie,BffActivity.UserAction);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            await circuit.Reset();httpMode="normal";await Reauth(async()=>{await networkB.RefreshIfDue(revokedProbe.Cookie,BffActivity.UserAction);});
+            Check(await storeA.ProbeLossCount()==beforeDefinitive,"definitive Identity 401 during a probe is excluded from ambiguity-loss metric");
             logoutMode="normal";
             var raceLogout=await Fixture();advance(TimeSpan.FromMinutes(13));
             async Task RaceRefresh(){try{await networkA.RefreshIfDue(raceLogout.Cookie,BffActivity.UserAction);}catch(BffError e)when(e.Code=="REAUTHENTICATION_REQUIRED"){}}

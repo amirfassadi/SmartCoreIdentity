@@ -238,10 +238,10 @@ a release gate. No browser cookie, token or secret is an input to the worker.
 
 A probe is a real eligible user's rotation, not a synthetic health request.
 Ambiguous delivery can cost that user's session under zero grace. The dispatch
-journal durably records probe_dispatch and probe_loss_recorded; a terminal
+journal durably records probe_dispatch, probe_uncertain and probe_loss_recorded; a terminal
 uncertain probe increments bff.refresh.probe_sessions_lost only after committing
 its loss flag. BffStore.ProbeLossCount is the durable distinct-session total;
 repeated terminal requests do not increment it. Restart can lose an in-memory
 metric emission, so the persisted count is authoritative. A quarantined attempt
-is counted only when it becomes terminal. Alert delivery and a full production
+is counted only when it becomes terminal; a definitive Identity 401 is excluded. Alert delivery and a full production
 load test remain release requirements.

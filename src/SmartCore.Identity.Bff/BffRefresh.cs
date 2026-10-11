@@ -183,7 +183,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             {
                 await using var markerTx=await marker.BeginTransactionAsync(ct);
                 var changed=await BffStore.Execute(marker,"""
-                    UPDATE bff_refresh_journal SET attempt_id=@op,source_version=@version,probe_dispatch=@probe,probe_loss_recorded=false,
+                    UPDATE bff_refresh_journal SET attempt_id=@op,source_version=@version,probe_dispatch=@probe,probe_loss_recorded=false,probe_uncertain=true,
                      first_dispatched_at=coalesce(first_dispatched_at,@now),last_dispatched_at=@now
                     WHERE session_id=@id AND attempt_id IS NULL
                     """,ct,("op",operation),("version",version),("now",Now),("id",id),("probe",permit.Probe));
@@ -238,6 +238,12 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         }
         catch(Exception failure) when(dispatched)
         {
+            if(failure is HttpRequestException {StatusCode:System.Net.HttpStatusCode.Unauthorized} || failure is ApiError {Status:401})
+            {
+                using var certainty=new CancellationTokenSource(cleanupBudget);
+                await using var evidence=await store.Source.OpenConnectionAsync(certainty.Token);
+                await BffStore.Execute(evidence,"UPDATE bff_refresh_journal SET probe_uncertain=false WHERE session_id=@id AND attempt_id=@op AND source_version=@version",certainty.Token,("id",id),("op",operation),("version",version));
+            }
             if(!commitAttempted && failure is HttpRequestException {StatusCode:var status} && status is not null)
             {
                 using var circuitBudget=new CancellationTokenSource(cleanupBudget);
@@ -278,7 +284,7 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
         await BffStore.Execute(c,"UPDATE bff_refresh_journal SET attempt_id=NULL,source_version=NULL,retry_not_before=NULL,admission_rejections=0 WHERE session_id=@id AND attempt_id=@op AND source_version=@version",cancellation,("id",id),("op",attempt),("version",version));
     }
     private static async Task<bool> CountProbeLoss(NpgsqlConnection c,Guid id,CancellationToken cancellation)=>
-        await BffStore.Execute(c,"UPDATE bff_refresh_journal SET probe_loss_recorded=true WHERE session_id=@id AND probe_dispatch AND NOT probe_loss_recorded",cancellation,("id",id))==1;
+        await BffStore.Execute(c,"UPDATE bff_refresh_journal SET probe_loss_recorded=true WHERE session_id=@id AND probe_dispatch AND probe_uncertain AND NOT probe_loss_recorded",cancellation,("id",id))==1;
     private static string LogoutPurpose(Guid id,long version)=>"bff-logout-access:"+id+":"+version.ToString(System.Globalization.CultureInfo.InvariantCulture);
     public async Task Logout(string cookie,CancellationToken cancellation=default)
     {
