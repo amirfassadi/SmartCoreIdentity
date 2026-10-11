@@ -481,3 +481,19 @@ Initial infrastructure CI passed the Next production job and reached two-host
 response validation, then exposed an adapter mismatch: actual uppercase HTTP
 methods were not normalized for lowercase OpenAPI operation lookup. The validator
 now normalizes methods and has an uppercase GET fixture; fresh CI is required.
+
+Fresh B1 infrastructure CI is now verified on code commit
+`d3bae2be0ac4289af724cadbd3b561664f1e3ee9` (tree
+`0eca4fc77223fc6f1c5c0392c7ebea2b4f7c6ac7`):
+[run 38142922769](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38142922769)
+completed successfully. Job 114480289913 passed the production Next build and HTTP
+checks; job 114480290078 built the host with zero warnings/errors and passed
+actual two-host PostgreSQL 17 readiness/routing, rejected startup configurations
+and the encrypted cross-process key-ring proof. Both jobs' logs were inspected.
+The identical code tree on integration commit
+`135bdafcef525d7f872d7da8c12067660e72ada9` also passed infrastructure run 38142923724.
+Documentary runs 38142922765 and 38142923718 succeeded on those same revisions.
+The initial uppercase-method adapter failure is superseded by these fresh runs.
+This evidence covers infrastructure only; task-5/6 guards/account handlers and
+actual browser hydration/HTTPS ingress remain unimplemented.
+The documentation refresh passes 20 archive hashes, 17 documents and 64 links.
