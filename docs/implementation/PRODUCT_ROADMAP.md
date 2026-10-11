@@ -48,12 +48,39 @@ must cover tenant resolution and cookie isolation before publishing multiple sit
 
 | Decision | Required input | Current position |
 | --- | --- | --- |
-| Frontend framework | Owner/team experience and maintenance preference | SSR required; framework not selected; do not presume team experience |
+| Frontend framework | Owner decision; team familiarity is not a constraint | Proposed: Next.js App Router + React + TypeScript; existing ASP.NET Core BFF remains session owner |
 | Business-site domains | Initial hosting/domain plan and tenant isolation | Subdomain vs custom-domain rollout undecided |
-| Initial users' country | Owner's initial market | Undecided; controls SMS provider and allowed countries |
+| Initial users' country | Owner's initial market | Iran, confirmed 2026-10-11; provider selection remains open |
 | OTP channels | Agreed product policy | SMS first for real users; email remains valid; both use test inbox in development |
 
 Release requirements and SMS ambiguity/abuse policy have one current source:
 [RELEASE_GATES.md](RELEASE_GATES.md). Dependency/tree evidence remains in
 [PR_STACK.md](PR_STACK.md). CI counts are cumulative historical evidence, not proof
 that future stages or browser/provider paths are implemented.
+
+## Frontend recommendation (proposed, not yet implemented)
+
+Next.js App Router with React and TypeScript, with Tailwind CSS for the shared
+responsive design system. Use server rendering for public sites and limited client
+components for the calendar, booking flow and owner tools. This is a product choice
+for the three surfaces, not an assumption about owner/team familiarity. Keep the
+existing ASP.NET Core BFF and Identity; do not duplicate refresh/session ownership
+in Next.js. A single HTTPS origin routes page requests to Next.js and /bff requests
+to ASP.NET Core. Server-rendered account reads call the BFF over the internal route
+with the session cookie; authenticated responses and one-time recovery material
+must never enter shared caches. Browser mutations retain BFF CSRF/Origin checks.
+
+Tradeoff: an additional Node.js runtime and explicit SSR cookie forwarding/cache
+isolation to operate. Pin supported dependency versions when implementation starts.
+Razor Pages would simplify hosting, but Next.js is the proposed basis for the future
+interactive owner dashboard and customizable public site. This proposal awaits owner
+acceptance and creates no frontend files or new runtime evidence.
+
+Primary references consulted 2026-10-11:
+https://nextjs.org/docs/app/getting-started/server-and-client-components and
+https://nextjs.org/docs/app/guides/self-hosting . Next.js supports self-hosting;
+Vercel hosting is not a requirement. Initial locale is fa-IR with RTL. Normalize
+Persian/Arabic digits in phone/OTP inputs; store timestamps canonically and localize
+date/calendar presentation separately. Provider selection must now assess Iranian
+operator coverage and sender/template requirements without assuming any vendor's
+idempotency/status support.

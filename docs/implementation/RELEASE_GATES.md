@@ -12,7 +12,7 @@ main merge, production/VPS change or real SMS purchase is authorized by this fil
 | --- | --- | --- |
 | Canonical contract | Platform PR #11 merged first; Identity pin/provenance compared to canonical Platform schema 1.2.2; applicable OpenAPI validation passes | Platform merge/provenance open |
 | Browser account path | Same-origin BFF host and Playwright flow: registration, login, refresh, logout, reset, login with new password and replacement recovery enrollment | Host/browser E2E not implemented |
-| OTP delivery | Real SMS adapter behind a provider-neutral interface and durable notification queue; destination-country delivery and sender/template registration verified | SMS selected first; country/provider undecided |
+| OTP delivery | Real SMS adapter behind a provider-neutral interface and durable notification queue; destination-country delivery and sender/template registration verified | SMS selected first; Iran confirmed; provider undecided |
 | SMS pumping | Allowed-country list enforced before enqueue/send; destination and trusted-subject budgets independent of Person; aggregate spend ceiling, provider hard cap and delivered alerts; concurrent-instance enforcement tested | Required before provider activation |
 | Delivery ambiguity | Durable attempt journal, explicit outcomes, safe provider idempotency/status reconciliation, duplicate/reordered webhook tests | Design below; adapter/worker pending |
 | Operational alerts | Circuit opening/probe losses, maintenance failures and account reset limits exported and delivered to an operator; escalation/runbook tested | Signals exist; delivery pending |
@@ -21,12 +21,14 @@ main merge, production/VPS change or real SMS purchase is authorized by this fil
 | Contact release | Manual ownership-safe policy/runbook for recycled phone numbers, disputed ownership and duplicate-registration lockout; audited operator workflow, no contact-only takeover | Pending |
 | LoginFailed retention | Chosen retention duration, cleanup/aggregation, growth limit and contact-data minimization; attacker-driven volume test | Pending |
 | Deployment | TLS, secure cookie policy, secret provisioning/rotation, restricted operator routes, health/metrics and startup configuration reviewed | No production deployment |
-| Product/legal | Recovery-code loss warning, one-time display acknowledgment, applicable privacy/terms and retention notice for chosen market | Pending; market undecided |
+| Product/legal | Recovery-code loss warning, one-time display acknowledgment, applicable privacy/terms and retention notice for chosen market | Pending; initial market Iran |
 
 Budget values, spend amounts, alert destinations and load/failover pass thresholds
 must be recorded before this list is marked complete; naming a gate is not evidence.
 The first real-user release is a closed beta after these gates, not an exception
-to them. SMS country selection follows the users' country, not the VPS location.
+to them. Initial users are in Iran; the first allowed-country policy is Iran-only
+(+98), subject to implementation/testing before sending. SMS selection follows the
+users' country, not the VPS location.
 
 ## Conditional or later work
 
@@ -83,8 +85,8 @@ delivery and proof consumption remain separate facts.
 Provider selection priority: reliable idempotency or status lookup by original client
 reference is a prerequisite ahead of price/delivery ranking. Then compare delivery on
 initial-market operators, OTP routes, sender/template registration, authenticated
-receipts, spending controls and a backup with an explicit ambiguity policy. Country
-and provider remain open; no vendor-specific adapter is selected or implemented here.
+receipts, spending controls and a backup with an explicit ambiguity policy. Initial market is Iran (owner-confirmed 2026-10-11); provider remains open. No
+vendor-specific adapter is selected or implemented here.
 
 ## Development inbox and browser acceptance
 
