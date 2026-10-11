@@ -44,6 +44,8 @@ Subsequent documentation-only commits add this manifest and current verification
 evidence to both final branches with the same complete tree; runtime evidence
 above remains tied to the explicitly listed runtime revisions.
 
-Alert delivery, full load/timing acceptance, replicated failover, browser host
-(cookie/CSRF/Origin and maintenance registration), notification delivery and
-contact-release policy remain release gates. Core tests do not certify those gates.
+The single current release checklist and SMS ambiguity/abuse requirements are in
+[RELEASE_GATES.md](RELEASE_GATES.md). Product stages A–G and demonstrable completion
+criteria are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md). Core tests do not certify
+these future release gates. Country, SMS provider, framework and domain strategy
+remain open; these documents add no new runtime/browser CI evidence.
