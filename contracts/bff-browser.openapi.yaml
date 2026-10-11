@@ -1,0 +1,746 @@
+openapi: 3.1.0
+info:
+  title: SmartCore browser BFF — B1 draft
+  version: 0.1.0
+  description: Contract-first candidate, not an implemented API or release approval. Exactly five B1 paths.
+    Browser uses same configured HTTPS origin and opaque cookies; no Identity tokens/keys or translated error
+    strings. Request-size maximum 16384 bytes. POST requires application/json and declared DTO, including {}
+    for empty requests. Body/schema validation is distinct from CSRF/Origin runtime validation. Header names
+    are case-insensitive.
+servers:
+- url: /
+  description: Same configured HTTPS origin; no cross-origin Identity endpoint.
+x-status: Draft
+x-runtime-implemented: false
+x-platform-contract:
+  version: 1.2.2
+  mergePrerequisite: 'SmartCorePlatform PR #11 and canonical provenance check'
+x-cookie-response-policy:
+  description: x-cookie-actions declares cookie semantics. Multiple Set-Cookie fields stay separate; no combined-header
+    approximation. On pre-side-effect errors preserve existing cookies; authenticated 401 clears session/antiforgery
+    as declared. Header schemas alone cannot prove cookie security/session binding.
+  sessionAttributes:
+  - Secure
+  - HttpOnly
+  - SameSite=Lax
+  - Path=/
+  - No Domain
+  antiforgeryAttributes:
+  - Secure
+  - HttpOnly
+  - SameSite=Lax
+  - Path=/
+  - No Domain
+x-security-headers:
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000 in production HTTPS only; local CI policy separate
+  Content-Security-Policy: HTML nonce/dynamic policy defined in BROWSER_SKELETON_SLICE.md; not applied as a
+    blanket JSON nonce header
+paths:
+  /bff/csrf:
+    get:
+      operationId: getBrowserCsrf
+      description: No request body. Read-only bootstrap after local cookie principal resolution; no Identity
+        call or refresh. Anonymous identity binds to antiforgery cookie only; authenticated token binds to
+        unique BFF session UUID. No auth cookie is issued.
+      security:
+      - {}
+      - bffSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/Csrf200'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/Csrf503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /bff/login:
+    post:
+      operationId: loginBrowser
+      description: Anonymous login only; current active session returns 409 without replacement. Uniform credential
+        failure, no contact enumeration. No automatic login retry on unknown outcome. Fresh /bff/csrf required
+        after success.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              valid:
+                value:
+                  mobile: '+989121234567'
+                  password: ExamplePassword15!
+      responses:
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/Csrf503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '200':
+          $ref: '#/components/responses/Login200'
+        '401':
+          $ref: '#/components/responses/Login401'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /bff/me:
+    post:
+      operationId: readBrowserSession
+      description: Read safe profile; host calls existing RefreshIfDue(Background) as needed, then private
+        Identity /me. Activity derived from this route, never request JSON. Client does not receive/rotate
+        tokens. An Identity access 401 terminalizes matching BFF session.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - bffSession: []
+        antiforgeryCookie: []
+        csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
+            examples:
+              valid:
+                value: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/Csrf503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '200':
+          $ref: '#/components/responses/Me200'
+        '401':
+          $ref: '#/components/responses/Me401'
+  /bff/me/action:
+    post:
+      operationId: readForegroundBrowserSession
+      description: Read safe profile; host calls existing RefreshIfDue(UserAction) as needed, then private
+        Identity /me. Activity derived from this route, never request JSON. Client does not receive/rotate
+        tokens. An Identity access 401 terminalizes matching BFF session.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - bffSession: []
+        antiforgeryCookie: []
+        csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
+            examples:
+              valid:
+                value: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/Csrf503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '200':
+          $ref: '#/components/responses/Me200'
+        '401':
+          $ref: '#/components/responses/Me401'
+  /bff/logout:
+    post:
+      operationId: logoutBrowser
+      description: Validate current-session Origin/CSRF before work. Persist LogoutRequested before dropping
+        cookies; background maintenance completes upstream without a cookie. Repeated valid logout is idempotent.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - bffSession: []
+        antiforgeryCookie: []
+        csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
+            examples:
+              valid:
+                value: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/Logout503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '204':
+          $ref: '#/components/responses/Logout204'
+        '401':
+          $ref: '#/components/responses/Me401'
+components:
+  securitySchemes:
+    bffSession:
+      type: apiKey
+      in: cookie
+      name: __Host-smartcore-session
+      description: Opaque cookie only; no bearer JWT/Identity refresh token. Invalid/expired/terminal server
+        row cannot authenticate.
+    antiforgeryCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-smartcore-antiforgery
+      description: ASP.NET antiforgery cookie, Secure/HttpOnly/SameSite=Lax/Path=/; no Domain. Rotated at login/committed
+        logout; per-session identity binding.
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Request token from GET /bff/csrf; required on every POST with matching cookie and current
+        session principal.
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Must exactly match configured external HTTPS origin; null/missing/foreign rejected. Host/forwarded
+        headers cannot expand allowlist.
+      schema:
+        type: string
+        format: uri
+      example: https://localhost:7443
+    FetchSite:
+      name: Sec-Fetch-Site
+      in: header
+      required: false
+      description: If present allow same-origin or none; other values ORIGIN_REJECTED. Missing does not waive
+        Origin/CSRF.
+      schema:
+        type: string
+        enum:
+        - same-origin
+        - none
+      example: same-origin
+  headers:
+    NoStore:
+      description: Required on every BFF response, including errors.
+      x-required: true
+      schema:
+        type: string
+        const: no-store
+      example: no-store
+    RetryAfter:
+      description: Required for 429/503. Decimal seconds; equals body retryAfterSeconds. Does not authorize
+        automatic command/token retry.
+      x-required: true
+      schema:
+        type: string
+        pattern: ^(?:[1-9]|[1-5][0-9]|60)$
+      example: '1'
+    SetCookie:
+      description: Zero or more separate Set-Cookie header fields (never comma-join). Bootstrap may set antiforgery
+        cookie; login sets a fresh session and clears old antiforgery; committed logout clears both. All __Host
+        cookies Secure, HttpOnly, SameSite=Lax, Path=/, no Domain. See per-response x-cookie-actions; raw header
+        values are browser-managed and inaccessible to generated JS.
+      schema:
+        type: string
+      example: __Host-smartcore-session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; Secure; HttpOnly;
+        SameSite=Lax; Max-Age=86400
+  schemas:
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      required: []
+      properties: {}
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - password
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          format: email
+        mobile:
+          type: string
+          minLength: 7
+          maxLength: 32
+          pattern: ^[+0-9۰-۹٠-٩ ()-]+$
+          description: 'Iran default normalization: trim approved separators, normalize Persian/Arabic digits;
+            accept +98/0098/09 then canonical E.164 before Identity and budgets. Password unchanged.'
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+      oneOf:
+      - required:
+        - email
+        not:
+          required:
+          - mobile
+      - required:
+        - mobile
+        not:
+          required:
+          - email
+    CsrfResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - requestToken
+      properties:
+        requestToken:
+          type: string
+          minLength: 32
+          maxLength: 4096
+          description: Opaque antiforgery request token, not an Identity token. Keep in memory; refresh after
+            auth transitions.
+    Person:
+      type: object
+      additionalProperties: false
+      required:
+      - personId
+      - displayName
+      - email
+      - mobile
+      - status
+      - recoveryEnrollmentRequired
+      properties:
+        personId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+          maxLength: 254
+        mobile:
+          type:
+          - string
+          - 'null'
+          pattern: ^\+[1-9][0-9]{1,14}$
+        status:
+          type: string
+          const: Active
+        recoveryEnrollmentRequired:
+          type: boolean
+      oneOf:
+      - properties:
+          email:
+            type: string
+          mobile:
+            type: 'null'
+      - properties:
+          email:
+            type: 'null'
+          mobile:
+            type: string
+    SessionResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - person
+      properties:
+        person:
+          $ref: '#/components/schemas/Person'
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - VALIDATION_FAILED
+    SessionError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - REAUTHENTICATION_REQUIRED
+    LoginError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - UNAUTHORIZED
+    ForbiddenError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - CSRF_REJECTED
+          - ORIGIN_REJECTED
+    ConflictError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - SESSION_ALREADY_ACTIVE
+    TooLargeError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - REQUEST_TOO_LARGE
+    MediaTypeError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - UNSUPPORTED_MEDIA_TYPE
+    RateError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - retryAfterSeconds
+      properties:
+        code:
+          type: string
+          enum:
+          - RATE_LIMITED
+        retryAfterSeconds:
+          type: integer
+          minimum: 1
+          maximum: 60
+    BusyError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - retryAfterSeconds
+      properties:
+        code:
+          type: string
+          enum:
+          - BFF_BUSY
+          - BFF_UNAVAILABLE
+          - AUTHENTICATION_BUSY
+        retryAfterSeconds:
+          type: integer
+          minimum: 1
+          maximum: 60
+    InternalError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - INTERNAL_ERROR
+  responses:
+    Csrf200:
+      description: Request token for current anonymous/session context. Set antiforgery cookie if absent; preserve
+        it on ordinary bootstrap. Invalid auth cookies create anonymous context here; auth cookie clearing
+        occurs on authenticated 401, not bootstrap.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Set-Cookie:
+          $ref: '#/components/headers/SetCookie'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CsrfResponse'
+          examples:
+            valid:
+              value:
+                requestToken: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+      x-cookie-actions:
+        __Host-smartcore-antiforgery: set-if-absent
+    RateError:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RateError'
+          examples:
+            valid:
+              value:
+                code: RATE_LIMITED
+                retryAfterSeconds: 1
+    Csrf503:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BusyError'
+          examples:
+            valid:
+              value:
+                code: BFF_BUSY
+                retryAfterSeconds: 1
+    InternalError:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InternalError'
+          examples:
+            valid:
+              value:
+                code: INTERNAL_ERROR
+    ValidationError:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+          examples:
+            valid:
+              value:
+                code: VALIDATION_FAILED
+    ForbiddenError:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ForbiddenError'
+          examples:
+            valid:
+              value:
+                code: CSRF_REJECTED
+    TooLargeError:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TooLargeError'
+          examples:
+            valid:
+              value:
+                code: REQUEST_TOO_LARGE
+    MediaTypeError:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MediaTypeError'
+          examples:
+            valid:
+              value:
+                code: UNSUPPORTED_MEDIA_TYPE
+    Login200:
+      description: Identity login and BFF session persistence completed before cookie response. No token bundle
+        or CSRF request token in body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Set-Cookie:
+          $ref: '#/components/headers/SetCookie'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SessionResponse'
+          examples:
+            valid:
+              value:
+                person:
+                  personId: 11111111-1111-4111-8111-111111111111
+                  displayName: Example owner
+                  email: null
+                  mobile: '+989121234567'
+                  status: Active
+                  recoveryEnrollmentRequired: true
+      x-cookie-actions:
+        __Host-smartcore-session: set-fresh
+        __Host-smartcore-antiforgery: clear
+    Login401:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LoginError'
+          examples:
+            valid:
+              value:
+                code: UNAUTHORIZED
+    ConflictError:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConflictError'
+          examples:
+            valid:
+              value:
+                code: SESSION_ALREADY_ACTIVE
+    Me200:
+      description: Safe current profile; no token, generation, internal reference or CSRF token.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SessionResponse'
+          examples:
+            valid:
+              value:
+                person:
+                  personId: 11111111-1111-4111-8111-111111111111
+                  displayName: Example owner
+                  email: null
+                  mobile: '+989121234567'
+                  status: Active
+                  recoveryEnrollmentRequired: true
+    Me401:
+      description: Stable machine code; no localized text, sensitive details or upstream body.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Set-Cookie:
+          $ref: '#/components/headers/SetCookie'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SessionError'
+          examples:
+            valid:
+              value:
+                code: REAUTHENTICATION_REQUIRED
+      x-cookie-actions:
+        __Host-smartcore-session: clear
+        __Host-smartcore-antiforgery: clear
+    Logout503:
+      description: 'BFF_BUSY before intent: preserve cookies, logout did not succeed. Upstream BFF_UNAVAILABLE
+        after committed intent is translated to 204 because local logout already succeeded; maintenance retries.
+        A host failure without confirmed local commit must not claim 204.'
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BusyError'
+          examples:
+            valid:
+              value:
+                code: BFF_BUSY
+                retryAfterSeconds: 1
+    Logout204:
+      description: Local intent committed or a previous bound logout intent confirmed; upstream completion
+        is not guaranteed. No body. Clear both cookies; broadcast logout then fetch fresh anonymous CSRF.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Set-Cookie:
+          $ref: '#/components/headers/SetCookie'
+      x-cookie-actions:
+        __Host-smartcore-session: clear
+        __Host-smartcore-antiforgery: clear

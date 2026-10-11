@@ -1,0 +1,1367 @@
+[
+  {
+    "name": "get /bff/csrf 200",
+    "kind": "response",
+    "path": "/bff/csrf",
+    "method": "get",
+    "body": {
+      "requestToken": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "valid": true,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-antiforgery=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=86400"
+      ],
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "get /bff/csrf 429",
+    "kind": "response",
+    "path": "/bff/csrf",
+    "method": "get",
+    "body": {
+      "code": "RATE_LIMITED",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 429,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "get /bff/csrf 503",
+    "kind": "response",
+    "path": "/bff/csrf",
+    "method": "get",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "get /bff/csrf 500",
+    "kind": "response",
+    "path": "/bff/csrf",
+    "method": "get",
+    "body": {
+      "code": "INTERNAL_ERROR"
+    },
+    "valid": true,
+    "status": 500,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 400",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "VALIDATION_FAILED"
+    },
+    "valid": true,
+    "status": 400,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 403",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "CSRF_REJECTED"
+    },
+    "valid": true,
+    "status": 403,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 413",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "REQUEST_TOO_LARGE"
+    },
+    "valid": true,
+    "status": 413,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 415",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "UNSUPPORTED_MEDIA_TYPE"
+    },
+    "valid": true,
+    "status": 415,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 429",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "RATE_LIMITED",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 429,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 503",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 500",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "INTERNAL_ERROR"
+    },
+    "valid": true,
+    "status": 500,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 200",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": true,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=86400",
+        "__Host-smartcore-antiforgery=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+      ],
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 401",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "UNAUTHORIZED"
+    },
+    "valid": true,
+    "status": 401,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/login 409",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "code": "SESSION_ALREADY_ACTIVE"
+    },
+    "valid": true,
+    "status": 409,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 400",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "VALIDATION_FAILED"
+    },
+    "valid": true,
+    "status": 400,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 403",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "CSRF_REJECTED"
+    },
+    "valid": true,
+    "status": 403,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 413",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "REQUEST_TOO_LARGE"
+    },
+    "valid": true,
+    "status": 413,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 415",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "UNSUPPORTED_MEDIA_TYPE"
+    },
+    "valid": true,
+    "status": 415,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 429",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "RATE_LIMITED",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 429,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 503",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 500",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "INTERNAL_ERROR"
+    },
+    "valid": true,
+    "status": 500,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 200",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": true,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me 401",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "REAUTHENTICATION_REQUIRED"
+    },
+    "valid": true,
+    "status": 401,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+        "__Host-smartcore-antiforgery=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+      ],
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 400",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "VALIDATION_FAILED"
+    },
+    "valid": true,
+    "status": 400,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 403",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "CSRF_REJECTED"
+    },
+    "valid": true,
+    "status": 403,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 413",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "REQUEST_TOO_LARGE"
+    },
+    "valid": true,
+    "status": 413,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 415",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "UNSUPPORTED_MEDIA_TYPE"
+    },
+    "valid": true,
+    "status": 415,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 429",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "RATE_LIMITED",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 429,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 503",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 500",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "INTERNAL_ERROR"
+    },
+    "valid": true,
+    "status": 500,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 200",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": true,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/me/action 401",
+    "kind": "response",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {
+      "code": "REAUTHENTICATION_REQUIRED"
+    },
+    "valid": true,
+    "status": 401,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+        "__Host-smartcore-antiforgery=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+      ],
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 400",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "VALIDATION_FAILED"
+    },
+    "valid": true,
+    "status": 400,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 403",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "CSRF_REJECTED"
+    },
+    "valid": true,
+    "status": 403,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 413",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "REQUEST_TOO_LARGE"
+    },
+    "valid": true,
+    "status": 413,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 415",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "UNSUPPORTED_MEDIA_TYPE"
+    },
+    "valid": true,
+    "status": 415,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 429",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "RATE_LIMITED",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 429,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 503",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1
+    },
+    "valid": true,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 500",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "INTERNAL_ERROR"
+    },
+    "valid": true,
+    "status": 500,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "post /bff/logout 204",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": null,
+    "valid": true,
+    "status": 204,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+        "__Host-smartcore-antiforgery=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+      ]
+    }
+  },
+  {
+    "name": "post /bff/logout 401",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "code": "REAUTHENTICATION_REQUIRED"
+    },
+    "valid": true,
+    "status": 401,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+        "__Host-smartcore-antiforgery=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+      ],
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "login email",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": true,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "login mobile",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "mobile": "+989121234567",
+      "password": "ExamplePassword15!"
+    },
+    "valid": true,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "login Persian digits",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "mobile": "۰۹۱۲۱۲۳۴۵۶۷",
+      "password": "ExamplePassword15!"
+    },
+    "valid": true,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "both contacts",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "mobile": "+989121234567",
+      "password": "p"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "no contact",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "password": "p"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "empty password",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": ""
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "unknown field",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "p",
+      "foreground": true
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "explicit null",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "mobile": null,
+      "password": "p"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "oversized password",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "mobile": "+989121234567",
+      "password": "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "wrong email",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "not-an-email",
+      "password": "p"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "foreground flag forbidden",
+    "kind": "request",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "foreground": true
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "logout body forbidden fields",
+    "kind": "request",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {
+      "sessionId": "11111111-1111-4111-8111-111111111111"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "response raw token",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      },
+      "refreshToken": "forbidden"
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "response nested token",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true,
+        "accessToken": "forbidden"
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "missing field",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "bad uuid",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "wrong",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "both person contacts",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": "owner@example.test",
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "missing no-store",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "cacheable private response",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "public",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "missing retry",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1
+    },
+    "valid": false,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "retry mismatch",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1
+    },
+    "valid": false,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "2",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "retry bool",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": true
+    },
+    "valid": false,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "unknown error code",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "UPSTREAM_UNKNOWN",
+      "retryAfterSeconds": 1
+    },
+    "valid": false,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "translated error",
+    "kind": "response",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {
+      "code": "BFF_BUSY",
+      "retryAfterSeconds": 1,
+      "message": "Please try again"
+    },
+    "valid": false,
+    "status": 503,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Retry-After": "1",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "missing login cookie",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "insecure cookie",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400",
+        "__Host-smartcore-antiforgery=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+      ],
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "Domain cookie",
+    "kind": "response",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "person": {
+        "personId": "11111111-1111-4111-8111-111111111111",
+        "displayName": "Example owner",
+        "email": null,
+        "mobile": "+989121234567",
+        "status": "Active",
+        "recoveryEnrollmentRequired": true
+      }
+    },
+    "valid": false,
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store",
+      "Set-Cookie": [
+        "__Host-smartcore-session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=86400; Domain=example.test",
+        "__Host-smartcore-antiforgery=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+      ],
+      "Content-Type": "application/json"
+    }
+  },
+  {
+    "name": "204 body forbidden",
+    "kind": "response",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {},
+    "valid": false,
+    "status": 204,
+    "headers": {
+      "Cache-Control": "no-store"
+    }
+  },
+  {
+    "name": "missing Origin",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "null Origin",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "null",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "foreign Origin",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://foreign.example",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "missing CSRF header",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "missing antiforgery cookie",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+  },
+  {
+    "name": "cross-site fetch",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+      "Sec-Fetch-Site": "cross-site"
+    }
+  },
+  {
+    "name": "same-site fetch",
+    "kind": "request",
+    "path": "/bff/login",
+    "method": "post",
+    "body": {
+      "email": "owner@example.test",
+      "password": "ExamplePassword15!"
+    },
+    "valid": false,
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+      "Sec-Fetch-Site": "same-site"
+    }
+  },
+  {
+    "name": "valid empty envelope /bff/me",
+    "kind": "request",
+    "path": "/bff/me",
+    "method": "post",
+    "body": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    },
+    "valid": true
+  },
+  {
+    "name": "valid empty envelope /bff/me/action",
+    "kind": "request",
+    "path": "/bff/me/action",
+    "method": "post",
+    "body": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    },
+    "valid": true
+  },
+  {
+    "name": "valid empty envelope /bff/logout",
+    "kind": "request",
+    "path": "/bff/logout",
+    "method": "post",
+    "body": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://localhost:7443",
+      "X-CSRF-Token": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "Cookie": "__Host-smartcore-antiforgery=TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT; __Host-smartcore-session=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    },
+    "valid": true
+  }
+]

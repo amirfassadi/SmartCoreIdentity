@@ -395,3 +395,34 @@ commit/tree identities, cumulative counts and dependency order. PR #3 is an
 integration reference; no main merge, deployment or production/VPS change occurred.
 Release gates remain delivered alerts, full load, replicated failover and the
 browser host, plus notification/contact-release and canonical Platform provenance.
+
+## B1 candidate browser contract — 2026-10-11
+
+Before host implementation, contracts/bff-browser.openapi.yaml (Draft 0.1.0) now
+specifies exactly GET /bff/csrf and POST /bff/login, /bff/me, /bff/me/action,
+/bff/logout. Request/response DTOs disallow extra fields, errors are stable codes,
+429/503 bind Retry-After to retryAfterSeconds, and explicit cookie actions preserve
+multiple Set-Cookie header fields. Login/session responses never contain Identity
+tokens. Confirmed local logout intent maps to 204 even if upstream completion needs
+maintenance; pre-intent busy does not report success. Contract status is candidate,
+not an implemented browser API or owner approval of every DTO/error choice.
+
+Executed locally with openapi-spec-validator 0.7.2, jsonschema 4.26.0 and PyYAML
+6.0.3: OpenAPI 3.1 structural validation, **91 positive schema/wire-envelope checks
+and 32 rejected negative controls**. The fixtures include extra/secret fields,
+contact exclusivity, empty/oversized passwords, malformed identifiers, missing
+Origin/CSRF/cookies, foreign fetch context, cookie attributes, forbidden 204 body,
+private caching and Retry-After mismatch. Example placeholders are not real secrets.
+Existing preparation schema controls (2 valid /17 negative) and documentary checks
+(20 archives /16 documents /59 local links) also passed.
+
+The new checker is wired into documentary CI and exposes reusable request/response
+validation for future live-host tests. It checks structural envelopes; it does not
+prove cryptographic CSRF binding, Origin enforcement, cookie MAC validity, generated
+client compatibility, proxy/browser correctness or production key protection. No
+C# runtime files, migrations, public routes or deployment changed in this step.
+
+B1 policy specifies style-src-attr 'none' and Tailwind classes, an explicit bounded
+smartcore-locale next-intl cookie, certificate-encrypted shared Data Protection keys
+on Linux, and optional Sec-Fetch-Site rejection in addition to mandatory Origin/CSRF.
+These remain implementation/acceptance requirements, not newly executed host tests.

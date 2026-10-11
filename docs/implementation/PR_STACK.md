@@ -40,8 +40,9 @@ its successor to the canonical branch, resolve any ancestry conflicts and rerun 
 Registration's parent is 0cec3994077b63990a9d0c2d69656e1294e5e33c (PR #2).
 Each following stage's parent is the previous stage's verified runtime commit.
 The identical final BFF/integration trees prove that extraction omitted no files.
-Subsequent documentation-only commits add this manifest and current verification
-evidence to both final branches with the same complete tree; runtime evidence
+Subsequent documentary/contract commits add this manifest, candidate browser
+contract and verification evidence to both final branches with the same complete
+tree; runtime evidence
 above remains tied to the explicitly listed runtime revisions.
 
 The single current release checklist and SMS ambiguity/abuse requirements are in
@@ -49,3 +50,7 @@ The single current release checklist and SMS ambiguity/abuse requirements are in
 criteria are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md). Core tests do not certify
 these future release gates. Country, SMS provider, framework and domain strategy
 remain open; these documents add no new runtime/browser CI evidence.
+
+The B1 browser contract (Draft 0.1.0) now exists before host code. Its OpenAPI/schema
+checks are distinct from the historical C# runtime evidence above. The host,
+generated client and Playwright acceptance remain open.
