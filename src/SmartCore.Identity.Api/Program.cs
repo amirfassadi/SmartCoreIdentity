@@ -80,6 +80,20 @@ builder.Services.AddRateLimiter(options=>
 var app=builder.Build();
 app.Use(async(context,next)=>
 {
+    var diagnosticStarted=System.Diagnostics.Stopwatch.GetTimestamp();
+    var diagnosticKey=builder.Configuration["Identity:DevInboxKey"];
+    var diagnosticAllowed=builder.Environment.IsDevelopment() && builder.Configuration.GetValue("Identity:ResetTimingDiagnostics",false)
+        && context.Connection.RemoteIpAddress is not null && System.Net.IPAddress.IsLoopback(context.Connection.RemoteIpAddress)
+        && diagnosticKey is {Length:>=32}
+        && Secrets.Equal(context.RequestServices.GetRequiredService<Secrets>().Mac("reset-timing-diagnostic",diagnosticKey),
+            context.RequestServices.GetRequiredService<Secrets>().Mac("reset-timing-diagnostic",context.Request.Headers["X-Reset-Timing-Key"].ToString()));
+    using var diagnosticScope=diagnosticAllowed?ResetResponseTiming.Diagnostics(sample=>context.Items["reset-timing-sample"]=sample):null;
+    if(diagnosticAllowed)context.Response.OnStarting(()=>
+    {
+        if(context.Items["reset-timing-sample"] is ResetTimingSample sample)
+            context.Response.Headers["Server-Timing"]=FormattableString.Invariant($"reset-work;dur={sample.WorkMilliseconds:F3}, reset-total;dur={sample.TotalMilliseconds:F3}, reset-deadline;dur={sample.DeadlineMilliseconds:F3}, pipeline;dur={System.Diagnostics.Stopwatch.GetElapsedTime(diagnosticStarted).TotalMilliseconds:F3}");
+        return Task.CompletedTask;
+    });
     context.Response.Headers.CacheControl="no-store";
     context.Response.Headers["X-Content-Type-Options"]="nosniff";
     try { await next(); }
