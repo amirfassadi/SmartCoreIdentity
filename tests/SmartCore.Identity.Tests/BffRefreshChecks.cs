@@ -427,6 +427,8 @@ internal static class BffRefreshChecks
             Check(!(await State(logoutFixture.Tokens)).Has("sealed_tokens") && (await State(logoutFixture.Tokens)).Has("sealed_logout_access") && (await sql.One("SELECT status FROM auth_sessions WHERE id=@id",("id",logoutFixture.Tokens.SessionId)))!.Get<string>("status")=="Closed",
                 "lost real HTTP logout response preserves only BFF access material after Identity has closed the session");
             Check((await State(logoutFixture.Tokens)).Get<string>("status")=="LogoutRequested","lost logout response commits durable local LogoutRequested before returning");
+            var onlyAccess=await State(logoutFixture.Tokens);
+            Check(secrets.Open(onlyAccess.Get<byte[]>("sealed_logout_access"),"bff-logout-access:"+onlyAccess.Get<Guid>("id")+":"+onlyAccess.Get<long>("version").ToString(System.Globalization.CultureInfo.InvariantCulture))==logoutFixture.Tokens.AccessToken && !onlyAccess.Has("sealed_tokens"),"intent stores only sealed access proof and removes the full refresh bundle atomically");
             try{await sql.Execute("UPDATE bff_sessions SET status='Active' WHERE identity_session_id=@id",("id",logoutFixture.Tokens.SessionId));throw new Exception("Reactivated logout intent");}
             catch(PostgresException e)when(e.SqlState=="23514"){}
             Check(true,"database rejects reactivation of a durable logout intent");
@@ -457,6 +459,17 @@ internal static class BffRefreshChecks
                 await worker.StopAsync(CancellationToken.None);
             }
             Check(!(await State(retryLogout.Tokens)).Has("sealed_logout_access"),"actual hosted maintenance completes durable logout without the deleted cookie");
+            var concurrentLogout=await Fixture();logoutMode="lost";var beforeConcurrentLogout=logoutCalls;
+            try{await networkA.Logout(concurrentLogout.Cookie);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
+            logoutMode="normal";advance(TimeSpan.FromSeconds(1));
+            await Task.WhenAll(networkA.SweepLogout(),networkB.SweepLogout());
+            Check(logoutCalls==beforeConcurrentLogout+2 && (await State(concurrentLogout.Tokens)).Get<string>("status")=="Closed","two cookie-free sweepers serialize one idempotent completion across instances");
+            var legacyLogout=await Fixture();
+            await sql.Execute("UPDATE bff_sessions SET status='LogoutRequested' WHERE identity_session_id=@id",("id",legacyLogout.Tokens.SessionId));
+            logoutMode="lost";await networkB.SweepLogout();
+            var legacyIntent=await State(legacyLogout.Tokens);
+            Check(!legacyIntent.Has("sealed_tokens") && legacyIntent.Has("sealed_logout_access"),"sweeper converts legacy bundle intent to access-only storage before a lost upstream response");
+            logoutMode="normal";advance(TimeSpan.FromSeconds(1));await networkA.SweepLogout();
             var expiredLogout=await Fixture();logoutMode="lost";
             try{await networkA.Logout(expiredLogout.Cookie);}catch(BffError e)when(e.Code=="BFF_UNAVAILABLE"){}
             var beforeExpiry=logoutCalls;advance(TimeSpan.FromHours(25));await networkB.SweepLogout();

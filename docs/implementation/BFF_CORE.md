@@ -2,7 +2,7 @@
 
 The class library src/SmartCore.Identity.Bff implements the token-store/refresh-coordination slice of [BFF_REFRESH_DESIGN.md](BFF_REFRESH_DESIGN.md). It is called only by trusted server code. It does not expose HTTP/browser endpoints, serialize BffAccess to browsers, set browser cookies or implement CSRF/Origin routing. No production host or public onboarding is enabled. The opaque cookie value returned by Create is the future cookie secret, not a refresh token.
 
-BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql, 002_refresh_admission.sql and 003_refresh_circuit.sql and 004_circuit_recovery_logout.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
+BffStore owns a separate schema/migration ledger (bff-database/001_bff_sessions.sql, 002_refresh_admission.sql and 003_refresh_circuit.sql 004_circuit_recovery_logout.sql and 005_logout_completion.sql); it can use a separate database, and is not part of Identity's migration 001–011. Two application instances must use the same BFF database and BFF encryption/MAC keys, distinct from Identity's keys. The scaffold reuses the API project's database/crypto/token DTO dependencies; extraction of shared primitives is a future packaging choice, not a shared transaction or store. No new NuGet dependency is introduced.
 
 Create seals the trusted login token bundle by BFF session/version, stores only a keyed opaque-cookie verifier and creates the fixed FK journal row in one transaction. GetAccess reads committed active access without row locking. It returns a RefreshDue signal for the host's bounded proactive scheduler; the library never starts detached background tasks. The host must call RefreshIfDue with its trusted activity classification around 80% of the issued access lifetime and for due foreground activity, even when cached access is still valid. Expired-access callers wait for a current successor; they cannot fall back to an expired token.
 
@@ -16,7 +16,7 @@ BffActivity is a trusted server enum, never a raw browser assertion. Background 
 
 BffRefreshChecks is part of the native PostgreSQL C# harness. It uses two independent BffStore data sources/pools, actual Identity authentication/refresh transactions and a transport fault seam. It checks 20 parallel foreground decisions for exactly one rotation and no reuse, valid-access reads while rotation is paused, expired-access waiting longer than two seconds, five owner-loss stages, server-side PostgreSQL termination of the owning BFF connection, lost/malformed/timed-out responses, cancellation after dispatch, foreground after fresh background rotation, thirty-minute polling expiry, token erasure, definitive revocation excluded from uncertainty, and distinct-session uncertainty aggregation.
 
-The transport seam calls the actual Identity service directly. Additional controlled loopback HTTP bridge checks exercise the concrete adapter: twenty parallel decisions on two instances send one authenticated HTTP refresh, an HTTP abort after the real Identity commit is never retried, and a redirect never forwards secrets. This bridge is not the complete Identity middleware pipeline. The initial runtime 779c6ab did not test OS process death. The admission follow-up below adds independent process peers and actual kill coverage. Browser cookie/CSRF endpoints, database failover durability, pool exhaustion and production load remain acceptance work before real users. The core has no autonomous purge or production retention decision. Runtime 779c6ab passed native PostgreSQL CI with 26 BFF checks within 224 total C# checks, 230 emitted-event validations and five existing API HTTP smokes. Exact SHA/run/job evidence and limits are in [VERIFICATION.md](VERIFICATION.md).
+The transport seam calls the actual Identity service directly. Additional controlled loopback HTTP bridge checks exercise the concrete adapter: twenty parallel decisions on two instances send one authenticated HTTP refresh, an HTTP abort after the real Identity commit is never retried, and a redirect never forwards secrets. This bridge is not the complete Identity middleware pipeline. The initial runtime 779c6ab did not test OS process death. The admission follow-up below adds independent process peers and actual kill coverage. Browser cookie/CSRF endpoints, database failover durability, pool exhaustion and production load remain acceptance work before real users. Migration 005 now supplies bounded periodic sample pruning and logout completion; broader production retention remains a release decision. Runtime 779c6ab passed native PostgreSQL CI with 26 BFF checks within 224 total C# checks, 230 emitted-event validations and five existing API HTTP smokes. Exact SHA/run/job evidence and limits are in [VERIFICATION.md](VERIFICATION.md).
 
 ## Admission rejection contract (authentication subset 0.8.0)
 
@@ -122,7 +122,7 @@ tokens and commits local Closed state. HTTP response loss/timeout/dependency
 failure keeps locally unusable intent/material and returns BFF_UNAVAILABLE; another instance can
 retry the same idempotent logout. A local terminal replay sends no HTTP request.
 The existing Close method remains local-only cleanup and must not serve explicit
-browser logout. Logout 403 preserves intent/tokens and contributes to the unverified distinct-session threshold.
+browser logout. Logout 403 preserves access-only intent with persisted retry backoff.
 A logout 401 closes the local user session; it does not certify upstream revocation
 when the access proof is expired. The documented bounded Identity expiry remains.
 
@@ -163,9 +163,8 @@ across all instances. The owner budget must remain below the 60-second probe int
 or process death leaves the next opportunity at least another minute away.
 Normal in-flight successes cannot close another session's probe. Dispatch journal
 reconciliation still precedes any send: permission never clears an unmatched
-marker or retries a possibly consumed predecessor. A probe used for reconciliation
-without an HTTP send can consume that minute's permit; this conservative delay
-is preferable to replay. No permanent latch mode is enabled in this core.
+marker or retries a possibly consumed predecessor. Migration 005 acquires permission only after reconciliation, due and backoff
+checks, so these non-sending decisions no longer spend a permit. No permanent latch mode is enabled in this core.
 
 A verified configuration NotProcessed receipt can open immediately. Unverified
 403 responses, including WAF/proxy or malformed receipts, need three distinct
@@ -187,9 +186,9 @@ revocation limitation) closes and erases material. Concurrent instances serializ
 completion; lost responses leave durable intent for explicit retry. Refresh circuit
 state does not block logout. Intent cannot revert to Active, and refresh cannot
 rotate it. The browser host must expire its cookie immediately and schedule bounded
-logout retries from retained server-side intent; autonomous retry worker/host and
-retention are not implemented by the library. Unfinished intent can be safely
-retried with the same cookie by trusted server code and has no ordinary access.
+logout completion from retained server-side intent. Migration 005 supplies a hosted
+worker and cookie-free completion; the browser host must register that worker.
+Unfinished intent has no ordinary access.
 
 Operational investigation: inspect bff_refresh_circuit opened_at/reason and
 next_probe_at plus the circuit metric; compare credential/receipt key configuration,
