@@ -1,6 +1,6 @@
 # Authentication transaction boundary — implementation decision
 
-Date: 2026-10-10. Status: prepared for owner disposition; neither alternative is newly accepted by this document.
+Date: 2026-10-10. Status: **A selected by Amir (@amirfassadi), project/architecture owner**, in the project conversation on this date. B remains deferred and requires evidence and a separate scoped ADR revision.
 
 Registration/setup is implemented and native-tested at `c49e3ee776565c2e2e9adcae2e47ae417c67cf8e`. Credential, Ready and acknowledgment still commit separately. Preserve the immutable initial winner, pre-Ready mutation guard, distinct ownership/Ready timestamps and recovery evidence under either authentication alternative.
 
@@ -28,12 +28,12 @@ The next slice is login, authenticated self read, refresh and logout. Its writer
 
 Sharing a PostgreSQL server alone is neither alternative B nor a guarantee that independent commits are atomic. Neither alternative uses 2PC. Operator recovery and production service authorization remain separate deliverables.
 
-A is the continuity recommendation: preserve the accepted boundary unless the owner deliberately selects B and its scoped architectural revision. This recommendation is not a recorded owner acceptance.
+A is selected. Preserve the accepted boundary. Reconsider B only with evidence about persistence topology or recovery cost and a separate scoped ADR revision. The owner's decision is a design disposition, not a line-by-line C# security audit or full-MVP release acceptance. Existing registration tests do not prove authentication fencing/recovery: that protocol needs its own runtime evidence.
 
 ## Implementation work after disposition
 
 1. Record the selected transaction owner, module write authority and exact Platform/Identity source revisions. For B, publish a scoped ADR candidate preserving the registration guard and history before claiming acceptance.
-2. Add Session-owned family/generation storage, purpose-bound verifiers and bounded predecessor recognition. Add the Person issuance coordination required by the selected alternative; no sixth domain Aggregate is introduced.
+2. Add Session-owned family/generation storage, purpose-bound verifiers and recognition of spent generations until the immutable family deadline. **Grace window: zero**. Recognition retention is not permission to replay, recover a successor or retry a consumed token; authenticated same-client reuse revokes the family even after a lost response. Add Person issuance coordination behind an interface; no sixth domain Aggregate is introduced. See [storage and transaction ownership](AUTH_STORAGE.md).
 3. Implement Ready/active-Person/active-Credential login gates, authenticated self read, rotating refresh and logout. Define distinct access and Session deadlines in a versioned development contract. BFF testing uses a clearly identified authenticated test client; no production BFF integration is claimed.
 4. Test wrong-client presentations without revoking another family, same-generation races, lost response/reuse, strict idle and absolute boundaries, logout/refresh races, old-password login crossing a fence, and recovery at each durable boundary. No tokens or password/proof material in logs/events.
 5. Implement authenticated password change and verified reset with the same guard, then delivery, browser/BFF integration and release evidence. Mobile reset must address reassigned-number risk; contact possession is not silently made sufficient for existing-account takeover.
@@ -42,4 +42,11 @@ Upstream context: [co-location owner worksheet](https://github.com/amirfassadi/S
 
 ## Owner disposition
 
-Pending: A or B. No response, elapsed time or generic implementation authorization is recorded as an acceptance of B. Until explicit disposition, ADR-0004 and the existing registration transaction boundaries remain authoritative.
+**A selected; B may be reconsidered only with evidence and a separate ADR.** Recorded at Amir's explicit instruction, 2026-10-10; no cryptographic signature or independent code audit is asserted. ADR-0004 and existing registration transaction boundaries remain authoritative.
+
+Conditions accepted with this implementation direction:
+
+- Put Person-scoped issuance acquisition/epoch behind an interface shared by login, refresh and sensitive operations.
+- Activate a persistent fence only after valid change/reset proof has been verified and bound to the operation. Reset initiation, OTP delivery, unknown accounts and invalid proof cannot activate it or revoke Sessions. Revalidate admission against the current epoch/Credential under the gate before fencing; discard proof from a superseded epoch.
+- Reconcile stalled fences through durable scheduled work and restricted operator-visible status. Login/refresh outward failures must not reveal that reset or password replacement is in progress. Timeout alone must never reopen issuance after an uncertain Credential result.
+- Sensitive actions (change password, authorized reset completion and future deletion) require online Session status/deadline, current epoch equality and no pending fence. This closes the residual-access window at those endpoints; general self-contained resource access still has its bounded 900-second residual validity. Reset completion may use a separate verified recovery proof instead of an access token but must bind/revalidate its observed epoch before mutation.

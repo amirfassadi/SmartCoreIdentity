@@ -23,6 +23,44 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<RegistrationService>();
 builder.Services.AddSingleton<Provisioning>();
 builder.Services.AddSingleton<RegistrationSetupService>();
+var authenticationEnabled=builder.Configuration.GetValue("Identity:AuthenticationEnabled",false);
+var passwordChangeEnabled=builder.Configuration.GetValue("Identity:PasswordChangeEnabled",false);
+if(passwordChangeEnabled && !authenticationEnabled) throw new InvalidOperationException("Password change requires authentication.");
+string? bffKey=null;
+var bffClient="development-bff";
+if(authenticationEnabled)
+{
+    bffKey=builder.Configuration["Identity:BffClientKey"];
+    if(bffKey is not {Length:>=32}) throw new InvalidOperationException("An authenticated development BFF client key is required.");
+    var signingKey=builder.Configuration["Identity:AccessSigningKey"] ?? "";
+    var bytes=Convert.FromBase64String(signingKey);
+    if(bytes.SequenceEqual(Convert.FromBase64String(builder.Configuration["Identity:MacKey"] ?? ""))
+        || bytes.SequenceEqual(Convert.FromBase64String(builder.Configuration["Identity:MaterialKey"] ?? "")))
+        throw new InvalidOperationException("Access signing key must be distinct from MAC/material keys.");
+    builder.Services.AddSingleton<IAuthenticationIssuanceGate,PostgresAuthenticationIssuanceGate>();
+    builder.Services.AddSingleton(c=>new AccessTokens(signingKey,c.GetRequiredService<TimeProvider>()));
+    builder.Services.AddSingleton<AuthenticationService>();
+    builder.Services.AddSingleton<AuthenticationAdmission>();
+    if(passwordChangeEnabled)
+    {
+        if(!builder.Environment.IsDevelopment()) throw new InvalidOperationException("Password recovery adapter is Development-only.");
+        var operatorKey=builder.Configuration["Identity:AuthOperatorKey"];
+        if(operatorKey is not {Length:>=32} || operatorKey==bffKey) throw new InvalidOperationException("A separate development operator key is required.");
+        builder.Services.AddSingleton<CredentialChanges>();
+        builder.Services.AddSingleton<PasswordChanges>();
+        builder.Services.AddSingleton<IPasswordChangeRunner>(c=>c.GetRequiredService<PasswordChanges>());
+        var socket=builder.Configuration["Identity:AuthOperatorSocket"];
+        var applicationPort=builder.Configuration.GetValue<int>("Identity:ApplicationPort");
+        if(!OperatingSystem.IsLinux() || socket is null || !Path.IsPathFullyQualified(socket)
+            || applicationPort is <1024 or >65535) throw new InvalidOperationException("A private Linux operator socket and application port are required.");
+        var directory=Path.GetDirectoryName(socket)!;
+        Directory.CreateDirectory(directory,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+        if(new DirectoryInfo(directory).LinkTarget is not null || (File.GetUnixFileMode(directory)&(UnixFileMode.GroupRead|UnixFileMode.GroupWrite|UnixFileMode.GroupExecute|UnixFileMode.OtherRead|UnixFileMode.OtherWrite|UnixFileMode.OtherExecute))!=0)
+            throw new InvalidOperationException("Operator socket directory must be private to the service account.");
+        builder.WebHost.ConfigureKestrel(o=>{o.Listen(System.Net.IPAddress.Loopback,applicationPort);o.ListenUnixSocket(socket);});
+        if(builder.Configuration.GetValue("Identity:PasswordChangeWorkerEnabled",true)) builder.Services.AddHostedService<PasswordChangeWorker>();
+    }
+}
 if(builder.Configuration.GetValue("Identity:WorkerEnabled",true)) builder.Services.AddHostedService<ProvisioningWorker>();
 builder.Services.ConfigureHttpJsonOptions(o=>o.SerializerOptions.DefaultIgnoreCondition=JsonIgnoreCondition.WhenWritingNull);
 builder.Services.AddRateLimiter(options=>
@@ -31,6 +69,8 @@ builder.Services.AddRateLimiter(options=>
     options.OnRejected=async(context,_)=>await WriteError(context.HttpContext,429,"RATE_LIMITED");
     options.AddPolicy("registration",context=>RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _=>new FixedWindowRateLimiterOptions {PermitLimit=30,Window=TimeSpan.FromMinutes(1),QueueLimit=0}));
+    options.AddPolicy("authentication-transport",context=>RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _=>new FixedWindowRateLimiterOptions {PermitLimit=12000,Window=TimeSpan.FromMinutes(1),QueueLimit=0}));
 });
 var app=builder.Build();
 app.Use(async(context,next)=>
@@ -45,12 +85,30 @@ app.Use(async(context,next)=>
     { await WriteError(context,503,"TEMPORARILY_UNAVAILABLE"); }
 });
 app.UseRateLimiter();
+app.Use(async(context,next)=>
+{
+    var path=context.Request.Path.Value;
+    var privateConnection=context.Connection.LocalPort==0 && context.Connection.LocalIpAddress is null && context.Connection.RemoteIpAddress is null;
+    if(path?.StartsWith("/dev/auth/recovery/",StringComparison.Ordinal)==true)
+    {
+        if(!privateConnection) throw new ApiError(404,"NOT_FOUND");
+    }
+    else if(privateConnection && passwordChangeEnabled) throw new ApiError(404,"NOT_FOUND");
+    var category=path switch {"/auth/login"=>"login","/auth/password/change"=>"change","/auth/refresh" or "/auth/logout" or "/me"=>"session",_=>null};
+    if(authenticationEnabled && category is not null)
+    {
+        var secrets=context.RequestServices.GetRequiredService<Secrets>();
+        if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",context.Request.Headers["X-Bff-Client-Key"].ToString()))) throw new ApiError(401,"UNAUTHORIZED");
+        await context.RequestServices.GetRequiredService<AuthenticationAdmission>().Admit(bffClient,context.Request.Headers["X-Bff-Subject"].ToString(),category);
+    }
+    await next();
+});
 app.MapGet("/health/live",()=>Results.Ok(new {status="live"}));
 app.MapGet("/health/ready",async(Database db)=>
 {
     await using var c=await db.Source.OpenConnectionAsync();
-    var row=await c.One("SELECT version FROM schema_versions WHERE version=2");
-    return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope="internal-registration"});
+    var row=await c.One("SELECT version FROM schema_versions WHERE version=@version",("version",authenticationEnabled?7:2));
+    return row is null ? Results.StatusCode(503) : Results.Ok(new {status="ready",scope=authenticationEnabled?"internal-authentication":"internal-registration"});
 });
 app.MapPost("/auth/register",async(HttpRequest http,RegistrationService service)=>
 {
@@ -75,6 +133,66 @@ app.MapPost("/auth/register/resend",async(HttpRequest http,RegistrationService s
     await service.Resend(await Read<ResendVerification>(http));
     return Results.Json(new {status="Accepted"},statusCode:202);
 }).RequireRateLimiting("registration");
+if(authenticationEnabled)
+{
+    void Bff(HttpRequest request,Secrets secrets)
+    {
+        if(!Secrets.Equal(secrets.Mac("bff-client",bffKey!),secrets.Mac("bff-client",request.Headers["X-Bff-Client-Key"].ToString())))
+            throw new ApiError(401,"UNAUTHORIZED");
+    }
+    AccessProof Proof(HttpRequest request,Secrets secrets,AccessTokens access)
+    {
+        Bff(request,secrets);
+        var header=request.Headers.Authorization.ToString();
+        if(!header.StartsWith("Bearer ",StringComparison.Ordinal) || header.Length>4103) throw new ApiError(401,"UNAUTHORIZED");
+        return access.Read(header[7..],bffClient);
+    }
+    app.MapPost("/auth/login",async(HttpRequest request,Secrets secrets,AuthenticationService service)=>
+    {
+        Bff(request,secrets);
+        return Results.Ok(await service.Login(await Read<LoginRequest>(request),bffClient));
+    }).RequireRateLimiting("authentication-transport");
+    app.MapPost("/auth/refresh",async(HttpRequest request,Secrets secrets,AuthenticationService service)=>
+    {
+        Bff(request,secrets);
+        return Results.Ok(await service.Refresh(await Read<RefreshRequest>(request),bffClient));
+    }).RequireRateLimiting("authentication-transport");
+    app.MapGet("/me",async(HttpRequest request,Secrets secrets,AccessTokens access,AuthenticationService service)=>
+        Results.Ok(await service.Self(Proof(request,secrets,access)))).RequireRateLimiting("authentication-transport");
+    app.MapPost("/auth/logout",async(HttpRequest request,Secrets secrets,AccessTokens access,AuthenticationService service)=>
+    {
+        var proof=Proof(request,secrets,access);
+        var body=await Read<LogoutRequest>(request);
+        Input.Require(body.SessionId==proof.SessionId);
+        await service.Logout(proof);
+        return Results.NoContent();
+    }).RequireRateLimiting("authentication-transport");
+    if(passwordChangeEnabled)
+    {
+        app.MapPost("/auth/password/change",async(HttpRequest request,Secrets secrets,AccessTokens access,PasswordChanges changes)=>
+        {
+            _=Proof(request,secrets,access);
+            return Results.Json(await changes.Accept(request.Headers.Authorization.ToString()[7..],bffClient,
+                await Read<ChangePasswordRequest>(request)),statusCode:202);
+        }).RequireRateLimiting("authentication-transport");
+        void Operator(HttpContext context,Secrets secrets)
+        {
+            if(context.Connection.LocalPort!=0 || context.Connection.LocalIpAddress is not null || context.Connection.RemoteIpAddress is not null
+                || !Secrets.Equal(secrets.Mac("auth-operator",builder.Configuration["Identity:AuthOperatorKey"]!),
+                    secrets.Mac("auth-operator",context.Request.Headers["X-Auth-Operator-Key"].ToString()))) throw new ApiError(404,"NOT_FOUND");
+        }
+        app.MapGet("/dev/auth/recovery/{id:guid}",async(Guid id,HttpContext context,Secrets secrets,PasswordChanges changes)=>
+        {
+            Operator(context,secrets); return Results.Ok(await changes.Status(id));
+        }).RequireRateLimiting("registration");
+        app.MapPost("/dev/auth/recovery/{id:guid}",async(Guid id,HttpContext context,Secrets secrets,PasswordChanges changes)=>
+        {
+            Operator(context,secrets); var request=await Read<RecoveryRequest>(context.Request);
+            try {return Results.Ok(await changes.Recover(id,request.Action));}
+            catch(InvalidOperationException) {throw new ApiError(409,"RECOVERY_CONFLICT");}
+        }).RequireRateLimiting("registration");
+    }
+}
 // Fake inbox is opt-in, loopback-only, authenticated and unavailable outside Development.
 if(builder.Environment.IsDevelopment() && builder.Configuration["Identity:DevInboxKey"] is {Length: >= 32} inboxKey)
 {
@@ -118,3 +236,4 @@ static async Task<T> Read<T>(HttpRequest request)
 }
 
 public partial class Program { }
+public sealed record LogoutRequest(Guid SessionId);
