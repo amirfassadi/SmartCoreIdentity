@@ -138,6 +138,13 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   status,new_factor=call('/auth/recovery/enroll',dict(operationId=str(uuid.uuid4()),currentPassword=new_password,acceptLossRisk=True),new_auth)
   assert status==200 and new_factor['version']==3 and len(new_factor['recoveryCode'])==32
   assert call('/me',headers=new_auth)[1]['recoveryEnrollmentRequired'] is False
+  # Actual reset failures must expose no service timings without the diagnostic key.
+  diagnostic_probe={**complete,'challengeId':unknown['challengeId'],'recoveryCode':'0'*32}
+  no_diagnostic={k:v for k,v in bff.items() if k!='X-Reset-Timing-Key'}
+  assert call('/auth/password/reset/complete',diagnostic_probe,no_diagnostic)[0]==401
+  assert 'reset-total' not in last_timing
+  assert call('/auth/password/reset/complete',diagnostic_probe,{**no_diagnostic,'X-Reset-Timing-Key':'incorrect'})[0]==401
+  assert 'reset-total' not in last_timing
   diagnostic_timings={'real':[],'decoy':[],'suppressed':[]}
   failure_timings={'real':[],'decoy':[],'suppressed':[]}
   for _ in range(12):
