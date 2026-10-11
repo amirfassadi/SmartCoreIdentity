@@ -58,4 +58,27 @@ public sealed class Secrets
         }
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }
+    public static async Task<bool> VerifyPassword(string password,string encoded)
+    {
+        // Only this phase's fixed Argon2 encoding is supported. Never trust stored work factors.
+        var parts=encoded.Split('$');
+        if(parts.Length!=6 || parts[1]!="argon2id" || parts[2]!="v=19" || parts[3]!="m=65536,t=3,p=4") return false;
+        byte[] salt,expected;
+        try
+        {
+            static byte[] Decode(string value)=>Convert.FromBase64String(value+new string('=',(4-value.Length%4)%4));
+            salt=Decode(parts[4]); expected=Decode(parts[5]);
+        }
+        catch(FormatException) {return false;}
+        if(salt.Length!=16 || expected.Length!=32) return false;
+        var bytes=Encoding.UTF8.GetBytes(password);
+        try
+        {
+            using var argon=new Argon2id(bytes) {Salt=salt,MemorySize=65536,Iterations=3,DegreeOfParallelism=4};
+            var actual=await argon.GetBytesAsync(32);
+            try {return CryptographicOperations.FixedTimeEquals(actual,expected);}
+            finally {CryptographicOperations.ZeroMemory(actual);}
+        }
+        finally {CryptographicOperations.ZeroMemory(bytes);}
+    }
 }

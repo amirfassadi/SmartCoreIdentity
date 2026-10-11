@@ -1,0 +1,508 @@
+openapi: 3.1.0
+info:
+  title: SmartCore development authentication subset
+  version: 0.3.1
+  description: Development BFF adapter. Authenticated BFF supplies a stable opaque
+    X-Bff-Subject for separate distributed admission budgets. Password change is separately
+    opt-in. Operator recovery HTTP is available only over a private Unix domain socket,
+    never on the application TCP listener. No reset endpoint.
+paths:
+  /auth/login:
+    post:
+      security:
+      - bffKey: []
+      responses:
+        '200':
+          description: Committed response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResult'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
+  /auth/refresh:
+    post:
+      security:
+      - bffKey: []
+      responses:
+        '200':
+          description: Committed response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tokens'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Refresh'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
+  /auth/logout:
+    post:
+      security:
+      - bffKey: []
+        bearer: []
+      responses:
+        '204':
+          description: Closed or bound terminal replay
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Logout'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
+  /me:
+    get:
+      security:
+      - bffKey: []
+        bearer: []
+      responses:
+        '200':
+          description: Committed response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
+  /auth/password/change:
+    post:
+      security:
+      - bffKey: []
+        bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+      responses:
+        '202':
+          description: Durable workflow status; Reconciled may mean Applied or RejectedNotApplied,
+            not a password-success assertion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeStatus'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: AUTHENTICATION_BUSY when the bounded KDF queue is full or its two-second wait expires; TEMPORARILY_UNAVAILABLE for dependency failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-Bff-Subject
+        in: header
+        required: true
+        description: Stable BFF-generated admission assertion; never copied from an
+          untrusted browser header. This is not Person identity or authorization.
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{32,128}$
+  /dev/auth/recovery/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      security:
+      - operatorKey: []
+      responses:
+        '200':
+          description: Durable workflow status; Reconciled may mean Applied or RejectedNotApplied,
+            not a password-success assertion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeStatus'
+        '404':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      security:
+      - operatorKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recovery'
+      responses:
+        '200':
+          description: Durable workflow status; Reconciled may mean Applied or RejectedNotApplied,
+            not a password-success assertion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeStatus'
+        '400':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: RATE_LIMITED caller or transport budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Uniform failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    x-transport: private-unix-domain-socket
+components:
+  schemas:
+    Login:
+      type: object
+      additionalProperties: false
+      properties:
+        email: &id001
+          type: string
+        mobile: *id001
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - password
+      oneOf:
+      - required:
+        - email
+        not:
+          required:
+          - mobile
+      - required:
+        - mobile
+        not:
+          required:
+          - email
+    Refresh:
+      type: object
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+          maxLength: 180
+        foreground:
+          type: boolean
+      required:
+      - refreshToken
+      - foreground
+    Logout:
+      type: object
+      additionalProperties: false
+      properties:
+        sessionId: &id002
+          type: string
+          format: uuid
+      required:
+      - sessionId
+    Person:
+      type: object
+      additionalProperties: false
+      properties:
+        personId: *id002
+        displayName: *id001
+        email: *id001
+        mobile: *id001
+        status:
+          const: Active
+      required:
+      - personId
+      - displayName
+      - status
+    Tokens:
+      type: object
+      additionalProperties: false
+      properties:
+        sessionId: *id002
+        accessToken: *id001
+        refreshToken: *id001
+        expiresAt: &id003
+          type: string
+          format: date-time
+        accessExpiresAt: *id003
+      required:
+      - sessionId
+      - accessToken
+      - refreshToken
+      - expiresAt
+      - accessExpiresAt
+    LoginResult:
+      type: object
+      additionalProperties: false
+      properties:
+        person:
+          $ref: '#/components/schemas/Person'
+        session:
+          $ref: '#/components/schemas/Tokens'
+      required:
+      - person
+      - session
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          properties:
+            code: *id001
+            message: *id001
+          required:
+          - code
+          - message
+        traceId: *id001
+      required:
+      - error
+      - traceId
+    ChangePassword:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - currentPassword
+      - newPassword
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 15
+          maxLength: 128
+    ChangeStatus:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      - stage
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        stage:
+          enum:
+          - Fenced
+          - AwaitingCredential
+          - Reconciled
+          - FailedClosed
+    Recovery:
+      type: object
+      additionalProperties: false
+      required:
+      - action
+      properties:
+        action:
+          enum:
+          - Retry
+          - ResolveNotApplied
+  securitySchemes:
+    bffKey:
+      type: apiKey
+      in: header
+      name: X-Bff-Client-Key
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    operatorKey:
+      type: apiKey
+      in: header
+      name: X-Auth-Operator-Key
