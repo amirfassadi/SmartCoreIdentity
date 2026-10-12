@@ -39,6 +39,10 @@ class LocalPreflightChecks(unittest.TestCase):
                 with self.assertRaises(ValueError): helper.browser_boundary(root)
             path.write_text(yaml.safe_dump({'description':'personId must not appear', 'properties':{'displayName':{'type':'string'}}}))
             with contextlib.redirect_stdout(io.StringIO()): helper.browser_boundary(root)
+            extension = root / 'contracts/bff-browser-recovery.openapi.yaml'
+            extension.write_text(yaml.safe_dump({'properties': {'PERSON_ID': {'type':'string'}}}))
+            with self.assertRaises(ValueError): helper.browser_boundary(root)
+            extension.unlink()
             source = root / 'web/identity/src/example.ts'
             source.write_text('const profile = {PersonId: "fixture"};')
             with self.assertRaises(ValueError): helper.browser_boundary(root)

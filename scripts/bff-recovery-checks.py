@@ -78,7 +78,9 @@ def recovery_checks(root,tls,private,env,identity_env,dotnet,validate_response,c
     assert fixture(contact)['Stage']=='Fenced' and fixture(contact)['ActiveSessions']==0
     assert '__Host-smartcore-session' not in reset.cookies
     assert peer.request('/bff/me',{})[0]==401
-    assert reset.request('/bff/login',{'email':contact,'password':new})[0]==503 # Intent still fenced, not reported as completed.
+    assert reset.request('/bff/login',{'email':contact,'password':new})==(401,{'code':'UNAUTHORIZED'})
+    assert reset.request('/bff/login',{'email':contact,'password':old})==(401,{'code':'UNAUTHORIZED'})
+    assert fixture(contact)['ActiveSessions']==0 # Uniform denial while fenced, no premature session.
     fixture(contact,'Process');assert fixture(contact)['Stage']=='Reconciled' and not fixture(contact)['HasRecovery']
     assert reset.request('/bff/login',{'email':contact,'password':old})[0]==401
     assert reset.request('/bff/login',{'email':contact,'password':new})[0]==200;reset.csrf()
