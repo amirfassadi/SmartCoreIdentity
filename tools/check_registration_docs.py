@@ -10,7 +10,7 @@ for item in manifest['files']:
  assert len(data)==item['bytes'] and hashlib.sha256(data).hexdigest()==item['sha256'],item['path']
 current=[root/'README.md',root/'docs/IDENTITY_VISION.md',root/'docs/KIMIA_IDENTITY_MVP.md',*(root/'docs/registration').glob('*.md')]
 current.append(root/'docs/reference/uploaded-blueprint/capability.validation_notes.md')
-current.extend(root/'docs/implementation'/name for name in ['PR_STACK.md','RELEASE_GATES.md','PRODUCT_ROADMAP.md','BROWSER_SKELETON_SLICE.md','BFF_BROWSER_HOST.md','HTTPS_INGRESS.md'])
+current.extend(root/'docs/implementation'/name for name in ['PR_STACK.md','RELEASE_GATES.md','PRODUCT_ROADMAP.md','BROWSER_SKELETON_SLICE.md','BFF_BROWSER_HOST.md','HTTPS_INGRESS.md','BFF_BROWSER_GUARD.md'])
 links=0
 for p in current:
  s=p.read_text()

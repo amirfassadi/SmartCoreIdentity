@@ -24,9 +24,10 @@ ingress is now present; see HTTPS_INGRESS.md for its acceptance evidence boundar
   and no unprotected-key fallback. Production, public bind, missing certificate
   and equal client/receipt keys are rejected at startup. Certificate/key-ring
   filesystem permissions, secret mounts and rotation remain operator obligations.
-- Antiforgery cookie/header options are registered. **No authentication principal
-  handler or CSRF validation has been delivered yet.** The five known browser
-  methods deliberately return `503 BFF_UNAVAILABLE`, without session cookies or
+- Antiforgery cookie/header options are registered. The opaque-session principal and CSRF validation are now implemented;
+  see [BFF_BROWSER_GUARD.md](BFF_BROWSER_GUARD.md). GET /bff/csrf issues an
+  antiforgery request token. Account handlers remain disconnected: guard-passing
+  account commands return unavailable without minting login session cookies or
   upstream work. Other methods return route-specific `405`/Allow; undeveloped
   B2/B3 and unknown paths return JSON `404 NOT_FOUND`; responses are no-store.
   These scaffold responses are not the final task-5 guard pipeline.
@@ -71,11 +72,11 @@ and the two-host PostgreSQL checks in isolated jobs.
 
 Task 3 still needs seeded Identity account integration through the real login
 handler (task 6). Task 4 now supplies development HTTPS ingress with locale-only cookies to Next
-and trusted-header overwrites; see [HTTPS_INGRESS.md](HTTPS_INGRESS.md). Task 5 establishes the opaque-cookie principal and
-session-bound CSRF guards. The [raw request fixtures](../../tests/browser/b1-guard-precedence.json)
+and trusted-header overwrites; see [HTTPS_INGRESS.md](HTTPS_INGRESS.md). Task 5 now establishes the opaque-cookie principal and session-bound CSRF guards;
+its fresh CI evidence is tracked in BFF_BROWSER_GUARD.md. The [raw request fixtures](../../tests/browser/b1-guard-precedence.json)
 cover each adjacent competing error pair plus cross-site/malformed JSON. Their
-current Python evaluator injects a CSRF result; they must be executed against the
-live host with zero upstream calls asserted once task 5 lands. The 15 older
+current Python evaluator injects a CSRF result; they now run against the live host/TLS proxy with zero Identity calls asserted;
+fresh CI must pass before claiming their runtime evidence. The 15 older
 controls are a precedence model, not 15 live requests.
 
 B2 must review OTP/register Retry-After again; B3 must review reset cooldowns.

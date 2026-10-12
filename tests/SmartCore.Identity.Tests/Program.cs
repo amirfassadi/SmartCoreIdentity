@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using SmartCore.Identity;
 
+if(args.Contains("--browser-session-fixture")){await BrowserSessionFixture.Run();return;}
+
 if(args.Contains("--bff-process-peer")){await BffProcessPeer.Run();return;}
 
 var connection=Environment.GetEnvironmentVariable("SMARTCORE_TEST_DB") ?? throw new Exception("Set SMARTCORE_TEST_DB to a dedicated, disposable PostgreSQL database.");

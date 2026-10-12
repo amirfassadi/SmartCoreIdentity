@@ -1,5 +1,5 @@
 """B1 host infrastructure only: two real processes, encrypted DP ring and JSON routing.
-No session-bound CSRF, auth flow, HTTPS proxy or browser acceptance claim.
+Includes live TLS/session-bound CSRF guards; no actual browser login/account E2E claim.
 """
 import base64
 import json
@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 import secrets
 import ssl
+import runpy
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import subprocess
 import sys
 import tempfile
@@ -49,10 +52,22 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
     if '--config-only' in sys.argv:
         sys.exit(0)
     assert os.environ.get('ConnectionStrings__Bff'), 'Provide a disposable PostgreSQL 17 test database'
+    # TLS endpoints use their own key, separate from Data Protection wrapping material.
+    subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1','-keyout',str(directory/'tls.key'),'-out',str(directory/'tls.crt')],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['openssl','pkcs12','-export','-out',str(directory/'tls.pfx'),'-inkey',str(directory/'tls.key'),'-in',str(directory/'tls.crt'),'-passout','stdin'],input=(password+'\n').encode(),check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    identity_calls=[]
+    class IdentityTrap(BaseHTTPRequestHandler):
+        def log_message(self,*args): pass
+        def do_POST(self):
+            identity_calls.append(self.path)
+            self.send_response(500);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(b'{"code":"INTERNAL_ERROR"}')
+        do_GET=do_POST
+    trap=ThreadingHTTPServer(('127.0.0.1',5157),IdentityTrap)
+    thread=threading.Thread(target=trap.serve_forever,daemon=True);thread.start()
     processes = []
     try:
         for port in (5171,5172):
-            process = subprocess.Popen([dotnet, assembly], env={**env,'ASPNETCORE_URLS':f'http://127.0.0.1:{port}'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = subprocess.Popen([dotnet, assembly], env={**env,'ASPNETCORE_URLS':f'http://127.0.0.1:{port};https://127.0.0.1:{port+100}', 'Kestrel__Certificates__Default__Path':str(directory/'tls.pfx'), 'Kestrel__Certificates__Default__Password':password}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             processes.append(process)
             for _ in range(200):
                 assert process.poll() is None, 'BFF host exited before readiness'
@@ -61,14 +76,12 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 except OSError: pass
                 time.sleep(.1)
             else: raise AssertionError('BFF host readiness timed out')
-            for path,method,status in [('/bff/register','POST',404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503),('/bff/login','POST',503)]:
+            for path,method,status in [('/bff/register','POST',404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503),('/bff/login','POST',415)]:
                 request = urllib.request.Request(f'http://127.0.0.1:{port}{path}',method=method)
                 try: response = opener.open(request,timeout=5)
                 except urllib.error.HTTPError as error: response = error
                 assert response.status == status
                 validate_response(contract,path,method,status,json.loads(response.read()),dict(response.headers.items()))
-        # A distinct TLS key/certificate, never the Data Protection wrapping key.
-        subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1','-keyout',str(directory/'tls.key'),'-out',str(directory/'tls.crt')],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         ingress = subprocess.Popen(['node',str(root/'deploy/development/https-ingress.mjs')],env={**os.environ,
             'SMARTCORE_INGRESS_ENVIRONMENT':'Testing','SMARTCORE_INGRESS_ORIGIN':'https://localhost:7443',
             'SMARTCORE_TLS_KEY':str(directory/'tls.key'),'SMARTCORE_TLS_CERT':str(directory/'tls.crt')},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -83,7 +96,11 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
             except OSError: pass
             time.sleep(.1)
         else: raise AssertionError('HTTPS ingress readiness timed out')
-        for path,method,status in [('/bff/register','POST',404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503)]:
+        guard=runpy.run_path(str(root/'scripts/bff-guard-checks.py'))['guard_checks']
+        guard(root,tls,env,dotnet,validate_response,contract,'https://localhost:5271')
+        assert not identity_calls, 'Guard/bootstrap must never dispatch to Identity'
+        print('BFF GUARD DISPATCH PASS: zero Identity calls across guard, bootstrap and fixture checks.')
+        for path,method,status in [('/bff/register','POST',404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',200)]:
             request=urllib.request.Request('https://localhost:7443'+path,method=method,headers={'Origin':'https://localhost:7443','Sec-Fetch-Site':'same-origin','X-Bff-Client-Key':'forged','X-Forwarded-Host':'evil.invalid','X-Forwarded-Proto':'http'})
             try: response=tls.open(request,timeout=5)
             except urllib.error.HTTPError as error: response=error
@@ -93,6 +110,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         print('BFF HTTPS ingress PASS: trusted local TLS certificate, two real ASP.NET hosts, B2/B3 JSON 404, route-specific 405 Allow and no-store through the actual proxy.')
         print('BFF two-host routing PASS: B2/B3 JSON 404, route-specific 405 Allow, no-store and scaffold-unavailable responses match contract.')
     finally:
+        trap.shutdown();trap.server_close();thread.join(timeout=5)
         for process in processes:
             process.terminate()
         for process in processes:
