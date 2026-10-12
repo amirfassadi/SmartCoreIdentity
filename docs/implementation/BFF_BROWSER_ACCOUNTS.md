@@ -85,7 +85,8 @@ SMARTCORE_BROWSER_E2E=yes python scripts/bff-account-smoke.py
 ```
 
 The exact successful CI revisions below verify these private B1 controls. B2 registration/OTP now has a separately tested private candidate;
-B3 enrollment/reset/password-change UI remains open, as do public-user release gates,
+B3 enrollment/reset/password-change has a private candidate and suite in
+[BFF_BROWSER_RECOVERY.md](BFF_BROWSER_RECOVERY.md); live acceptance remains pending, as do public-user release gates,
 provider selection, canonical Platform provenance and operator deployment inputs.
 B1 does not certify the complete registration/reset browser journey or production.
 
