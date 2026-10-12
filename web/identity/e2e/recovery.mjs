@@ -81,8 +81,15 @@ try {
   await reset.getByRole('button',{name:'Request password reset',exact:true}).click();
   await reset.getByText(/Your request was accepted/).waitFor();
   assert.equal(await reset.locator('input').count(),0);assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));
+  stage='pending reset preserves processing explanation';
+  await reset.getByRole('button',{name:'Go to sign in',exact:true}).click();
+  await page.locator('input[name=contact]').fill(fixture.email);await page.locator('input[name=password]').fill(fixture.newPassword);
+  await page.locator('form').locator('button[type=submit]').click();await page.getByRole('alert').waitFor();
+  await page.getByText('Your request was accepted. Processing may still be underway; sign in with your new password when ready.',{exact:true}).waitFor();
+  assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));
   stage='new-password login and replacement enrollment';
-  await exchange('process');await reset.getByRole('button',{name:'Go to sign in',exact:true}).click();await login(fixture.newPassword);
+  await exchange('process');await login(fixture.newPassword);
+  assert.equal(await page.getByText('Your request was accepted. Processing may still be underway; sign in with your new password when ready.',{exact:true}).count(),0);
   await recovery.locator('input[name=currentPassword]').fill(fixture.newPassword);await recovery.locator('input[name=acceptLossRisk]').check();
   await recovery.getByRole('button',{name:'Issue recovery code',exact:true}).click();await recovery.getByTestId('recovery-code').waitFor();
   const replacement=await recovery.getByTestId('recovery-code').textContent();assert.notEqual(replacement,code);

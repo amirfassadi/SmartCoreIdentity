@@ -126,3 +126,8 @@ Live wire-contract failures retain route/method/status only: schema exceptions c
 print the one-time recovery code, antiforgery token or raw headers. The documentary
 validator/negative fixtures remain unchanged. A focused failure regression verifies
 that formatting the live exception cannot recover the rejected proof value.
+
+Pending-mutation explanation persists through a denied new-password sign-in and
+clears only after successful sign-in/profile resolution or an explicitly new
+registration/reset flow. Chromium checks the real fenced denial before its private
+worker reconciles, then checks successful new-password login clears that explanation.
