@@ -61,3 +61,18 @@ the disposable DB verifies that media/Origin errors precede lookup and a lookup
 failure does not log users out. It restores the column in finally. These are synthetic
 session state tests, not actual Identity login/logout/password/reset acceptance.
 Fresh PostgreSQL 17 CI must pass before live-guard evidence is claimed.
+
+## Verified live-guard CI
+
+Code revision `4c4c58f13daf958e36f344c2a00200a1551c7619` passed
+[Browser B1 infrastructure run 38226825957](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38226825957).
+Job 114736278067 was inspected: both Release builds had zero warnings/errors;
+five competing-error requests through real TLS ingress and direct-TLS host size
+precedence passed; two-host session-bound antiforgery, synthetic lifecycle and
+lookup-failure controls passed; Identity dispatch count was zero. Next/ingress
+job 114736277941 also passed. The identical integration code tree on
+`8e939026f00a43d1c449258279f67847fe933352` passed run 38226829321.
+The initial missing DI configuration failure is superseded by these fresh runs.
+This certifies the stated HTTP/TLS guard controls only. Actual account handlers,
+login-cookie transitions and browser registration/login/refresh/logout/reset E2E
+remain unimplemented/unverified in this slice.

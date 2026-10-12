@@ -30,7 +30,8 @@ ingress is now present; see HTTPS_INGRESS.md for its acceptance evidence boundar
   account commands return unavailable without minting login session cookies or
   upstream work. Other methods return route-specific `405`/Allow; undeveloped
   B2/B3 and unknown paths return JSON `404 NOT_FOUND`; responses are no-store.
-  These scaffold responses are not the final task-5 guard pipeline.
+  Task-6 account commands still terminate in unavailable; actual account
+  transitions and browser acceptance remain open.
 
 ## Configuration and local checks
 
