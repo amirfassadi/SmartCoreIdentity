@@ -20,7 +20,7 @@ import yaml
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'tools'))
-from check_bff_browser_contract import validate_response
+from check_bff_browser_contract import validate_live_response as validate_response
 contract = yaml.safe_load((root / 'contracts/bff-browser.openapi.yaml').read_text())
 dotnet = os.environ.get('SMARTCORE_DOTNET', 'dotnet')
 assembly = str(root / 'src/SmartCore.Identity.Bff.Host/bin/Release/net10.0/SmartCore.Identity.Bff.Host.dll')

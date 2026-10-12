@@ -86,5 +86,43 @@ and verifies one real browser /me/action causes exactly one native generation
 advance while preserving the opaque cookie. It then tests lost one-time response/replay, fresh
 replacement consent, one-time code isolation/acknowledgment, two-factor reset, fresh
 login, replacement enrollment and Persian password change/cross-tab rejection.
-Native builds, type checking, production build, schemas and ingress pass locally;
-exact live CI evidence is added only after all checks complete.
+Native builds, type checking, production build, schemas and ingress pass locally.
+The exact successful live execution is recorded below.
+
+## Verified complete private browser journey — 2026-10-12
+
+Code `f3851af966ebe36d1e49287a404db0395582f292` passed all four workflows:
+
+- [Browser B1/B2/B3 38306669824](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38306669824)
+- [Backend 38306669984](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38306669984)
+- [Documentary 38306669922](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38306669922)
+- [Full local preflight 38306669827](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38306669827)
+
+Jobs `115002840710` and `115002803091` logs were inspected. The native harness
+retains **303 cumulative checks**, all five earlier API smokes and both controlled
+reset timing gates. Full local preflight reports **41 passed, 0 failed, 0 skipped**;
+nine focused preflight regression checks pass separately. Browser release builds
+had zero warnings/errors. Actual B1/B2/B3 HTTP/Chromium, pre-dispatch lock failure
+and private upstream outage controls passed. The complete browser journey proves
+a single native refresh-generation advance with a stable opaque cookie before
+one-time enrollment, reset, new-password login, replacement enrollment and change.
+
+The same-tree integration is `d8f79e456e1dc69642feea0993f78ae501eb27d3`. Its browser,
+documentary and full-preflight jobs passed independently. The first separate
+backend run hit one legacy wire-timing sample at 355.21 ms against the unchanged
+350 ms maximum; the reset service itself measured 217.68 ms and the rest was
+pipeline overhead. Only that failed job was retried, with no threshold or test
+relaxation: [backend 38306672999, attempt 2](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38306672999) passed.
+All four integration workflows now pass on the identical source tree. This remains
+controlled regression acceptance, not production/load or constant-time certification.
+
+This closes the **private Stage B** implementation/Chromium journey. Default flags
+and public/Production startup gates remain disabled. Canonical Platform/Identity
+merges, real SMS delivery/spend controls, delivered alerts, load/failover acceptance,
+operational/contact-release policy and market privacy/retention still gate real
+users. No main merge, VPS/service/database change or provider send occurred.
+
+Live wire-contract failures retain route/method/status only: schema exceptions cannot
+print the one-time recovery code, antiforgery token or raw headers. The documentary
+validator/negative fixtures remain unchanged. A focused failure regression verifies
+that formatting the live exception cannot recover the rejected proof value.

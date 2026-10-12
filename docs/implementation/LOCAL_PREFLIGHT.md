@@ -97,6 +97,24 @@ after successful execution. See [B2 boundaries](BFF_BROWSER_REGISTRATION.md).
 The runner now also checks the B3 contract and the real recovery browser journey.
 All three UI features are enabled only in the isolated copy. Error logs remain
 suppressed; only an enumerated test phase/type can be emitted, with a regression
-ensuring raw secret/error text cannot appear. Eight focused preflight tests pass.
+ensuring raw secret/error text cannot appear. Nine focused preflight tests pass.
 The 39-check same-tree B2 result is recorded in
 [B2 acceptance](BFF_BROWSER_REGISTRATION.md); it does not certify B3.
+
+## Verified B1/B2/B3 runner — 2026-10-12
+
+Code `f3851af966ebe36d1e49287a404db0395582f292` passed
+[run 38306669827](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38306669827).
+Job `115002803091` logs were inspected: **41 passed, 0 failed, 0 skipped**.
+The native 303-check harness, five earlier API smokes, actual two-host guards, all
+three real Chromium suites and disposable migration/reapply/dump/restore completed.
+Nine preflight regression checks pass separately. The browser B3 suite proves an
+actual browser refresh generation followed by enrollment/reset/replacement/change.
+See [complete private browser acceptance](BFF_BROWSER_RECOVERY.md).
+This supersedes prior incomplete/failing local-run results for private Stage B;
+it does not close canonical governance, production, provider or VPS restore gates.
+
+Live wire-contract failures retain route/method/status only: schema exceptions cannot
+print the one-time recovery code, antiforgery token or raw headers. The documentary
+validator/negative fixtures remain unchanged. A focused failure regression verifies
+that formatting the live exception cannot recover the rejected proof value.
