@@ -64,6 +64,18 @@ class LocalPreflightChecks(unittest.TestCase):
         for origin in ('https://example.test', 'http://localhost:7443', 'https://user:password@localhost:7443', 'https://localhost:7443/path'):
             with self.assertRaises(ValueError): helper.probe(origin, None)
 
+    def test_relative_tmpdir_becomes_absolute_and_is_cleaned(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base=Path(scratch); (base / 'relative').mkdir()
+            captured=base / 'captured'; scanner=base / 'scanner'
+            scanner.write_text('#!/usr/bin/env bash\nif [[ "$1" == dir ]]; then printf "%s" "$2" > "$PREFLIGHT_CAPTURE"; fi\nexit 0\n')
+            scanner.chmod(0o700)
+            result=subprocess.run(['bash',str(ROOT / 'preflight-local.sh'),'--static-only'],cwd=base,
+                env={**os.environ,'SMARTCORE_PYTHON':sys.executable,'SMARTCORE_GITLEAKS':str(scanner),'PREFLIGHT_CAPTURE':str(captured),'TMPDIR':'relative'},capture_output=True,text=True,timeout=45)
+            self.assertEqual(result.returncode,2)
+            self.assertTrue(Path(captured.read_text()).is_absolute())
+            self.assertEqual(list((base / 'relative').iterdir()),[])
+
     def test_static_mode_never_marks_skips_as_success(self):
         with tempfile.TemporaryDirectory() as scratch:
             result = subprocess.run(['bash',str(ROOT / 'preflight-local.sh'),'--static-only'],env={**os.environ,'SMARTCORE_PYTHON':sys.executable,'SMARTCORE_GITLEAKS':'/nonexistent/preflight-gitleaks','TMPDIR':scratch}, capture_output=True,text=True,timeout=45)

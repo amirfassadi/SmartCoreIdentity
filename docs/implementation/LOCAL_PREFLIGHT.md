@@ -61,3 +61,25 @@ by this runner. RELEASE_GATES.md, canonical Platform provenance, real delivery,
 VPS configuration and operator-controlled backups remain independent requirements.
 
 Gitleaks command reference: https://github.com/gitleaks/gitleaks#usage .
+
+## Verified execution — 2026-10-12
+
+Code `4350f1cd199e6d0b86428c87f8bc0c95b6bf6977` passed
+[Local B1 preflight run 38298164165](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164165).
+Job `114974216318` logs were inspected: **37 passed, 0 failed, 0 skipped**.
+The actual native harness, both migration invocations, disposable pg_dump/pg_restore,
+five existing HTTP smokes, two-host TLS/config guards and Chromium all completed.
+The older temporary-server readiness failure and missing Debug-build failures are
+superseded by this exact successful code revision. No raw failure logs were exposed.
+
+The three existing workflows also passed on that code:
+[backend 38298164186](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164186),
+[browser 38298164246](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164246),
+[documentary 38298164159](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164159).
+
+The follow-up canonicalizes a relative TMPDIR before any directory change, with a
+separate regression proving an absolute copy path and complete temporary cleanup.
+Seven focused helper/CLI tests pass. Native application behavior remains unchanged.
+Local execution where SDK/Docker are unavailable returned INCOMPLETE/2 rather than
+full PASS, even when all available static/frontend controls succeeded. These results
+do not close B2/B3, production delivery, canonical governance or VPS restore gates.

@@ -27,6 +27,7 @@ for binary in git "$PYTHON_BIN" mktemp timeout setsid; do
 done
 if ! git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo '[FAIL] Git working copy required'; exit 1; fi
 TMPBASE=${TMPDIR:-/tmp}
+TMPBASE=$("$PYTHON_BIN" -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$TMPBASE") || exit 1
 if ! "$PYTHON_BIN" -c 'import pathlib,sys; sys.exit(pathlib.Path(sys.argv[1]).resolve().is_relative_to(pathlib.Path(sys.argv[2]).resolve()))' "$TMPBASE" "$ROOT"; then echo '[FAIL] TMPDIR must be outside the repository'; exit 1; fi
 TEMP=$(mktemp -d "$TMPBASE/smartcore-local-preflight.XXXXXXXX") || exit 1
 LOG_INDEX=0
