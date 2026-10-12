@@ -563,3 +563,29 @@ by missing HostConfiguration registration was corrected before these runs.
 These results supersede the pending live-guard statement above. Actual Identity
 login/logout and browser account E2E remain open; account commands are unavailable.
 No public/production deployment or main merge occurred.
+
+### B1 tasks 6–9 — verified private account and browser path, 2026-10-12
+
+Code `45c6d7ad015c4bda8ebeeb375d7323f4c61aa68c` passed all three workflows;
+see [BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md) for exact run/job references.
+Inspected logs prove actual private Identity Ready-account login/profile/logout,
+two BFF hosts with PostgreSQL 17 through real TLS ingress, CSRF rebinding, one
+rotation for four parallel reads, pre-intent logout contention/cookie preservation,
+outage preservation and cookie-free maintenance recovery. Production Next in
+Chromium passed fa/en nonce-CSP hydration, mobile RTL, locale persistence,
+BroadcastChannel/storage fallback, second login and delayed-body logout rejection.
+Generated browser request/response types reproduce from the reviewed B1 OpenAPI.
+Node/.NET/Chromium winter/summer 2026 Tehran formatting checks passed.
+
+Existing native backend remains **303 checks** with all five API HTTP smokes and
+both controlled reset timing gates passed; Release builds have zero warnings/errors.
+Integration `39268fc06a29120a930ec2bba3a061c02cb03b98` has the same complete tree and
+all three workflows passed. Earlier failed candidate executions are superseded by
+these explicitly identified successful code revisions; no test count is inferred
+from a document or replaced with a schema-only count.
+
+B1 is verified privately on Chromium; B2/B3 and the full registration/reset browser
+journey remain open. Web Locks coordinate potentially cookie-changing responses
+through headers while delayed body parsing remains cancelable outside the lock.
+BFF core/journal remains refresh owner. Production/default UI stays disabled;
+there is no main merge, VPS change, real provider activation or public-user approval.
