@@ -22,8 +22,9 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'tools'))
 from check_bff_browser_contract import validate_response
 from bff_browser_contract import load_contract
-b2 = os.environ.get('SMARTCORE_B2') == 'yes'
-contract = load_contract(registration=b2)
+b3 = os.environ.get('SMARTCORE_B3') == 'yes'
+b2 = os.environ.get('SMARTCORE_B2') == 'yes' or b3
+contract = load_contract(registration=b2,recovery=b3)
 dotnet = os.environ.get('SMARTCORE_DOTNET', 'dotnet')
 assembly = str(root / 'src/SmartCore.Identity.Bff.Host/bin/Release/net10.0/SmartCore.Identity.Bff.Host.dll')
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -40,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         'ConnectionStrings__Bff':os.environ.get('ConnectionStrings__Bff', 'Host=127.0.0.1;Database=unused_config_only'),
         'Bff__ExternalOrigin':'https://localhost:7443', 'Bff__IdentityOrigin':'http://127.0.0.1:5157/', 'Bff__ClientKey':secrets.token_urlsafe(32), 'Bff__ReceiptKey':secrets.token_urlsafe(32),
         'Bff__SessionMacKey':base64.b64encode(secrets.token_bytes(32)).decode(), 'Bff__SessionMaterialKey':base64.b64encode(secrets.token_bytes(32)).decode(),
-        'Bff__AccountsEnabled':'true', 'Bff__RegistrationEnabled':'true' if b2 else 'false', 'Bff__DataProtection__KeyRing':str(directory/'ring'), 'Bff__DataProtection__CertificatePath':str(directory/'wrap.pfx'), 'Bff__DataProtection__CertificatePassword':password}
+        'Bff__AccountsEnabled':'true', 'Bff__RegistrationEnabled':'true' if b2 else 'false', 'Bff__RecoveryEnabled':'true' if b3 else 'false', 'Bff__DataProtection__KeyRing':str(directory/'ring'), 'Bff__DataProtection__CertificatePath':str(directory/'wrap.pfx'), 'Bff__DataProtection__CertificatePassword':password}
     assert run(env, '--validate-config').returncode == 0
     for overrides in [{'ASPNETCORE_ENVIRONMENT':'Production'}, {'ASPNETCORE_URLS':'http://0.0.0.0:5171'}, {'Bff__DataProtection__CertificatePath':str(directory/'missing.pfx')}, {'Bff__ReceiptKey':env['Bff__ClientKey']}, {'Bff__ExternalOrigin':'http://localhost:7443'}]:
         assert run({**env, **overrides}, '--validate-config').returncode != 0
@@ -65,6 +66,9 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         'Identity__AccessSigningKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Identity__RefreshReceiptKey':env['Bff__ReceiptKey'], 'Identity__BffClientKey':env['Bff__ClientKey'],
         'Identity__AuthenticationEnabled':'true','Identity__WorkerEnabled':'false' if b2 else 'true','Identity__DevInboxKey':secrets.token_urlsafe(32)}
+    if b3:
+        (directory/'operator').mkdir(mode=0o700)
+        identity_env.update(Identity__PasswordChangeEnabled='true',Identity__RecoveryEnrollmentEnabled='true',Identity__PasswordChangeWorkerEnabled='false',Identity__AuthOperatorKey=secrets.token_urlsafe(32),Identity__AuthOperatorSocket=str(directory/'operator'/'recovery.sock'),Identity__ApplicationPort='5157')
     identity_assembly=str(root/'src/SmartCore.Identity.Api/bin/Release/net10.0/SmartCore.Identity.Api.dll')
     subprocess.run([dotnet,identity_assembly,'--migrate'],env=identity_env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     processes = []
@@ -118,7 +122,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 except OSError:pass
                 time.sleep(.1)
             else:raise AssertionError('Next readiness timed out')
-        checks=runpy.run_path(str(root/('scripts/bff-registration-checks.py' if b2 else 'scripts/bff-account-checks.py')))['registration_checks' if b2 else 'account_checks']
+        checks=runpy.run_path(str(root/('scripts/bff-recovery-checks.py' if b3 else 'scripts/bff-registration-checks.py' if b2 else 'scripts/bff-account-checks.py')))['recovery_checks' if b3 else 'registration_checks' if b2 else 'account_checks']
         checks(root,tls,opener,env,identity_env,dotnet,validate_response,contract,identity_process)
     finally:
         for process in processes:

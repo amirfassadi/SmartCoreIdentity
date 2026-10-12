@@ -48,6 +48,8 @@ builder.Services.AddSingleton<IdentityAccountHttp>();
 builder.Services.AddScoped<BrowserAccounts>();
 builder.Services.AddSingleton<IdentityRegistrationHttp>();
 builder.Services.AddScoped<BrowserRegistration>();
+builder.Services.AddSingleton<IdentityRecoveryHttp>();
+builder.Services.AddScoped<BrowserRecovery>();
 builder.Services.AddScoped<BrowserGuard>();
 var app = builder.Build();
 if (await app.Services.GetRequiredService<IAuthenticationSchemeProvider>().GetDefaultAuthenticateSchemeAsync() is not null)

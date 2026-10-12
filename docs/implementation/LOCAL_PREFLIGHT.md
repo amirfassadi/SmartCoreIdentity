@@ -91,3 +91,12 @@ real Identity/two-host/Chromium registration journey. Both browser flags are ena
 only inside the throwaway source copy. The historical 37-check B1 result below is
 not evidence for these additional B2 checks; their exact CI result is recorded
 after successful execution. See [B2 boundaries](BFF_BROWSER_REGISTRATION.md).
+
+## Additive B3 checks
+
+The runner now also checks the B3 contract and the real recovery browser journey.
+All three UI features are enabled only in the isolated copy. Error logs remain
+suppressed; only an enumerated test phase/type can be emitted, with a regression
+ensuring raw secret/error text cannot appear. Eight focused preflight tests pass.
+The 39-check same-tree B2 result is recorded in
+[B2 acceptance](BFF_BROWSER_REGISTRATION.md); it does not certify B3.

@@ -125,7 +125,7 @@ def validate_response(doc, path, method, status, body, headers):
             assert cookies[name].value == '' and cookies[name]['max-age'] == '0'
         else:
             assert cookies[name].value and cookies[name]['max-age'] != '0'
-            if name == '__Host-smartcore-registration':
+            if name in ('__Host-smartcore-registration', '__Host-smartcore-reset'):
                 assert re.fullmatch(r'[A-Za-z0-9_-]{1,2048}', cookies[name].value)
                 assert 0 < int(cookies[name]['max-age']) <= 660
             if name == '__Host-smartcore-session':

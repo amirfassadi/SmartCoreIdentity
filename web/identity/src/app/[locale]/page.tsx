@@ -1,11 +1,14 @@
 'use client';
 import {useLocale, useTranslations} from 'next-intl';
+import RecoveryPanel from './RecoveryPanel';
+import ResetPanel from './ResetPanel';
 import RegistrationPanel from './RegistrationPanel';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {bootstrap, BrowserError, invalidateCsrf, post, type Person} from '@/lib/bff/client';
 
 const enabled = process.env.NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED === 'true';
 const registrationEnabled = process.env.NEXT_PUBLIC_BFF_REGISTRATION_ENABLED === 'true';
+const recoveryEnabled = process.env.NEXT_PUBLIC_BFF_RECOVERY_ENABLED === 'true';
 const events = ['login', 'logout', 'session-lost'] as const;
 type SessionEvent = typeof events[number];
 export default function AccountShell() {
@@ -14,6 +17,8 @@ export default function AccountShell() {
   const locale = useLocale();
   const [person, setPerson] = useState<Person>();
   const [register, setRegister] = useState(false);
+  const [reset, setReset] = useState(false);
+  const [notice, setNotice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [retryUntil, setRetryUntil] = useState(0);
@@ -80,7 +85,7 @@ export default function AccountShell() {
     event.preventDefault(); if (locked.current || remaining) return;
     const form = event.currentTarget; const fields = new FormData(form);
     const contact = String(fields.get('contact') ?? ''); const password = String(fields.get('password') ?? '');
-    clear(); const current = generation.current; locked.current = true; setBusy(true); setError('');
+    clear(); setNotice(false); const current = generation.current; locked.current = true; setBusy(true); setError('');
     try {
       const result = await post('/bff/login', contact.includes('@') ? {email: contact, password} : {mobile: contact, password});
       if (current !== generation.current) return;
@@ -117,13 +122,16 @@ export default function AccountShell() {
             <button className="rounded-lg border border-slate-300 px-4 py-2" onClick={() => void refresh(true)} disabled={busy || remaining > 0}>{a('continue')}</button>
             <button className="rounded-lg bg-teal-800 px-4 py-2 text-white" onClick={() => void logout()} disabled={busy || remaining > 0}>{a('logout')}</button>
           </div>
-        </div> : register && registrationEnabled ? <RegistrationPanel onSignIn={() => setRegister(false)} /> : <form onSubmit={login} className="grid gap-4">
+          {recoveryEnabled && <RecoveryPanel onSessionLost={() => {clear(); setNotice(false); broadcast('session-lost');}} onEnrolled={() => void refresh(true)} onAccepted={() => {clear(); setRegister(false); setReset(false); setNotice(true); broadcast('session-lost');}} />}
+        </div> : reset && recoveryEnabled ? <ResetPanel onSignIn={() => setReset(false)} onAccepted={() => {clear(); setNotice(true); broadcast('session-lost');}} /> : register && registrationEnabled ? <RegistrationPanel onSignIn={() => setRegister(false)} /> : <form onSubmit={login} className="grid gap-4">
           <h2 className="text-xl font-semibold">{a('login')}</h2>
           <label className="grid gap-2">{a('contact')}<input name="contact" type="text" autoComplete="username" required maxLength={254} dir="ltr" className="rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="grid gap-2">{a('password')}<input name="password" type="password" autoComplete="current-password" required maxLength={128} className="rounded-lg border border-slate-300 px-3 py-2" /></label>
           <button type="submit" className="rounded-lg bg-teal-800 px-4 py-3 font-semibold text-white" disabled={busy || remaining > 0}>{busy ? a('waiting') : a('login')}</button>
           {registrationEnabled && <button type="button" onClick={() => setRegister(true)} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('register')}</button>}
+          {recoveryEnabled && <button type="button" onClick={() => {setReset(true); setRegister(false);}} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('reset')}</button>}
         </form>}
+        {notice && <p role="status" className="mt-4">{a('mutationAccepted')}</p>}
         {error && <p role="alert" className="mt-4 text-sm text-red-800">{a(`errors.${knownErrors.includes(error) ? error : 'UNKNOWN'}`)}</p>}
         {remaining > 0 && <p role="status" className="mt-3 text-sm">{a('retry', {seconds: remaining})}</p>}
       </div>

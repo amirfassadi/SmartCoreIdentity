@@ -22,6 +22,7 @@ opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 contract=yaml.safe_load((root/'contracts/authentication.openapi.yaml').read_text())
 bff={'X-Bff-Client-Key':env['Identity__BffClientKey'],'X-Bff-Subject':secrets.token_urlsafe(32),'X-Reset-Timing-Key':env['Identity__DevInboxKey']}
 last_timing={}
+test_phase="Startup"
 class UnixConnection(http.client.HTTPConnection):
  def connect(self):
   self.sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
@@ -62,6 +63,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
    except OSError:pass
    time.sleep(.1)
   else:raise RuntimeError('API did not become ready')
+  test_phase='Registration'
   email=secrets.token_hex(10)+'@example.test';password='safe recovery enrollment HTTP password';binding=secrets.token_urlsafe(32)
   status,start=call('/auth/register',dict(email=email,password=password,displayName='Recovery',bindingSecret=binding),{'Idempotency-Key':secrets.token_urlsafe(32)})
   assert status==202
@@ -73,6 +75,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
    status,ready=call('/auth/register/verify',verification)
    if status==200 and ready['status']=='Ready':break
   else:raise RuntimeError('Registration did not become Ready')
+  test_phase='Enrollment'
   status,login=call('/auth/login',dict(email=email,password=password),bff)
   assert status==200 and login['person']['recoveryEnrollmentRequired'] is True
   import uuid
@@ -88,6 +91,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   assert call('/me',headers=auth)[1]['recoveryEnrollmentRequired'] is False
   status,replacement=call('/auth/recovery/enroll',{**request,'operationId':str(uuid.uuid4())},auth)
   assert status==200 and replacement['version']==2 and replacement['recoveryCode']!=enrolled['recoveryCode']
+  test_phase='Initiation'
   reset_bff={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
   reset=dict(operationId=str(uuid.uuid4()),email=email,bindingSecret=secrets.token_urlsafe(32))
   status,pending=call('/auth/password/reset',reset,reset_bff);assert status==202
@@ -112,6 +116,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
    label:{'n':len(values),'median_ms':round(__import__('statistics').median(values),2),'max_ms':round(max(values),2)}
    for label,values in timings.items()}))
   assert call('/me',headers=auth)[0]==200
+  test_phase='Completion'
   complete_bff={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
   new_password='new password dual factor HTTP fixture'
   complete=dict(operationId=str(uuid.uuid4()),challengeId=pending['challengeId'],bindingSecret=reset['bindingSecret'],
@@ -178,6 +183,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
     initiation_diagnostics[label].append({**last_timing,'whole_call_ms':round(initiation_timings[label][-1],3)})
   start_summaries={label:{'n':len(values),'p50_ms':round(percentile(values,.5),2),'p90_ms':round(percentile(values,.9),2),'max_ms':round(max(values),2)}
    for label,values in initiation_timings.items()}
+  test_phase='TimingInitiation'
   print('RESET TIMING INITIATION DIAGNOSTICS (authorized loopback test only): '+json.dumps(initiation_diagnostics))
   assert all('reset-total' in sample for samples in initiation_diagnostics.values() for sample in samples)
   assert all(min(values)>=190 and max(values)<350 for values in initiation_timings.values()),start_summaries
@@ -185,6 +191,10 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   assert max(v['p90_ms'] for v in start_summaries.values())-min(v['p90_ms'] for v in start_summaries.values())<60,start_summaries
   print('RESET TIMING HTTP INITIATION PASS (12/group; fresh eligible path additionally checked in service acceptance): '+json.dumps(start_summaries))
   print('HTTP RECOVERY PASS: one-time enrollment, uniform initiation, two-factor reset, receipt recovery, old Session denial, bounded replay, fresh-login replacement and pinned response schemas')
+ except Exception as failure:
+  kind=type(failure).__name__ if type(failure).__name__ in ('AssertionError','RuntimeError','OSError') else 'Exception'
+  print('SAFE-TEST-FAIL phase='+test_phase+' type='+kind)
+  raise
  finally:
   process.terminate()
   try:process.wait(timeout=10)
