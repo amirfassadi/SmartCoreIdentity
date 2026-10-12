@@ -90,7 +90,9 @@ def account_checks(root, tls, private, env, identity_env, dotnet, validate_respo
     if os.environ.get('SMARTCORE_BROWSER_E2E')=='yes':
         browser_runner=root/'web/identity/e2e/account.mjs'
         child=subprocess.run(['node',str(browser_runner)],input=json.dumps({'email':email,'password':password,'tlsCertificatePath':env['SMARTCORE_ACCOUNT_TLS_CERT']})+'\n',text=True,capture_output=True,timeout=120)
-        assert child.returncode==0, 'Real browser acceptance failed: '+child.stdout[-4000:]+child.stderr[-4000:]
+        for line in child.stderr.splitlines():
+            if line.startswith('B1 CHROMIUM FAIL at '):print(line)
+        assert child.returncode==0, 'Real browser acceptance failed; only sanitized stage diagnostics are retained.'
         print(child.stdout.strip())
     # Upstream outage: /me preserves cookie; logout succeeds only after durable local intent.
     identity_process.terminate();identity_process.wait(timeout=10)

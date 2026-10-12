@@ -9,6 +9,11 @@ internal static class BrowserAccountFixture
     public static async Task Run()
     {
         if (Environment.GetEnvironmentVariable("SMARTCORE_TEST_ALLOW_RESET") != "yes") throw new Exception("Disposable opt-in required.");
+        var tehran=TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran");
+        foreach(var instant in new[]{"2026-01-01T12:00:00Z","2026-07-01T12:00:00Z"}) {
+            var local=TimeZoneInfo.ConvertTime(DateTimeOffset.Parse(instant,System.Globalization.CultureInfo.InvariantCulture),tehran);
+            if(local.Hour!=15 || local.Minute!=30 || local.Offset!=TimeSpan.FromMinutes(210)) throw new Exception("Runtime Tehran timezone mismatch.");
+        }
         var input = JsonSerializer.Deserialize<Configuration>((await Console.In.ReadLineAsync())!)!;
         await using var store = new BffStore(input.Connection);
         await using var db = new Database(input.IdentityConnection);

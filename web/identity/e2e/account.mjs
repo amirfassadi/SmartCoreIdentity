@@ -20,6 +20,9 @@ try {
   page.on('pageerror',()=>faults.push('pageerror'));
   await page.goto('/en');
   await page.locator('input[name=contact]').waitFor();
+  assert(await page.evaluate(() => ['2026-01-01T12:00:00Z','2026-07-01T12:00:00Z'].every(instant =>
+    new Intl.DateTimeFormat('en-GB-u-nu-latn',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(instant))==='15:30'
+    && new Intl.DateTimeFormat('fa-IR',{calendar:'persian',numberingSystem:'arabext',timeZone:'Asia/Tehran'}).resolvedOptions().calendar==='persian')),'Browser Tehran/calendar formatting');
   assert.equal(await page.locator('html').getAttribute('dir'),'ltr');
   assert.equal(await page.locator('input[name=password]').getAttribute('autocomplete'),'current-password');
   const form=page.locator('form');
@@ -48,15 +51,22 @@ try {
   assert(await peer.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Mobile RTL must not overflow');
   stage='delayed read and cross-tab logout';
   // Real /me read is held after response arrives; logout must discard it on the second tab.
-  const gate=new Promise(resolve=>{release=resolve;});let mark;
-  const held=new Promise(resolve=>{mark=resolve;});
-  await peer.route('**/bff/me/action', async route => {
-    const result=await route.fetch();mark();await gate;
-    try {await route.fulfill({response:result});}catch {/* The UI correctly aborts obsolete reads. */}
+  await peer.evaluate(() => {
+    const native=window.fetch.bind(window);
+    window.fetch=async (input,options) => {
+      const result=await native(input,options);
+      if(input==='/bff/me/action') {
+        window.__held=true;
+        await new Promise(resolve=>{window.__releaseHeld=resolve;});
+      }
+      return result;
+    };
   });
-  await peer.getByRole('button',{name:'ادامه',exact:true}).click();await held;
+  release=async () => {try {await peer.evaluate(()=>window.__releaseHeld?.());}catch {/* Context may already be gone. */}};
+  await peer.getByRole('button',{name:'ادامه',exact:true}).click();
+  await peer.waitForFunction(()=>window.__held===true);
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
-  await page.locator('form').waitFor();await peer.locator('form').waitFor();release();
+  await page.locator('form').waitFor();await peer.locator('form').waitFor();await release();
   await peer.waitForTimeout(300);
   assert.equal(await peer.getByTestId('profile').count(),0,'Delayed read must not resurrect logged-out profile');
   assert.equal(await page.getByTestId('profile').count(),0);
@@ -92,4 +102,4 @@ try {
 } catch {
   console.error(`B1 CHROMIUM FAIL at ${stage}. Credential-bearing artifacts suppressed.`);
   process.exitCode=1;
-} finally {release?.();await context.close();await browser.close();}
+} finally {await release?.();await context.close();await browser.close();}
