@@ -30,6 +30,10 @@ the existing core Logout API retains its prior request-plus-completion behavior.
 Pre-intent failure never reports successful logout.
 
 The fa/en client keeps CSRF only in memory and never retries credential commands.
+Web Locks serialize CSRF-cookie bootstrap with login/logout across tabs; login is
+broadcast after fresh CSRF is obtained. Ordinary profile reads are not serialized
+by this UI lock. Without Web Locks, the same ordered login notification applies;
+the Chromium acceptance exercises the supported shared-lock path.
 Errors are localized by code; Retry-After disables new actions for the stated
 bounded period. BroadcastChannel carries only transition types. The storage
 fallback contains type and non-secret timestamp, never proof/profile material.

@@ -82,8 +82,8 @@ export default function AccountShell() {
     try {
       const result = await post('/bff/login', contact.includes('@') ? {email: contact, password} : {mobile: contact, password});
       if (current !== generation.current) return;
-      invalidateCsrf(); form.reset(); if (result) setPerson(result.person); broadcast('login');
-      await bootstrap();
+      form.reset(); if (result) setPerson(result.person);
+      await bootstrap(); broadcast('login');
     } catch (failure) {if (current === generation.current) handleError(failure);}
     finally {locked.current = false; setBusy(false);}
   }

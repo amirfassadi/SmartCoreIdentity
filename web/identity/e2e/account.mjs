@@ -30,6 +30,7 @@ try {
   await form.locator('[name=password]').fill(fixture.password);
   await form.getByRole('button').click();
   await page.getByTestId('profile').waitFor();
+  assert.equal(await page.evaluate(()=>window.__cspViolations.length),0,'English production hydration CSP');
   const cookies=await context.cookies();
   for (const name of ['__Host-smartcore-session']) {
     const cookie=cookies.find(value=>value.name===name);
@@ -72,10 +73,12 @@ try {
   assert.equal(await page.getByTestId('profile').count(),0);
   stage='second login and locale';
   // Same owner logs in again; peer must reread authoritative session on the event.
+  stage='same-owner second login';
   await page.locator('[name=contact]').fill(fixture.email);
   await page.locator('[name=password]').fill(fixture.password);
   await page.locator('form').getByRole('button').click();
   await page.getByTestId('profile').waitFor();await peer.getByTestId('profile').waitFor();
+  stage='locale switch and CSP';
   await page.getByRole('link',{name:'فارسی',exact:true}).click();await page.getByTestId('profile').waitFor();
   assert.equal(await page.locator('html').getAttribute('lang'),'fa');
   await page.goto('/');assert.equal(new URL(page.url()).pathname,'/fa');
