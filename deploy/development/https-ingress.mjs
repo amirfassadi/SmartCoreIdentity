@@ -4,7 +4,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 
-const authCookies = ['__Host-smartcore-session', '__Host-smartcore-antiforgery'];
+const authCookies = ['__Host-smartcore-session', '__Host-smartcore-antiforgery', '__Host-smartcore-registration'];
 const sharedHeaders = ['accept','accept-language','content-type','origin','sec-fetch-site','sec-fetch-mode','sec-fetch-dest','user-agent'];
 const hopHeaders = new Set(['connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailer','transfer-encoding','upgrade']);
 function backend(value) {

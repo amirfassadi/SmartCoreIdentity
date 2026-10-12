@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using SmartCore.Identity;
 
+if(args.Contains("--browser-registration-fixture")){await BrowserRegistrationFixture.Run();return;}
+
 if(args.Contains("--browser-account-fixture")){await BrowserAccountFixture.Run();return;}
 
 if(args.Contains("--browser-session-fixture")){await BrowserSessionFixture.Run();return;}

@@ -5,8 +5,9 @@ remain rejected. Account handlers require explicit `Bff__AccountsEnabled=true`;
 the browser form requires `NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED=true` at build time.
 These switches enable isolated acceptance only and do not authorize deployment.
 
-The reviewed browser contract still defines exactly CSRF, login, me, me/action and
-logout. `tools/generate_bff_browser_client.py` reproduces the committed browser
+The base B1 browser contract defines exactly CSRF, login, me, me/action and
+logout. The additive [B2 candidate](BFF_BROWSER_REGISTRATION.md) has its own opt-in
+and contract extension; B1 paths/components stay unchanged. `tools/generate_bff_browser_client.py` reproduces the committed browser
 TypeScript definitions and route allowlist; `--check` fails on contract drift.
 The private adapter uses Identity's trusted DTOs and explicitly constructs the
 browser profile without internal IDs/tokens. Requests have bounded deadlines,
@@ -83,8 +84,8 @@ npx --prefix web/identity/e2e playwright install --with-deps chromium
 SMARTCORE_BROWSER_E2E=yes python scripts/bff-account-smoke.py
 ```
 
-The exact successful CI revisions below verify these private B1 controls. B2 registration/OTP UI and
-B3 enrollment/reset/password-change UI remain open, as do public-user release gates,
+The exact successful CI revisions below verify these private B1 controls. B2 registration/OTP now has a separately tested private candidate;
+B3 enrollment/reset/password-change UI remains open, as do public-user release gates,
 provider selection, canonical Platform provenance and operator deployment inputs.
 B1 does not certify the complete registration/reset browser journey or production.
 

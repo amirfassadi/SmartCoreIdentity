@@ -31,6 +31,48 @@
       "BFF_UNAVAILABLE": "The service is temporarily unavailable. Please try later.",
       "AUTHENTICATION_BUSY": "Sign-in is busy. Please try later.",
       "UNKNOWN": "The request could not be completed."
+    },
+    "register": "Create an account"
+  },
+  "Registration": {
+    "title": "Create an account",
+    "displayName": "Your name",
+    "contact": "Email or Iranian mobile number",
+    "password": "Password (15–128 characters)",
+    "code": "Verification code",
+    "originalCode": "Original verification code",
+    "waiting": "Please wait…",
+    "start": "Send verification code",
+    "verify": "Verify code",
+    "requestSetup": "Send a new setup code",
+    "complete": "Complete account setup",
+    "check": "Check account readiness",
+    "resend": "Send a new code",
+    "resendWait": "Send again in {seconds} seconds",
+    "retry": "Try again in {seconds} seconds.",
+    "signIn": "Go to sign in",
+    "restart": "Start again",
+    "expired": "This verification has expired. Start again.",
+    "existingWinner": "An existing password was kept. Sign in with that password.",
+    "states": {
+      "AwaitingVerification": "Enter the code sent to your contact.",
+      "PendingCredential": "Your contact is verified. Account setup is still processing; you may check again or go to sign in.",
+      "Ready": "Your account is ready. Sign in to continue.",
+      "SetupRequired": "An unfinished account needs a separate setup code. Confirm the original code to request it.",
+      "SignInRequired": "Your contact is verified. Sign in with your existing password.",
+      "AwaitingSetup": "Enter the new setup code and choose a password."
+    },
+    "errors": {
+      "VALIDATION_FAILED": "Check the entered information.",
+      "VERIFICATION_FAILED": "The code could not be verified. Check the code and its expiry.",
+      "REGISTRATION_FLOW_EXPIRED": "This verification is no longer available in this tab. Start again.",
+      "IDEMPOTENCY_CONFLICT": "The previous request had different information. Start again.",
+      "SESSION_ALREADY_ACTIVE": "You are already signed in. Return to your account.",
+      "CSRF_REJECTED": "Refresh this page and try again.",
+      "ORIGIN_REJECTED": "This request could not be verified.",
+      "RATE_LIMITED": "Please wait before trying again.",
+      "BFF_UNAVAILABLE": "The service is temporarily unavailable. You can retry the same request later.",
+      "UNKNOWN": "The request could not be completed."
     }
   }
 }

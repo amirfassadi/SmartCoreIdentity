@@ -1,5 +1,5 @@
 // Generated from contracts/bff-browser.openapi.yaml; do not edit.
-// SHA256 1eb051956d42b011883940c9c654021f4f9f402c9440e79d1d6b0984ee21a0d3
+// SHA256 cb63fabe083282d90510b34955a5d43857ad5bb76938321af3c730d2f303fee7
 export type EmptyRequest = { };
 export type LoginRequest = ({ email: string; mobile?: never; password: string; } | { email?: never; mobile: string; password: string; });
 export type CsrfResponse = { requestToken: string; };
@@ -18,6 +18,18 @@ export type CsrfUnavailable503Error = { code: "BFF_UNAVAILABLE"; retryAfterSecon
 export type LoginBusy503Error = { code: "BFF_UNAVAILABLE" | "AUTHENTICATION_BUSY"; retryAfterSeconds: number; };
 export type Busy503Error = { code: "BFF_BUSY" | "BFF_UNAVAILABLE"; retryAfterSeconds: number; };
 export type RouterError = { code: "NOT_FOUND" | "METHOD_NOT_ALLOWED"; };
-export type BrowserPostPath = '/bff/login' | '/bff/me' | '/bff/me/action' | '/bff/logout';
-export type BrowserRequests = { "/bff/login": LoginRequest; "/bff/me": EmptyRequest; "/bff/me/action": EmptyRequest; "/bff/logout": EmptyRequest; };
-export type BrowserResponses = { "/bff/login": SessionResponse; "/bff/me": SessionResponse; "/bff/me/action": SessionResponse; "/bff/logout": undefined; };
+export type RegistrationStartRequest = ({ email: string; mobile?: never; password: string; flowId: string; displayName: string; } | { email?: never; mobile: string; password: string; flowId: string; displayName: string; });
+export type RegistrationFlowRequest = { flowId: string; };
+export type RegistrationProofRequest = { flowId: string; code: string; };
+export type RegistrationCompleteRequest = { flowId: string; code: string; newPassword: string; };
+export type RegistrationPending = { status: "AwaitingVerification"; expiresAt: string; resendAfterSeconds: 60; };
+export type RegistrationAccepted = { status: "Accepted"; resendAfterSeconds: 60; };
+export type RegistrationSetupPending = { status: "AwaitingSetup"; expiresAt: string; };
+export type RegistrationVerified = { status: "PendingCredential" | "Ready" | "SetupRequired" | "SignInRequired"; };
+export type RegistrationCompleted = { status: "PendingCredential" | "Ready"; credentialOutcome: "CandidateSelected" | "ExistingWinner" | "Undetermined"; };
+export type RegistrationValidationError = { code: "VALIDATION_FAILED" | "VERIFICATION_FAILED" | "REGISTRATION_FLOW_EXPIRED"; };
+export type RegistrationConflictError = { code: "IDEMPOTENCY_CONFLICT" | "SESSION_ALREADY_ACTIVE"; };
+export type RegistrationRateError = { code: "RATE_LIMITED"; retryAfterSeconds: number; };
+export type BrowserPostPath = '/bff/login' | '/bff/me' | '/bff/me/action' | '/bff/logout' | '/bff/register' | '/bff/register/verify' | '/bff/register/resend' | '/bff/register/setup' | '/bff/register/complete';
+export type BrowserRequests = { "/bff/login": LoginRequest; "/bff/me": EmptyRequest; "/bff/me/action": EmptyRequest; "/bff/logout": EmptyRequest; "/bff/register": RegistrationStartRequest; "/bff/register/verify": RegistrationProofRequest; "/bff/register/resend": RegistrationFlowRequest; "/bff/register/setup": RegistrationProofRequest; "/bff/register/complete": RegistrationCompleteRequest; };
+export type BrowserResponses = { "/bff/login": SessionResponse; "/bff/me": SessionResponse; "/bff/me/action": SessionResponse; "/bff/logout": undefined; "/bff/register": RegistrationPending; "/bff/register/verify": RegistrationVerified; "/bff/register/resend": RegistrationAccepted; "/bff/register/setup": RegistrationSetupPending; "/bff/register/complete": RegistrationCompleted; };
