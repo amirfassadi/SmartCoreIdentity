@@ -16,15 +16,34 @@ async function response<T>(request: Promise<Response>): Promise<T> {
   }
   return data as T;
 }
-export async function bootstrap(signal?: AbortSignal) {
+async function csrfLock<T>(action: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (typeof navigator !== 'undefined' && navigator.locks) return navigator.locks.request('smartcore-csrf-bootstrap', {signal}, action);
+  return action();
+}
+async function loadCsrf(signal?: AbortSignal) {
   const value = await response<CsrfResponse>(fetch('/bff/csrf', {credentials: 'same-origin', cache: 'no-store', signal}));
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   if (typeof value?.requestToken !== 'string' || value.requestToken.length < 32 || value.requestToken.length > 4096) throw new BrowserError('BFF_UNAVAILABLE');
   csrf = value.requestToken;
 }
-export async function post<P extends BrowserPostPath>(path: P, body: BrowserRequests[P], signal?: AbortSignal) {
-  if (!csrf) await bootstrap(signal);
-  return response<BrowserResponses[P]>(fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
+// Cookie creation is shared across tabs: serialize it with transitions so simultaneous
+// first bootstraps cannot overwrite the cookie underlying another tab's request token.
+export async function bootstrap(signal?: AbortSignal) {await csrfLock(() => loadCsrf(signal), signal);}
+export async function post<P extends BrowserPostPath>(path: P, body: BrowserRequests[P], signal?: AbortSignal): Promise<BrowserResponses[P]> {
+  const send = async () => response<BrowserResponses[P]>(fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
     headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf!}, body: JSON.stringify(body), signal}));
+  if (path === '/bff/login' || path === '/bff/logout') {
+    return csrfLock(async () => {
+      if (!csrf) await loadCsrf(signal);
+      const result = await send();
+      invalidateCsrf();
+      // A committed transition remains successful even if subsequent bootstrap is unavailable.
+      // The next action obtains CSRF again; credentials are never replayed automatically.
+      try {await loadCsrf(signal);} catch {invalidateCsrf();}
+      return result;
+    }, signal);
+  }
+  if (!csrf) await bootstrap(signal);
+  return send();
 }
-// No retries of credentials or state-changing commands. A caller may initiate a new action after the shown delay.
+// No retries of credentials or state-changing commands. New user actions honor Retry-After.
