@@ -81,7 +81,9 @@ browser origin. HTTP checks include current-password denial/cookie preservation,
 no-code enrollment replay, both factors, proof-flow/DTO rejection, pending fencing
 and old-session rejection, reset receipt replay, new-password login, replacement
 enrollment, password change, outage and local lock failure before upstream dispatch.
-Chromium starts with B2 registration and tests lost one-time response/replay, fresh
+Chromium starts with B2 registration, forces access due through the private CLI,
+and verifies one real browser /me/action causes exactly one native generation
+advance while preserving the opaque cookie. It then tests lost one-time response/replay, fresh
 replacement consent, one-time code isolation/acknowledgment, two-factor reset, fresh
 login, replacement enrollment and Persian password change/cross-tab rejection.
 Native builds, type checking, production build, schemas and ingress pass locally;
