@@ -547,3 +547,19 @@ media/Origin priority and preserves cookies on lookup unavailability.
 These tests require fresh PostgreSQL 17 CI before their runtime results are claimed.
 Private fixture IPC is captured, not logged; there is no HTTP session-seeding route.
 Actual login/logout transitions and browser hydration/full account E2E remain open.
+
+Fresh live-guard runtime CI is verified on code commit
+`4c4c58f13daf958e36f344c2a00200a1551c7619` (tree
+`7c113b1456a32fc0e6c3418f3718a2250901e28e`): run 38226825957 succeeded and job
+114736278067's log was inspected. Five competing-error requests over real TLS,
+separate direct-TLS host size precedence, shared-ring/session CSRF across two
+hosts, synthetic session-state/UUID binding, strict DTO/UTF16 and database-fault
+priority/fail-closed controls passed. Zero Identity HTTP calls were asserted.
+The host and test fixture builds each had zero warnings/errors. Next/ingress job
+114736277941 passed. Integration has the identical code tree at
+`8e939026f00a43d1c449258279f67847fe933352` and passed infrastructure run 38226829321.
+Documentary runs 38226825911/38226829307 also passed. An initial failure caused
+by missing HostConfiguration registration was corrected before these runs.
+These results supersede the pending live-guard statement above. Actual Identity
+login/logout and browser account E2E remain open; account commands are unavailable.
+No public/production deployment or main merge occurred.
