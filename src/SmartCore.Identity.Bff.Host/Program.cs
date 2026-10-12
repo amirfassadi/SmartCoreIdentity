@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
 using SmartCore.Identity;
@@ -38,7 +39,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(options => {
     options.KnownProxies.Add(IPAddress.Loopback.MapToIPv6());
     options.AllowedHosts.Add(configuration.ExternalOrigin.Host);
 });
+// Minimal apps auto-add authentication middleware. Suppress the single-scheme default
+// so that middleware cannot resolve a cookie before the explicitly ordered guard.
+AppContext.SetSwitch("Microsoft.AspNetCore.Authentication.SuppressAutoDefaultScheme", true);
+builder.Services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, OpaqueSessionHandler>(OpaqueSessionHandler.SchemeName, _ => { });
+builder.Services.AddScoped<BrowserGuard>();
 var app = builder.Build();
+if (await app.Services.GetRequiredService<IAuthenticationSchemeProvider>().GetDefaultAuthenticateSchemeAsync() is not null)
+    throw new InvalidOperationException("Browser authentication must be explicitly invoked after transport guards.");
 if (args.Contains("--validate-config")) { Console.WriteLine("BFF scaffold configuration validated."); return; }
 // Test-only same-purpose proof across two separate host processes, not an HTTP endpoint.
 if (args.Contains("--keyring-proof")) {
@@ -60,26 +68,6 @@ app.Use(async (context, next) => {
     await next();
 });
 app.MapGet("/health/ready", () => Results.NoContent());
-// Scaffolding only. No session/authentication handler is registered yet; no opaque cookie is minted.
-// Registered contract methods remain unavailable until tasks 5/6 attach the session-bound guards/handlers.
-var routes = new Dictionary<string, string>(StringComparer.Ordinal) {
-    ["/bff/csrf"] = "GET", ["/bff/login"] = "POST", ["/bff/me"] = "POST",
-    ["/bff/me/action"] = "POST", ["/bff/logout"] = "POST"
-};
-app.MapFallback("/{**path}", async (HttpContext context) => {
-    var path = context.Request.Path.Value ?? "";
-    if (routes.TryGetValue(path, out var method)) {
-        if (!string.Equals(context.Request.Method, method, StringComparison.Ordinal)) {
-            context.Response.Headers.Allow = method;
-            context.Response.StatusCode = 405;
-            await context.Response.WriteAsJsonAsync(new {code = "METHOD_NOT_ALLOWED"});
-        } else {
-            context.Response.StatusCode = 503; context.Response.Headers.RetryAfter = "60";
-            await context.Response.WriteAsJsonAsync(new {code = "BFF_UNAVAILABLE", retryAfterSeconds = 60});
-        }
-    } else {
-        context.Response.StatusCode = 404;
-        await context.Response.WriteAsJsonAsync(new {code = "NOT_FOUND"});
-    }
-});
+// Authentication is invoked by the guard after size/type/origin, never globally before it.
+app.MapFallback("/{**path}", (HttpContext context, BrowserGuard guard) => guard.Handle(context));
 await app.RunAsync();

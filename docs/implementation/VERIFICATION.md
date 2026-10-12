@@ -531,3 +531,19 @@ infrastructure run 38223170805. Documentary runs 38223166277/38223170783 also pa
 This supersedes the pending task-4 build/runtime statement above. Live guard
 precedence, session binding, browser hydration and full account E2E remain open;
 no login has been enabled and no personId added to a browser DTO.
+
+### B1 task 5 — live session/CSRF guards, pending runtime CI
+
+Local .NET 10 Release host and fixture-executable builds passed with zero warnings
+and errors. The configuration-only shared encrypted key-ring check also passed.
+The host now exposes real antiforgery bootstrap and an explicitly ordered guard;
+account handlers remain disconnected, and no browser login has been enabled.
+The new live guard tests start with the committed adjacent-error fixtures over the
+existing TLS ingress, plus a direct verified-TLS host size check. They cover shared
+ring/session rebinding, synthetic session lifecycle, missing/bad CSRF, strict DTO and
+UTF-16 limits; all responses use the exact browser contract validator. The Identity
+trap must observe zero calls. A disposable database fault probe checks pre-lookup
+media/Origin priority and preserves cookies on lookup unavailability.
+These tests require fresh PostgreSQL 17 CI before their runtime results are claimed.
+Private fixture IPC is captured, not logged; there is no HTTP session-seeding route.
+Actual login/logout transitions and browser hydration/full account E2E remain open.

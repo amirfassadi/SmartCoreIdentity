@@ -44,6 +44,7 @@ jobs:
           node-version: '24'
       - run: dotnet restore src/SmartCore.Identity.Api --locked-mode
       - run: dotnet build src/SmartCore.Identity.Bff.Host -c Release -m:1
+      - run: dotnet build tests/SmartCore.Identity.Tests -c Release -m:1
       - run: python -m pip install -r requirements-dev.txt
       - run: python scripts/bff-host-smoke.py
         env:

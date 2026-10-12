@@ -115,6 +115,16 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     }
     private BffAccess Access(Row row)=>new(Tokens(row).AccessToken,row.Get<Guid>("identity_session_id"),row.Get<long>("version"),Due(row,BffActivity.Background));
     private Task Observe(RefreshStage stage,CancellationToken cancellation)=>probe?.Observe(stage,cancellation)??Task.CompletedTask;
+    // Principal lookup only: stable BFF row UUID, no token decryption, locks, writes or refresh.
+    public async Task<Guid?> ResolveBrowserSession(string cookie,bool allowLogoutRequested=false,CancellationToken cancellation=default)
+    {
+        if(!Input.Secret(cookie))return null;
+        await using var c=await store.Source.OpenConnectionAsync(cancellation);
+        var row=await BffStore.One(c,"SELECT id,status,expires_at,last_foreground_at FROM bff_sessions WHERE cookie_mac=@cookie",cancellation,("cookie",Cookie(cookie)));
+        if(row is null || row.Time("expires_at")<=Now)return null;
+        if(Live(row) || allowLogoutRequested && row.Get<string>("status")=="LogoutRequested")return row.Get<Guid>("id");
+        return null;
+    }
     public async Task<string> Create(SessionTokens tokens,CancellationToken cancellation=default)
     {
         if(tokens.SessionId==Guid.Empty || tokens.AccessExpiresAt<=Now || tokens.AccessExpiresAt>tokens.ExpiresAt)throw new ArgumentException("Invalid login result");

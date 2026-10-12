@@ -277,7 +277,8 @@ No host code precedes task 1. Contract review is a concrete implementation prere
 not a requirement to ask for another permission. Contract revision 0.1.1 has been reviewed. Task 2 now has a buildable shell/host;
 task 3 has core and shared-key wiring, with seeded account integration still open.
 Task 4 development HTTPS ingress is now implemented; see HTTPS_INGRESS.md.
-Tasks 5–9 remain open; see BFF_BROWSER_HOST.md for bounded evidence.
+Task 5 guards are now implemented; fresh CI evidence is tracked in BFF_BROWSER_GUARD.md.
+Tasks 6–9 and actual account browser acceptance remain open.
 
 ## Browser CI acceptance
 
