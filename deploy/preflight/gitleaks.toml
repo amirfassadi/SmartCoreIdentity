@@ -1,0 +1,15 @@
+# Preserve the byte-pinned uploaded Blueprint. These exact legacy example UUIDs
+# are not valid current Identity refresh tokens (family.generation.secret).
+# AND restricts the exception to this one archived example file plus these values.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Exact legacy Blueprint example refresh UUIDs only"
+condition = "AND"
+regexTarget = "secret"
+paths = ['(?:^|/)docs/reference/uploaded-blueprint/16_Examples\.md$']
+regexes = [
+  '^1a2b3c4d\-5e6f\-4789\-9012\-3456789abcde$',
+  '^9f8e7d6c\-5b4a\-4321\-9876\-abcdef123456$',
+]

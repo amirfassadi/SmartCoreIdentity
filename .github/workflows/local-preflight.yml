@@ -1,0 +1,43 @@
+name: Local B1 preflight
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  isolated-local-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Pinned Gitleaks executable with official checksum
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/preflight-tools"
+          curl -fsSL --max-time 60 https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz -o "$RUNNER_TEMP/preflight-tools/archive.tar.gz"
+          curl -fsSL --max-time 60 https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_checksums.txt -o "$RUNNER_TEMP/preflight-tools/checksums.txt"
+          python - <<'PY'
+          import hashlib,os
+          from pathlib import Path
+          base=Path(os.environ['RUNNER_TEMP'])/'preflight-tools'
+          line=next(item for item in (base/'checksums.txt').read_text().splitlines() if item.endswith('gitleaks_8.28.0_linux_x64.tar.gz'))
+          assert hashlib.sha256((base/'archive.tar.gz').read_bytes()).hexdigest()==line.split()[0]
+          PY
+          tar --no-same-owner -xzf "$RUNNER_TEMP/preflight-tools/archive.tar.gz" -C "$RUNNER_TEMP/preflight-tools" gitleaks
+          echo "$RUNNER_TEMP/preflight-tools" >> "$GITHUB_PATH"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m unittest discover -s tests/preflight -v
+      - run: npm ci --ignore-scripts --prefix web/identity/e2e
+      - name: Provision Chromium OS prerequisites in isolated CI runner
+        run: npx --prefix web/identity/e2e playwright install-deps chromium
+      - name: Full local B1 runner (own DB and temporary source/builds)
+        run: bash preflight-local.sh
