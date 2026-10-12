@@ -1,6 +1,6 @@
 Current continuation: private account handlers and fa/en client are implemented in
-[BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md); fresh CI is required before
-claiming their real account/browser acceptance. Historical infrastructure scope below
+[BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md); their exact verified private CI revisions
+are recorded there. Historical infrastructure scope below
 remains tied to its recorded revisions.
 
 # B1 browser infrastructure
@@ -80,7 +80,7 @@ Private task-6 account handlers and task-7 fa/en forms are implemented with expl
 acceptance opt-ins. The separate account suite covers real Identity, two BFF hosts,
 PostgreSQL 17, HTTPS and production Next/Chromium; see BFF_BROWSER_ACCOUNTS.md.
 Task 5's zero-dispatch guard suite deliberately keeps account handlers disabled.
-Fresh CI must pass before account/browser acceptance is claimed. B2 registration/OTP
+Private B1 account/browser acceptance is verified at the revisions recorded there. B2 registration/OTP
 and B3 recovery/reset/password-change UI remain open. Their Retry-After contracts
 must be reviewed separately; do not truncate longer cooldowns to B1's 60 seconds.
 

@@ -83,7 +83,35 @@ npx --prefix web/identity/e2e playwright install --with-deps chromium
 SMARTCORE_BROWSER_E2E=yes python scripts/bff-account-smoke.py
 ```
 
-CI must pass before these controls are called verified. B2 registration/OTP UI and
+The exact successful CI revisions below verify these private B1 controls. B2 registration/OTP UI and
 B3 enrollment/reset/password-change UI remain open, as do public-user release gates,
 provider selection, canonical Platform provenance and operator deployment inputs.
 B1 does not certify the complete registration/reset browser journey or production.
+
+## Verified private B1 acceptance
+
+Code `45c6d7ad015c4bda8ebeeb375d7323f4c61aa68c` passed all three workflows:
+[Browser B1 38237345381](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38237345381),
+[backend 38237345426](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38237345426),
+and [documentary 38237345369](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38237345369).
+Job logs 114771167953 and 114771168199 were inspected. Both Release host/test builds
+had zero warnings/errors. The zero-dispatch guard suite, real account HTTP suite,
+pre-intent lock-timeout control and actual Chromium suite all passed. The existing
+backend retained **303 checks** and all five prior API HTTP smokes passed, including
+both controlled reset timing gates. These are cumulative backend counts, not 303
+new browser tests and not production/load certification.
+
+Integration `39268fc06a29120a930ec2bba3a061c02cb03b98` has the identical complete tree
+and passed [browser 38237347290](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38237347290),
+[backend 38237347281](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38237347281)
+and [documentary 38237347287](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38237347287).
+Earlier fixture/TLS and cross-tab ordering failures are superseded by these exact
+successful revisions. Browser cookie coordination now includes potentially terminal
+read responses through headers; body parsing stays outside the lock. The delayed
+body control proves it cannot block logout or restore obsolete private UI.
+
+This verifies private **B1** on Chromium with the supported Web Locks path and both
+BroadcastChannel/storage-event coordination. It does not certify every browser,
+B2 registration/OTP, B3 recovery/reset/change browser journeys, replicated failover,
+real SMS, production hosting or formal governance acceptance. Startup/public-user
+release gates remain enforced; no main merge or VPS/service/database change occurred.
