@@ -4,13 +4,16 @@ using SmartCore.Identity;
 namespace SmartCore.Identity.Bff.Host;
 
 public sealed record HostConfiguration(string Database, Uri IdentityOrigin, string ClientKey, string ReceiptKey,
-    Secrets SessionSecrets, string KeyRing, X509Certificate2 WrappingCertificate)
+    Secrets SessionSecrets, string KeyRing, X509Certificate2 WrappingCertificate, Uri ExternalOrigin)
 {
     public static HostConfiguration Load(IConfiguration configuration, IHostEnvironment environment)
     {
         if (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
             throw new InvalidOperationException("Browser BFF deployment is disabled until the B1 acceptance and release gates pass.");
         string Required(string key) => configuration[key] is { Length: > 0 } value ? value : throw new InvalidOperationException($"Missing configuration: {key}.");
+        var external = new Uri(Required("Bff:ExternalOrigin"), UriKind.Absolute);
+        if (external.Scheme != "https" || !external.IsLoopback || external.AbsolutePath != "/" || external.UserInfo.Length != 0 || external.Query.Length != 0 || external.Fragment.Length != 0)
+            throw new InvalidOperationException("A fixed development HTTPS loopback external origin is required.");
         var origin = new Uri(Required("Bff:IdentityOrigin"), UriKind.Absolute);
         if (!origin.IsLoopback || origin.UserInfo.Length != 0 || origin.Query.Length != 0 || origin.Fragment.Length != 0
             || origin.AbsolutePath != "/" || origin.Scheme is not ("http" or "https"))
@@ -37,6 +40,6 @@ public sealed record HostConfiguration(string Database, Uri IdentityOrigin, stri
         var now = DateTime.UtcNow;
         if (!certificate.HasPrivateKey || rsa is null || certificate.NotBefore.ToUniversalTime() > now || certificate.NotAfter.ToUniversalTime() <= now)
         {certificate.Dispose(); throw new InvalidOperationException("A currently valid RSA certificate with a private key is required.");}
-        return new(Required("ConnectionStrings:Bff"), origin, client, receipt, session, ring, certificate);
+        return new(Required("ConnectionStrings:Bff"), origin, client, receipt, session, ring, certificate, external);
     }
 }

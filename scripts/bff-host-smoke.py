@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -32,11 +33,11 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
     subprocess.run(['openssl','pkcs12','-export','-out',str(directory/'wrap.pfx'),'-inkey',str(directory/'key.pem'),'-in',str(directory/'cert.pem'),'-passout','stdin'], input=(password+'\n').encode(), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     env = {**os.environ, 'ASPNETCORE_ENVIRONMENT':'Testing', 'ASPNETCORE_URLS':'http://127.0.0.1:5171',
         'ConnectionStrings__Bff':os.environ.get('ConnectionStrings__Bff', 'Host=127.0.0.1;Database=unused_config_only'),
-        'Bff__IdentityOrigin':'http://127.0.0.1:5157/', 'Bff__ClientKey':secrets.token_urlsafe(32), 'Bff__ReceiptKey':secrets.token_urlsafe(32),
+        'Bff__ExternalOrigin':'https://localhost:7443', 'Bff__IdentityOrigin':'http://127.0.0.1:5157/', 'Bff__ClientKey':secrets.token_urlsafe(32), 'Bff__ReceiptKey':secrets.token_urlsafe(32),
         'Bff__SessionMacKey':base64.b64encode(secrets.token_bytes(32)).decode(), 'Bff__SessionMaterialKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Bff__DataProtection__KeyRing':str(directory/'ring'), 'Bff__DataProtection__CertificatePath':str(directory/'wrap.pfx'), 'Bff__DataProtection__CertificatePassword':password}
     assert run(env, '--validate-config').returncode == 0
-    for overrides in [{'ASPNETCORE_ENVIRONMENT':'Production'}, {'ASPNETCORE_URLS':'http://0.0.0.0:5171'}, {'Bff__DataProtection__CertificatePath':str(directory/'missing.pfx')}, {'Bff__ReceiptKey':env['Bff__ClientKey']}]:
+    for overrides in [{'ASPNETCORE_ENVIRONMENT':'Production'}, {'ASPNETCORE_URLS':'http://0.0.0.0:5171'}, {'Bff__DataProtection__CertificatePath':str(directory/'missing.pfx')}, {'Bff__ReceiptKey':env['Bff__ClientKey']}, {'Bff__ExternalOrigin':'http://localhost:7443'}]:
         assert run({**env, **overrides}, '--validate-config').returncode != 0
     first = run(env, '--keyring-proof'); assert first.returncode == 0
     protected = first.stdout.strip().splitlines()[-1]
@@ -66,6 +67,30 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 except urllib.error.HTTPError as error: response = error
                 assert response.status == status
                 validate_response(contract,path,method,status,json.loads(response.read()),dict(response.headers.items()))
+        # A distinct TLS key/certificate, never the Data Protection wrapping key.
+        subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1','-keyout',str(directory/'tls.key'),'-out',str(directory/'tls.crt')],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        ingress = subprocess.Popen(['node',str(root/'deploy/development/https-ingress.mjs')],env={**os.environ,
+            'SMARTCORE_INGRESS_ENVIRONMENT':'Testing','SMARTCORE_INGRESS_ORIGIN':'https://localhost:7443',
+            'SMARTCORE_TLS_KEY':str(directory/'tls.key'),'SMARTCORE_TLS_CERT':str(directory/'tls.crt')},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        processes.append(ingress)
+        tls = urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=str(directory/'tls.crt'))))
+        for _ in range(100):
+            assert ingress.poll() is None, 'HTTPS ingress exited before readiness'
+            try:
+                tls.open('https://localhost:7443/bff/register',timeout=1)
+            except urllib.error.HTTPError as error:
+                if error.code == 404: break
+            except OSError: pass
+            time.sleep(.1)
+        else: raise AssertionError('HTTPS ingress readiness timed out')
+        for path,method,status in [('/bff/register','POST',404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503)]:
+            request=urllib.request.Request('https://localhost:7443'+path,method=method,headers={'Origin':'https://localhost:7443','Sec-Fetch-Site':'same-origin','X-Bff-Client-Key':'forged','X-Forwarded-Host':'evil.invalid','X-Forwarded-Proto':'http'})
+            try: response=tls.open(request,timeout=5)
+            except urllib.error.HTTPError as error: response=error
+            assert response.status==status
+            assert response.headers['Strict-Transport-Security']=='max-age=31536000'
+            validate_response(contract,path,method,status,json.loads(response.read()),dict(response.headers.items()))
+        print('BFF HTTPS ingress PASS: trusted local TLS certificate, two real ASP.NET hosts, B2/B3 JSON 404, route-specific 405 Allow and no-store through the actual proxy.')
         print('BFF two-host routing PASS: B2/B3 JSON 404, route-specific 405 Allow, no-store and scaffold-unavailable responses match contract.')
     finally:
         for process in processes:

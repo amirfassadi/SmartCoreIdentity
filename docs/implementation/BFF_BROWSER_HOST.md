@@ -1,7 +1,8 @@
 # B1 browser infrastructure
 
 Status: tasks 2 and 3 started after the 0.1.1 browser contract review. No production
-launch, account handlers, generated client, real HTTPS ingress or completed B1 claim.
+launch, account handlers, generated client or completed B1 claim. Development HTTPS
+ingress is now present; see HTTPS_INGRESS.md for its acceptance evidence boundaries.
 
 ## Delivered
 
@@ -13,8 +14,8 @@ launch, account handlers, generated client, real HTTPS ingress or completed B1 c
   checks all emitted script nonces; this is not browser hydration evidence.
 - Locale cookie is explicitly `smartcore-locale`, Secure/Lax/Path=/, bounded age,
   no Domain. Next's defence-in-depth `/bff` rejection produces JSON instead of HTML;
-  the ingress must still route **all** `/bff` traffic to .NET. The real proxy cookie
-  allowlist is task 4 and is not implemented here.
+  the development HTTPS ingress now routes **all** `/bff` traffic to .NET with
+  independent request/response cookie allowlists; see HTTPS_INGRESS.md.
 - [.NET host](../../src/SmartCore.Identity.Bff.Host/Program.cs) registers existing
   BffStore, refresh/logout adapter, BffRefresh, BffCircuit and BffMaintenance;
   runs existing PostgreSQL migrations before readiness (PostgreSQL 17 minimum).
@@ -39,6 +40,7 @@ secret mount; nothing here generates production secrets. Both hosts need:
 | --- | --- |
 | `ASPNETCORE_URLS` | Separate loopback listen URLs, for example ports 5171 and 5172 |
 | `ConnectionStrings__Bff` | Shared disposable PostgreSQL 17 database for acceptance |
+| `Bff__ExternalOrigin` | Fixed HTTPS browser origin, e.g. https://localhost:7443 |
 | `Bff__IdentityOrigin` | Private loopback Identity root URL; no path/query/credentials |
 | `Bff__ClientKey`, `Bff__ReceiptKey` | Separate existing Identity client and receipt keys |
 | `Bff__SessionMacKey`, `Bff__SessionMaterialKey` | Two distinct base64-encoded 32-byte BFF session keys |
@@ -68,8 +70,8 @@ and the two-host PostgreSQL checks in isolated jobs.
 ## Next slice
 
 Task 3 still needs seeded Identity account integration through the real login
-handler (task 6). Task 4 adds HTTPS ingress with locale-only cookies to Next and
-trusted-header overwrites. Task 5 establishes the opaque-cookie principal and
+handler (task 6). Task 4 now supplies development HTTPS ingress with locale-only cookies to Next
+and trusted-header overwrites; see [HTTPS_INGRESS.md](HTTPS_INGRESS.md). Task 5 establishes the opaque-cookie principal and
 session-bound CSRF guards. The [raw request fixtures](../../tests/browser/b1-guard-precedence.json)
 cover each adjacent competing error pair plus cross-site/malformed JSON. Their
 current Python evaluator injects a CSRF result; they must be executed against the
