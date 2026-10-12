@@ -32,7 +32,7 @@ def recovery_checks(root,tls,private,env,identity_env,dotnet,validate_response,c
             try:response=tls.open(request,timeout=30)
             except urllib.error.HTTPError as failure:response=failure
             wire=response.read();value=json.loads(wire) if wire else None
-            validate_response(contract,path,request.method,response.status,value,{k:response.headers.get_all(k) for k in response.headers.keys()})
+            validate_response(contract,path,request.get_method(),response.status,value,{k:response.headers.get_all(k) for k in response.headers.keys()})
             assert not any(k.encode() in wire for k in ('personId','sessionId','operationId','challengeId','bindingSecret','accessToken','refreshToken'))
             for field in response.headers.get_all('Set-Cookie',[]):
                 parsed=SimpleCookie();parsed.load(field)

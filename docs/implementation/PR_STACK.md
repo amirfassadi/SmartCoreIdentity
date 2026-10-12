@@ -57,6 +57,9 @@ The B1 browser contract (Draft 0.1.1) was reviewed before host code. Private acc
 handlers, generated browser request/response types and the fa/en client now build.
 The original guard checks still assert zero dispatch with account handlers disabled;
 a separate suite enables real Identity account flows and Chromium through HTTPS.
-Fresh bounded acceptance and remaining B2/B3 work are tracked in
+Fresh B1 acceptance is tracked in
 [BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md). Prior guard/ingress evidence stays
 in BFF_BROWSER_GUARD.md and HTTPS_INGRESS.md; it does not substitute for account E2E.
+Additive B2 verification is in BFF_BROWSER_REGISTRATION.md; the implemented B3
+candidate and full real-stack suite are in BFF_BROWSER_RECOVERY.md. Both complete
+working branches retain identical source trees.

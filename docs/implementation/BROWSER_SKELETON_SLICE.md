@@ -2,7 +2,8 @@
 
 Status: agreed architecture direction and implementation slice specification.
 Private B1 handlers, generated browser types and fa/en forms now exist. Fresh
-HTTP/Chromium acceptance is tracked in BFF_BROWSER_ACCOUNTS.md; B2/B3 remain open.
+HTTP/Chromium acceptance is tracked in BFF_BROWSER_ACCOUNTS.md; B2 is privately verified in BFF_BROWSER_REGISTRATION.md; B3 private
+implementation/live acceptance is tracked in BFF_BROWSER_RECOVERY.md.
 The original ordered design below remains the acceptance specification.
 Framework: Next.js App Router, React, TypeScript, Tailwind CSS. Initial UI locales:
 fa and en. Initial market remains Iran; adding a language does not authorize sending
@@ -280,7 +281,8 @@ task 3 has core and shared-key wiring, with seeded account integration still ope
 Task 4 development HTTPS ingress is now implemented; see HTTPS_INGRESS.md.
 Task 5 guards are now implemented; fresh CI evidence is tracked in BFF_BROWSER_GUARD.md.
 Tasks 6–9 have private implementations and an actual account/browser acceptance
-suite; fresh CI evidence is tracked in BFF_BROWSER_ACCOUNTS.md. B2/B3 remain open.
+suite; fresh CI evidence is tracked in BFF_BROWSER_ACCOUNTS.md. B2 is privately verified in BFF_BROWSER_REGISTRATION.md; B3 private
+implementation/live acceptance is tracked in BFF_BROWSER_RECOVERY.md.
 
 ## Browser CI acceptance
 
