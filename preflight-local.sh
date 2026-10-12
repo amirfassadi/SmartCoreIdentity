@@ -127,13 +127,15 @@ if [[ "$BUILD_READY" -eq 1 && "$PY_READY" -eq 1 && "$NODE_READY" -eq 1 && "$DOCK
   if docker run -d --rm -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=smartcore_preflight -p 127.0.0.1::5432 postgres:17 >"$TEMP/cid" 2>"$TEMP/docker.log"; then
     CID=$(cat "$TEMP/cid")
     if [[ "$CID" =~ ^[0-9a-f]{12,64}$ ]]; then
+      VERSION=''
+      # The image's temporary initialization server accepts Unix sockets before the
+      # requested database exists. Require a successful query over the final TCP listener.
       for ((attempt=0; attempt<40; attempt++)); do
-        if docker exec "$CID" pg_isready -U postgres -d smartcore_preflight >/dev/null 2>&1; then DB_READY=1; break; fi
+        if VERSION=$(docker exec -e "PGPASSWORD=$PASSWORD" "$CID" psql -X -h 127.0.0.1 -U postgres -d smartcore_preflight -At -v ON_ERROR_STOP=1 -c 'SHOW server_version_num;' 2>"$TEMP/readiness.log"); then DB_READY=1; break; fi
         sleep 0.25
       done
       if [[ "$DB_READY" -eq 1 ]]; then
         PORT=$(docker port "$CID" 5432/tcp); PORT=${PORT##*:}
-        VERSION=$(docker exec "$CID" psql -X -U postgres -d smartcore_preflight -Atc 'SHOW server_version_num;')
         if [[ ! "$PORT" =~ ^[0-9]+$ || ! "$VERSION" =~ ^17[0-9]{4}$ ]]; then DB_READY=0; bad 'Disposable PostgreSQL 17 version/loopback port check';
         else
           export ConnectionStrings__Identity="Host=127.0.0.1;Port=$PORT;Database=smartcore_preflight;Username=postgres;Password=$PASSWORD"
