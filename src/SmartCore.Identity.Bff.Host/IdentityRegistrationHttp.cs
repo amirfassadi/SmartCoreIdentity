@@ -39,6 +39,9 @@ public sealed class IdentityRegistrationHttp(HostConfiguration configuration) : 
     private sealed record Failure(ErrorBody Error, string TraceId);
     private sealed record ErrorBody(string Code, string Message, string? NextAction);
     private async Task<T> Send<T>(string path, object body, string? key, int[] success, CancellationToken cancellation) {
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        cancellation=deadline.Token;
         using var request = new HttpRequestMessage(HttpMethod.Post,path) {Content = JsonContent.Create(body, options: Json)};
         if (key is not null) request.Headers.Add("Idempotency-Key",key);
         using var response = await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancellation);
