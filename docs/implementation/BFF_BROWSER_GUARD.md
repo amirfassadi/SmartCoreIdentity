@@ -39,8 +39,9 @@ Identity-session fixture metadata. No BFF UUID or personId is exposed in JSON.
 
 Anonymous requests with valid anonymous CSRF to authenticated paths return terminal
 401 and clear both cookies. An already-active principal attempting login gets 409
-without replacement. Successful guard passes still end in BFF_UNAVAILABLE for the
-unconnected task-6 account handlers; no session login cookie is minted. Clients must
+without replacement. With the account feature disabled, successful guard passes still end in
+BFF_UNAVAILABLE and mint no login cookie. The separate opt-in account suite connects
+real account handlers; see BFF_BROWSER_ACCOUNTS.md. Clients must
 obtain fresh CSRF after future actual login/logout transitions.
 
 ## Acceptance evidence boundary

@@ -74,19 +74,15 @@ connection strings. There is no diagnostic HTTP endpoint for key-ring proof.
 The new Browser B1 infrastructure workflow executes the Next production checks
 and the two-host PostgreSQL checks in isolated jobs.
 
-## Next slice
+## Current continuation
 
-Task 3 still needs seeded Identity account integration through the real login
-handler (task 6). Task 4 now supplies development HTTPS ingress with locale-only cookies to Next
-and trusted-header overwrites; see [HTTPS_INGRESS.md](HTTPS_INGRESS.md). Task 5 now establishes the opaque-cookie principal and session-bound CSRF guards;
-its fresh CI evidence is tracked in BFF_BROWSER_GUARD.md. The [raw request fixtures](../../tests/browser/b1-guard-precedence.json)
-cover each adjacent competing error pair plus cross-site/malformed JSON. Their
-current Python evaluator injects a CSRF result; they now run against the live host/TLS proxy with zero Identity calls asserted;
-fresh CI must pass before claiming their runtime evidence. The 15 older
-controls are a precedence model, not 15 live requests.
-
-B2 must review OTP/register Retry-After again; B3 must review reset cooldowns.
-Do not silently clamp longer upstream cooldowns into the B1 60-second schema.
+Private task-6 account handlers and task-7 fa/en forms are implemented with explicit
+acceptance opt-ins. The separate account suite covers real Identity, two BFF hosts,
+PostgreSQL 17, HTTPS and production Next/Chromium; see BFF_BROWSER_ACCOUNTS.md.
+Task 5's zero-dispatch guard suite deliberately keeps account handlers disabled.
+Fresh CI must pass before account/browser acceptance is claimed. B2 registration/OTP
+and B3 recovery/reset/password-change UI remain open. Their Retry-After contracts
+must be reviewed separately; do not truncate longer cooldowns to B1's 60 seconds.
 
 ## Verified infrastructure CI
 

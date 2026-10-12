@@ -1,6 +1,6 @@
 # Run the first backend delivery
 
-This service handles test registration only. It has no frontend, login or public deployment. Start at [the implementation baseline](BASELINE.md).
+This service has private registration/authentication/recovery APIs and a B1 browser account surface; public deployment remains disabled. Start at [the implementation baseline](BASELINE.md), then [private B1 accounts](BFF_BROWSER_ACCOUNTS.md) for current host/browser configuration and evidence. The initial registration instructions below remain applicable to the trusted API.
 
 ## Docker: local database and backend
 

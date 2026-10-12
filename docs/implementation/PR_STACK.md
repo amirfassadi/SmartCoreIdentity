@@ -53,10 +53,10 @@ these future release gates. The initial country is Iran and the frontend framewo
 provider and business-domain strategy remain open. The release-gate documents
 themselves do not certify runtime/browser behavior.
 
-The B1 browser contract (Draft 0.1.1) was reviewed before host code. A Next fa/en
-shell and a private two-host .NET scaffold now exist; account handlers remain
-unavailable. Schema checks, infrastructure HTTP checks and full Playwright
-acceptance are separate evidence. Generated client, actual account handlers and
-full account browser acceptance remain open. Opaque-cookie/CSRF guards are now
-implemented; see [BFF_BROWSER_GUARD.md](BFF_BROWSER_GUARD.md) for bounded evidence. Development HTTPS
-ingress is now implemented; see [HTTPS_INGRESS.md](HTTPS_INGRESS.md) for evidence limits.
+The B1 browser contract (Draft 0.1.1) was reviewed before host code. Private account
+handlers, generated browser request/response types and the fa/en client now build.
+The original guard checks still assert zero dispatch with account handlers disabled;
+a separate suite enables real Identity account flows and Chromium through HTTPS.
+Fresh bounded acceptance and remaining B2/B3 work are tracked in
+[BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md). Prior guard/ingress evidence stays
+in BFF_BROWSER_GUARD.md and HTTPS_INGRESS.md; it does not substitute for account E2E.

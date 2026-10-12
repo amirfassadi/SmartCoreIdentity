@@ -30,7 +30,7 @@ services, hours and appointments. Public pages expose customer booking.
 | Stage | Scope | Demonstrable done criterion | Status |
 | --- | --- | --- | --- |
 | A | Platform #11 then Identity #1/#2/#4/#5/#6/#7; retarget/rebase as required | All stages on canonical main with successful CI after each base change | Draft stack prepared, not merged |
-| B1 | Contract-first host/proxy, seeded login/me/logout, csrf and fa/en shell | Browser session/CSRF/Origin and two-host single-flight tests | Not implemented |
+| B1 | Contract-first host/proxy, seeded login/me/logout, csrf and fa/en shell | Browser session/CSRF/Origin and two-host single-flight tests | Private implementation present; fresh acceptance tracked in BFF_BROWSER_ACCOUNTS.md |
 | B2 | Registration and protected OTP inbox | Browser registration Ready then login; proof/inbox rejection checks | Not implemented |
 | B3 | Recovery enrollment/reset/password change | Complete Playwright journey through new-password login and replacement enrollment | Not implemented |
 | C | Real-user release controls, SMS, operations and deployment | Closed beta after all evidence in RELEASE_GATES.md is accepted | Open |
@@ -59,7 +59,7 @@ Release requirements and SMS ambiguity/abuse policy have one current source:
 [PR_STACK.md](PR_STACK.md). CI counts are cumulative historical evidence, not proof
 that future stages or browser/provider paths are implemented.
 
-## Frontend choice (accepted, not yet implemented)
+## Frontend choice (accepted; private B1 implementation)
 
 Next.js App Router with React and TypeScript, with Tailwind CSS for the shared
 responsive design system. Use server rendering for public sites without session reads. Account/dashboard
@@ -74,8 +74,8 @@ Authenticated responses and one-time recovery material must never enter shared c
 Tradeoff: an additional Node.js runtime and explicit proxy/session/cache isolation
 to operate. Pin supported dependency versions when implementation starts.
 Razor Pages would simplify hosting, but Next.js is the accepted basis for the future
-interactive owner dashboard and customizable public site. The owner accepted this choice on 2026-10-11. It creates no frontend files or new
-runtime evidence.
+interactive owner dashboard and customizable public site. The owner accepted this choice on 2026-10-11. The current private frontend and acceptance evidence are tracked separately in
+BFF_BROWSER_ACCOUNTS.md.
 
 Primary references consulted 2026-10-11:
 https://nextjs.org/docs/app/getting-started/server-and-client-components and

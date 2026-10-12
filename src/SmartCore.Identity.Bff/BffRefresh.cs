@@ -299,8 +299,9 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     private static string LogoutPurpose(Guid id,long version)=>"bff-logout-access:"+id+":"+version.ToString(System.Globalization.CultureInfo.InvariantCulture);
     public async Task Logout(string cookie,CancellationToken cancellation=default)
     {
-        var id=await RequestLogout(cookie,cancellation);
-        if(id is not null)await CompleteLogout(id.Value,cancellation);
+        using var budget=CancellationTokenSource.CreateLinkedTokenSource(cancellation);budget.CancelAfter(limits.LockWait+limits.Owner);
+        var id=await RequestLogout(cookie,budget.Token);
+        if(id is not null)await CompleteLogout(id.Value,budget.Token);
     }
     // Browser response may acknowledge only this durable local intent, before any upstream work.
     public async Task<Guid?> RequestLogout(string cookie,CancellationToken cancellation=default)

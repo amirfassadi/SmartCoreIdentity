@@ -11,7 +11,7 @@ main merge, production/VPS change or real SMS purchase is authorized by this fil
 | Gate | Required evidence | Current disposition |
 | --- | --- | --- |
 | Canonical contract | Platform PR #11 merged first; Identity pin/provenance compared to canonical Platform schema 1.2.2; applicable OpenAPI validation passes | Platform merge/provenance open |
-| Browser account path | Same-origin BFF host and Playwright flow: registration, login, refresh, logout, reset, login with new password and replacement recovery enrollment | Host/browser E2E not implemented |
+| Browser account path | Same-origin BFF host and Playwright flow: registration, login, refresh, logout, reset, login with new password and replacement recovery enrollment | Private B1 login/me/logout implemented; B2 registration and B3 recovery/reset browser journey still open |
 | OTP delivery | Real SMS adapter behind a provider-neutral interface and durable notification queue; destination-country delivery and sender/template registration verified | SMS selected first; Iran confirmed; provider undecided |
 | SMS pumping | Allowed-country list enforced before enqueue/send; destination and trusted-subject budgets independent of Person; aggregate spend ceiling, provider hard cap and delivered alerts; concurrent-instance enforcement tested | Required before provider activation |
 | Delivery ambiguity | Durable attempt journal, explicit outcomes, safe provider idempotency/status reconciliation, duplicate/reordered webhook tests | Design below; adapter/worker pending |
