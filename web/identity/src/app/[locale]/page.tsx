@@ -37,7 +37,6 @@ export default function AccountShell() {
     read.current?.abort(); const controller = new AbortController(); read.current = controller;
     const current = generation.current;
     try {
-      await bootstrap(controller.signal);
       const result = await post(action ? '/bff/me/action' : '/bff/me', {}, controller.signal);
       if (!controller.signal.aborted && current === generation.current && result) {setPerson(result.person); setError('');}
     } catch (failure) {

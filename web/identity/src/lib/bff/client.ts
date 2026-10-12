@@ -32,18 +32,18 @@ export async function bootstrap(signal?: AbortSignal) {await csrfLock(() => load
 export async function post<P extends BrowserPostPath>(path: P, body: BrowserRequests[P], signal?: AbortSignal): Promise<BrowserResponses[P]> {
   const send = async () => response<BrowserResponses[P]>(fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
     headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf!}, body: JSON.stringify(body), signal}));
-  if (path === '/bff/login' || path === '/bff/logout') {
-    return csrfLock(async () => {
-      if (!csrf) await loadCsrf(signal);
-      const result = await send();
+  // Every account response may clear cookies on terminal rejection. Keep its proof
+  // bootstrap and response in the same cross-tab lock as login/logout, so an old
+  // anonymous/terminal read cannot clear a later login cookie.
+  return csrfLock(async () => {
+    await loadCsrf(signal);
+    const result = await send();
+    if (path === '/bff/login' || path === '/bff/logout') {
       invalidateCsrf();
-      // A committed transition remains successful even if subsequent bootstrap is unavailable.
-      // The next action obtains CSRF again; credentials are never replayed automatically.
+      // Failure here does not change the already committed transition outcome.
       try {await loadCsrf(signal);} catch {invalidateCsrf();}
-      return result;
-    }, signal);
-  }
-  if (!csrf) await bootstrap(signal);
-  return send();
+    }
+    return result;
+  }, signal);
 }
 // No retries of credentials or state-changing commands. New user actions honor Retry-After.
