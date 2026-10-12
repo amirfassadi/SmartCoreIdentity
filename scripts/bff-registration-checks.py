@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 import subprocess
+import time
 import urllib.error
 import urllib.request
 
@@ -119,6 +120,20 @@ def registration_checks(root,tls,private,env,identity_env,dotnet,validate_respon
     assert expired.request('/bff/register/verify',{'flowId':expired_body['flowId'],'code':expired_code})[1]['code']=='VERIFICATION_FAILED'
     print('B2 HTTP PASS: real TLS/two-host encrypted context, strict DTOs/guard no-dispatch budgets, lost-start replay, resend, wrong/expired OTP, proof-gated existence outcomes, cross-tab flow binding, 3600-second contact cooldown, setup/candidate completion and replay, no automatic authentication.')
     if os.environ.get('SMARTCORE_BROWSER_E2E')=='yes':
+        # The HTTP negative fixtures intentionally use the real 30/minute limiter.
+        # Restart only our private Identity process between independent suites; do
+        # not make Chromium inherit the HTTP suite's consumed transport budget.
+        identity_process.terminate();identity_process.wait(timeout=10)
+        isolated_identity=subprocess.Popen([dotnet,str(root/'src/SmartCore.Identity.Api/bin/Release/net10.0/SmartCore.Identity.Api.dll')],env=identity_env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        for _ in range(100):
+            assert isolated_identity.poll() is None,'Private Chromium Identity exited'
+            try:
+                if private.open('http://127.0.0.1:5157/health/ready',timeout=1).status==200:break
+            except OSError:pass
+            time.sleep(.1)
+        else:
+            isolated_identity.terminate();isolated_identity.wait(timeout=10)
+            raise AssertionError('Private Chromium Identity readiness timed out')
         contact=secrets.token_hex(12)+'@example.test'
         child=subprocess.Popen(['node',str(root/'web/identity/e2e/registration.mjs')],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
         try:
@@ -134,6 +149,7 @@ def registration_checks(root,tls,private,env,identity_env,dotnet,validate_respon
             assert child.wait(timeout=10)==0,'B2 Chromium failed (proof output suppressed)'
         finally:
             if child.poll() is None:child.terminate();child.wait(timeout=10)
+            isolated_identity.terminate();isolated_identity.wait(timeout=10)
     # Unknown upstream outcome preserves registration context; never reports verified/Ready.
     prior=expired.cookies.copy();identity_process.terminate();identity_process.wait(timeout=10)
     assert expired.request('/bff/register/resend',{'flowId':expired_body['flowId']})[0]==503

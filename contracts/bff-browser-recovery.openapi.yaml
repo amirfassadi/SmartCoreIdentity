@@ -1,0 +1,440 @@
+openapi: 3.1.0
+info:
+  title: SmartCore browser BFF — private B1+B2+B3 candidate
+  version: 0.3.0
+  description: Additive recovery candidate. B1/B2 paths/components unchanged. Compose
+    with tools/bff_browser_contract.py. Not release approval.
+x-extends:
+- bff-browser.openapi.yaml
+- bff-browser-registration.openapi.yaml
+paths:
+  /bff/recovery/enroll:
+    post:
+      operationId: browserRecoveryEnroll
+      x-enabled-setting: Bff:RecoveryEnabled
+      description: Explicit Development/Testing opt-in, disabled routes 404. Ordered
+        B1 guards and strict DTOs. Trusted operation IDs are server-derived, not exposed.
+        Enrollment/change authenticate with existing opaque BFF session and current
+        password. Reset is anonymous, uniform initiation and both OTP plus pre-enrolled
+        recovery code. One-time receipt replay never returns recovery secret again.
+        Fresh independent login resolves accepted mutation; no public/operator status
+        route.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+        bffSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryEnrollRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RecoveryValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RecoveryConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/Busy503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '200':
+          description: Private result only; accepted mutation means fenced/durable
+            intent, not completed password replacement. No automatic command replay.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryEnrollment'
+              examples: {}
+        '401':
+          $ref: '#/components/responses/Me401'
+  /bff/password/change:
+    post:
+      operationId: browserPasswordChange
+      x-enabled-setting: Bff:RecoveryEnabled
+      description: Explicit Development/Testing opt-in, disabled routes 404. Ordered
+        B1 guards and strict DTOs. Trusted operation IDs are server-derived, not exposed.
+        Enrollment/change authenticate with existing opaque BFF session and current
+        password. Reset is anonymous, uniform initiation and both OTP plus pre-enrolled
+        recovery code. One-time receipt replay never returns recovery secret again.
+        Fresh independent login resolves accepted mutation; no public/operator status
+        route.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+        bffSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RecoveryValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RecoveryConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/Busy503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '202':
+          description: Private result only; accepted mutation means fenced/durable
+            intent, not completed password replacement. No automatic command replay.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordMutationAccepted'
+              examples: {}
+          x-cookie-actions:
+            __Host-smartcore-session: clear
+            __Host-smartcore-antiforgery: clear
+        '401':
+          $ref: '#/components/responses/Me401'
+  /bff/password/reset:
+    post:
+      operationId: browserPasswordReset
+      x-enabled-setting: Bff:RecoveryEnabled
+      description: Explicit Development/Testing opt-in, disabled routes 404. Ordered
+        B1 guards and strict DTOs. Trusted operation IDs are server-derived, not exposed.
+        Enrollment/change authenticate with existing opaque BFF session and current
+        password. Reset is anonymous, uniform initiation and both OTP plus pre-enrolled
+        recovery code. One-time receipt replay never returns recovery secret again.
+        Fresh independent login resolves accepted mutation; no public/operator status
+        route.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetStartRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RecoveryValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RecoveryConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/CsrfUnavailable503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '202':
+          description: Private result only; accepted mutation means fenced/durable
+            intent, not completed password replacement. No automatic command replay.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetPending'
+              examples: {}
+          x-cookie-actions:
+            __Host-smartcore-reset: set
+  /bff/password/reset/complete:
+    post:
+      operationId: browserPasswordResetComplete
+      x-enabled-setting: Bff:RecoveryEnabled
+      description: Explicit Development/Testing opt-in, disabled routes 404. Ordered
+        B1 guards and strict DTOs. Trusted operation IDs are server-derived, not exposed.
+        Enrollment/change authenticate with existing opaque BFF session and current
+        password. Reset is anonymous, uniform initiation and both OTP plus pre-enrolled
+        recovery code. One-time receipt replay never returns recovery secret again.
+        Fresh independent login resolves accepted mutation; no public/operator status
+        route.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+        resetCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetCompleteRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RecoveryValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RecoveryConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RateError'
+        '503':
+          $ref: '#/components/responses/CsrfUnavailable503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '202':
+          description: Private result only; accepted mutation means fenced/durable
+            intent, not completed password replacement. No automatic command replay.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordMutationAccepted'
+              examples: {}
+components:
+  securitySchemes:
+    resetCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-smartcore-reset
+      description: Authenticated/encrypted HttpOnly proof context with tab flow binding.
+        Secure/SameSite=Lax/Path=/, no Domain, no sliding expiry; absolute private
+        reset deadline, at most 11 minutes. Never includes password, OTP or recovery
+        code. Not authentication authority.
+  schemas:
+    RecoveryEnrollRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - flowId
+      - currentPassword
+      - acceptLossRisk
+      properties:
+        flowId: &id001
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: Web Crypto 32-byte random per-tab command correlation. Memory
+            only; not Identity authority.
+        currentPassword: &id002
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+          x-max-utf16-code-units: 128
+        acceptLossRisk:
+          const: true
+    PasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - flowId
+      - currentPassword
+      - newPassword
+      properties:
+        flowId: *id001
+        currentPassword: *id002
+        newPassword: &id003
+          type: string
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+          x-max-utf16-code-units: 128
+    PasswordResetCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - flowId
+      - code
+      - recoveryCode
+      - newPassword
+      properties:
+        flowId: *id001
+        code:
+          type: string
+          pattern: ^(?:[0-9]{6}|[0-9]{8})$
+          writeOnly: true
+        recoveryCode:
+          type: string
+          maxLength: 64
+          pattern: ^\s*[0-9A-Fa-f]{32}\s*$
+          writeOnly: true
+        newPassword: *id003
+    RecoveryEnrollment:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - Issued
+          - AlreadyIssued
+        recoveryCode:
+          type: string
+          pattern: ^[A-F0-9]{32}$
+          description: 128-bit recovery secret shown once. Volatile UI only; never
+            SSR/storage/telemetry/download/trace. Acknowledgment is UX only.
+      oneOf:
+      - properties:
+          status:
+            const: Issued
+        required:
+        - recoveryCode
+      - properties:
+          status:
+            const: AlreadyIssued
+        not:
+          required:
+          - recoveryCode
+    PasswordResetPending:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - expiresAt
+      properties:
+        status:
+          type: string
+          const: Accepted
+        expiresAt:
+          type: string
+          format: date-time
+    PasswordMutationAccepted:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          const: Accepted
+    RecoveryValidationError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - VALIDATION_FAILED
+          - CREDENTIALS_REJECTED
+          - RESET_PROOF_REJECTED
+          - RESET_FLOW_EXPIRED
+    RecoveryConflictError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - IDEMPOTENCY_CONFLICT
+          - SESSION_ALREADY_ACTIVE
+          - RECOVERY_UNAVAILABLE
+    PasswordResetStartRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - flowId
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          format: email
+        mobile:
+          type: string
+          minLength: 7
+          maxLength: 32
+          pattern: ^[+0-9۰-۹٠-٩ ()-]+$
+          description: 'Iran default normalization: trim approved separators, normalize
+            Persian/Arabic digits; accept +98/0098/09 then canonical E.164 before
+            Identity and budgets. Password unchanged.'
+        flowId: *id001
+      oneOf:
+      - required:
+        - email
+        not:
+          required:
+          - mobile
+      - required:
+        - mobile
+        not:
+          required:
+          - email
+  responses:
+    RecoveryValidation400:
+      description: Uniform proof/current-password failures preserve cookies. Reset
+        cooldown/eligibility are not disclosed. Private 401 is a browser proof error,
+        not evidence that an authenticated BFF session is terminal.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RecoveryValidationError'
+          examples: {}
+    RecoveryConflict409:
+      description: Explicit idempotency conflict, active session on anonymous flow,
+        or unavailable enrollment. No cookie mutation.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RecoveryConflictError'
+          examples: {}
