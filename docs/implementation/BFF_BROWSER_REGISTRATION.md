@@ -94,5 +94,7 @@ SPKI trusted. Private pipe messages supply protected-inbox OTP/provisioning with
 exposing an inbox key or ID to the browser. It exercises a lost start response and
 explicit retry, Persian OTP/RTL mobile, Pending/Ready, separate English login, CSP,
 HttpOnly proof and absence of private values in storage. No traces, screenshots,
-network dumps or secret-bearing diagnostics are retained. Native builds and static
-checks passed locally; full live CI evidence will be recorded after those jobs pass.
+network dumps or secret-bearing diagnostics are retained. The private Identity process is restarted between the independent HTTP and browser
+suites so the deliberate HTTP admission controls do not consume Chromium's real
+30/minute registration transport budget. No limiter is disabled or broadened.
+Native builds and static checks passed locally; full live CI evidence will be recorded after those jobs pass.

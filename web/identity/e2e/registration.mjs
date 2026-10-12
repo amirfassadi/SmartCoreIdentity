@@ -55,15 +55,17 @@ try {
   await panel.getByRole('button',{name:'بررسی آماده‌شدن حساب',exact:true}).waitFor();
   assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));
   process.stdout.write(JSON.stringify({event:'provision'})+'\n');await receive();
-  stage='Ready and separate login';
+  stage='manual Ready proof check';
   await panel.getByRole('button',{name:'بررسی آماده‌شدن حساب',exact:true}).click();
   await panel.getByText('حساب شما آماده است. برای ادامه وارد شوید.',{exact:true}).waitFor();
   assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));
+  stage='separate sign-in navigation';
   await panel.getByRole('button',{name:'رفتن به ورود',exact:true}).click();
   await page.getByRole('link',{name:'English',exact:true}).click();
   await page.locator('input[name=contact]').waitFor();
   assert.equal(await page.locator('html').getAttribute('dir'),'ltr');
   await page.locator('input[name=contact]').fill(fixture.email);await page.locator('input[name=password]').fill(fixture.password);
+  stage='independent English login';
   await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByTestId('profile').waitFor();
   stage='proof isolation and CSP';
   const stored=await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}));
