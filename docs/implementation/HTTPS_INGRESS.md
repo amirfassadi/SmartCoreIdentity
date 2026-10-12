@@ -76,3 +76,15 @@ The four adjacent competing-error requests in tests/browser/b1-guard-precedence.
 must be the first live guard tests in task 5, with zero upstream calls asserted.
 `personId` remains prohibited in browser DTOs. B2 will re-review OTP/register retry
 windows; B3 will separately review reset cooldowns rather than clamp them to B1.
+
+## Verified code revision
+
+Revision `d6ea1da22cb6bd5d1d9c724ef2b8d649b7935d89` passed
+[Browser B1 infrastructure CI 38223166330](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38223166330).
+Both job logs were inspected. Job 114724111216 built the .NET host with zero
+warnings/errors and passed TLS requests to two real hosts on PostgreSQL 17.
+Job 114724111533 passed production Next-through-TLS checks and the independent
+TLS cookie/header/no-retry boundary checks. Integration revision
+`09834bce323f42f84b256e8875a5f142bd4d4480` has the identical code tree and passed
+infrastructure run 38223170805. Neither job certifies live CSRF/session guards or
+browser account E2E; those remain the next acceptance work.

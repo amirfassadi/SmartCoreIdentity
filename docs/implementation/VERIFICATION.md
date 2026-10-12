@@ -519,3 +519,15 @@ No opaque-cookie principal/CSRF pipeline or browser login has been enabled. The 
 adjacent-error fixtures remain candidate fixtures until live guard tests execute.
 The development proxy is not a production ingress or VPS deployment authorization.
 See HTTPS_INGRESS.md for current scope and commands.
+
+Task-4 infrastructure runtime evidence is now verified on code commit
+`d6ea1da22cb6bd5d1d9c724ef2b8d649b7935d89` (tree
+`83140f97eafca0b20a16a30ae67c70e974e9d9a6`): infrastructure run 38223166330
+succeeded. Job logs 114724111216 (two real ASP.NET hosts/PostgreSQL 17 through TLS,
+zero build warnings/errors) and 114724111533 (production Next through TLS and
+controlled-peer TLS boundary/no-retry tests) were inspected. Integration commit
+`09834bce323f42f84b256e8875a5f142bd4d4480` has the same code tree and passed
+infrastructure run 38223170805. Documentary runs 38223166277/38223170783 also passed.
+This supersedes the pending task-4 build/runtime statement above. Live guard
+precedence, session binding, browser hydration and full account E2E remain open;
+no login has been enabled and no personId added to a browser DTO.
