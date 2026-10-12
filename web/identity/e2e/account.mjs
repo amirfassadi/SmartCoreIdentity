@@ -57,8 +57,12 @@ try {
     window.fetch=async (input,options) => {
       const result=await native(input,options);
       if(input==='/bff/me/action') {
-        window.__held=true;
-        await new Promise(resolve=>{window.__releaseHeld=resolve;});
+        const readJson=result.json.bind(result);
+        result.json=async () => {
+          const payload=await readJson();window.__held=true;
+          await new Promise(resolve=>{window.__releaseHeld=resolve;});
+          return payload;
+        };
       }
       return result;
     };
