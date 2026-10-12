@@ -121,7 +121,7 @@ export default function AccountShell() {
           <h2 className="text-xl font-semibold">{a('login')}</h2>
           <label className="grid gap-2">{a('contact')}<input name="contact" type="text" autoComplete="username" required maxLength={254} dir="ltr" className="rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="grid gap-2">{a('password')}<input name="password" type="password" autoComplete="current-password" required maxLength={128} className="rounded-lg border border-slate-300 px-3 py-2" /></label>
-          <button className="rounded-lg bg-teal-800 px-4 py-3 font-semibold text-white" disabled={busy || remaining > 0}>{busy ? a('waiting') : a('login')}</button>
+          <button type="submit" className="rounded-lg bg-teal-800 px-4 py-3 font-semibold text-white" disabled={busy || remaining > 0}>{busy ? a('waiting') : a('login')}</button>
           {registrationEnabled && <button type="button" onClick={() => setRegister(true)} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('register')}</button>}
         </form>}
         {error && <p role="alert" className="mt-4 text-sm text-red-800">{a(`errors.${knownErrors.includes(error) ? error : 'UNKNOWN'}`)}</p>}
