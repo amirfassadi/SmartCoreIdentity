@@ -14,6 +14,7 @@ catch (Exception failure) { Console.Error.WriteLine($"BFF startup configuration 
 using var certificate = configuration.WrappingCertificate;
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16384);
+builder.Services.AddSingleton(configuration);
 builder.Services.AddSingleton(configuration.SessionSecrets);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(new BffStore(configuration.Database));
@@ -69,5 +70,6 @@ app.Use(async (context, next) => {
 });
 app.MapGet("/health/ready", () => Results.NoContent());
 // Authentication is invoked by the guard after size/type/origin, never globally before it.
-app.MapFallback("/{**path}", (HttpContext context, BrowserGuard guard) => guard.Handle(context));
+// Explicit RequestDelegate keeps routing/validation inside the ordered guard without body-binding inference.
+app.MapFallback("/{**path}", (RequestDelegate)(context => context.RequestServices.GetRequiredService<BrowserGuard>().Handle(context)));
 await app.RunAsync();

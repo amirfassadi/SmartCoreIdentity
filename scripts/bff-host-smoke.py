@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 request = urllib.request.Request(f'http://127.0.0.1:{port}{path}',method=method)
                 try: response = opener.open(request,timeout=5)
                 except urllib.error.HTTPError as error: response = error
-                assert response.status == status
+                assert response.status == status, (path, method, response.status, status)
                 validate_response(contract,path,method,status,json.loads(response.read()),dict(response.headers.items()))
         ingress = subprocess.Popen(['node',str(root/'deploy/development/https-ingress.mjs')],env={**os.environ,
             'SMARTCORE_INGRESS_ENVIRONMENT':'Testing','SMARTCORE_INGRESS_ORIGIN':'https://localhost:7443',
@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
             request=urllib.request.Request('https://localhost:7443'+path,method=method,headers={'Origin':'https://localhost:7443','Sec-Fetch-Site':'same-origin','X-Bff-Client-Key':'forged','X-Forwarded-Host':'evil.invalid','X-Forwarded-Proto':'http'})
             try: response=tls.open(request,timeout=5)
             except urllib.error.HTTPError as error: response=error
-            assert response.status==status
+            assert response.status==status, (path, method, response.status, status)
             assert response.headers['Strict-Transport-Security']=='max-age=31536000'
             validate_response(contract,path,method,status,json.loads(response.read()),dict(response.headers.items()))
         print('BFF HTTPS ingress PASS: trusted local TLS certificate, two real ASP.NET hosts, B2/B3 JSON 404, route-specific 405 Allow and no-store through the actual proxy.')
