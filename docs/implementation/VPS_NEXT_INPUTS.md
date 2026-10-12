@@ -36,5 +36,7 @@ Inputs needed for the deployment plan:
   operator-managed mount and are never posted in chat or committed.
 - Alert destination, finite audit retention and accepted load/failover thresholds.
 
+Before VPS access, [LOCAL_PREFLIGHT.md](LOCAL_PREFLIGHT.md) documents the isolated
+local runner and its verified native PostgreSQL/Chromium execution.
 The code/test workflow can continue without a purchased domain. These inputs block
 real-host rollout/provider activation; they do not certify or replace code acceptance.

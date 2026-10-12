@@ -40,6 +40,13 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         'Bff__SessionMacKey':base64.b64encode(secrets.token_bytes(32)).decode(), 'Bff__SessionMaterialKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Bff__DataProtection__KeyRing':str(directory/'ring'), 'Bff__DataProtection__CertificatePath':str(directory/'wrap.pfx'), 'Bff__DataProtection__CertificatePassword':password}
     assert run(env, '--validate-config').returncode == 0
+    required = ['ASPNETCORE_URLS', 'ConnectionStrings__Bff', 'Bff__ExternalOrigin', 'Bff__IdentityOrigin',
+        'Bff__ClientKey', 'Bff__ReceiptKey', 'Bff__SessionMacKey', 'Bff__SessionMaterialKey',
+        'Bff__DataProtection__KeyRing', 'Bff__DataProtection__CertificatePath', 'Bff__DataProtection__CertificatePassword']
+    for key in required:
+        missing = env.copy(); missing.pop(key)
+        assert run(missing, '--validate-config').returncode != 0, 'Missing required configuration accepted'
+    print('BFF required-config PASS: healthy Testing control succeeds; each of 11 missing settings fails independently before database/network work.')
     for overrides in [{'ASPNETCORE_ENVIRONMENT':'Production'}, {'ASPNETCORE_URLS':'http://0.0.0.0:5171'}, {'Bff__DataProtection__CertificatePath':str(directory/'missing.pfx')}, {'Bff__ReceiptKey':env['Bff__ClientKey']}, {'Bff__ExternalOrigin':'http://localhost:7443'}]:
         assert run({**env, **overrides}, '--validate-config').returncode != 0
     first = run(env, '--keyring-proof'); assert first.returncode == 0
