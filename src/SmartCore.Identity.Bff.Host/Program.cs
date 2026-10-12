@@ -44,6 +44,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options => {
 // so that middleware cannot resolve a cookie before the explicitly ordered guard.
 AppContext.SetSwitch("Microsoft.AspNetCore.Authentication.SuppressAutoDefaultScheme", true);
 builder.Services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, OpaqueSessionHandler>(OpaqueSessionHandler.SchemeName, _ => { });
+builder.Services.AddSingleton<IdentityAccountHttp>();
+builder.Services.AddScoped<BrowserAccounts>();
 builder.Services.AddScoped<BrowserGuard>();
 var app = builder.Build();
 if (await app.Services.GetRequiredService<IAuthenticationSchemeProvider>().GetDefaultAuthenticateSchemeAsync() is not null)

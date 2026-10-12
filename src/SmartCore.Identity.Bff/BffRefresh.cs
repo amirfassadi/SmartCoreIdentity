@@ -299,6 +299,12 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
     private static string LogoutPurpose(Guid id,long version)=>"bff-logout-access:"+id+":"+version.ToString(System.Globalization.CultureInfo.InvariantCulture);
     public async Task Logout(string cookie,CancellationToken cancellation=default)
     {
+        var id=await RequestLogout(cookie,cancellation);
+        if(id is not null)await CompleteLogout(id.Value,cancellation);
+    }
+    // Browser response may acknowledge only this durable local intent, before any upstream work.
+    public async Task<Guid?> RequestLogout(string cookie,CancellationToken cancellation=default)
+    {
         if(identity is not IIdentityLogout)throw new InvalidOperationException("Identity logout adapter required");
         using var budget=CancellationTokenSource.CreateLinkedTokenSource(cancellation);budget.CancelAfter(limits.LockWait+limits.Owner);
         Guid id;
@@ -310,14 +316,14 @@ public sealed class BffRefresh(BffStore store,Secrets secrets,TimeProvider clock
             try{row=await BffStore.One(c,"SELECT * FROM bff_sessions WHERE cookie_mac=@cookie FOR UPDATE",budget.Token,("cookie",Cookie(cookie)));}
             catch(Exception e)when(e is PostgresException {SqlState:"55P03"} || e is OperationCanceledException && !cancellation.IsCancellationRequested)
             {Busy.Add(1);throw new BffError("BFF_BUSY",1);}
-            if(row is null || row.Get<string>("status") is not ("Active" or "LogoutRequested")){await tx.CommitAsync(budget.Token);return;}
+            if(row is null || row.Get<string>("status") is not ("Active" or "LogoutRequested")){await tx.CommitAsync(budget.Token);return null;}
             id=row.Get<Guid>("id");
             if(row.Get<string>("status")=="Active")
                 await BffStore.Execute(c,"UPDATE bff_sessions SET status='LogoutRequested',sealed_tokens=NULL,sealed_logout_access=@access,logout_retry_at=@now WHERE id=@id",budget.Token,
                     ("id",id),("now",Now),("access",secrets.Seal(Tokens(row).AccessToken,LogoutPurpose(id,row.Get<long>("version")))));
             await tx.CommitAsync(budget.Token);
         }
-        await CompleteLogout(id,budget.Token);
+        return id;
     }
     // Trusted server/session id, not a browser assertion. Cookie is unnecessary after durable intent.
     public async Task CompleteLogout(Guid id,CancellationToken cancellation=default)

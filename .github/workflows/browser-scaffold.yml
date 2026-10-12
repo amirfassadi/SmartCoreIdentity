@@ -49,3 +49,14 @@ jobs:
       - run: python scripts/bff-host-smoke.py
         env:
           ConnectionStrings__Bff: Host=localhost;Database=bff_test;Username=bff_test;Password=test_only_bff_password
+      - run: python tools/generate_bff_browser_client.py --check
+      - run: npm ci --ignore-scripts --prefix web/identity
+      - run: npm run build --prefix web/identity
+        env:
+          NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED: 'true'
+      - run: npm ci --ignore-scripts --prefix web/identity/e2e
+      - run: npx --prefix web/identity/e2e playwright install --with-deps chromium
+      - run: python scripts/bff-account-smoke.py
+        env:
+          SMARTCORE_BROWSER_E2E: 'yes'
+          ConnectionStrings__Bff: Host=localhost;Database=bff_test;Username=bff_test;Password=test_only_bff_password
