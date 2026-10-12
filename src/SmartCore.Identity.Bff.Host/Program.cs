@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
+using System.Net;
 using SmartCore.Identity;
 using SmartCore.Identity.Bff;
 using SmartCore.Identity.Bff.Host;
@@ -28,6 +30,14 @@ builder.Services.AddAntiforgery(options => {
     options.Cookie.Path = "/"; options.Cookie.HttpOnly = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always; options.Cookie.SameSite = SameSiteMode.Lax;
 });
+builder.Services.Configure<ForwardedHeadersOptions>(options => {
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    options.ForwardLimit = 1; options.RequireHeaderSymmetry = true;
+    options.KnownIPNetworks.Clear(); options.KnownProxies.Clear();
+    options.KnownProxies.Add(IPAddress.Loopback); options.KnownProxies.Add(IPAddress.IPv6Loopback);
+    options.KnownProxies.Add(IPAddress.Loopback.MapToIPv6());
+    options.AllowedHosts.Add(configuration.ExternalOrigin.Host);
+});
 var app = builder.Build();
 if (args.Contains("--validate-config")) { Console.WriteLine("BFF scaffold configuration validated."); return; }
 // Test-only same-purpose proof across two separate host processes, not an HTTP endpoint.
@@ -40,6 +50,7 @@ if (args.Contains("--keyring-proof")) {
 }
 await app.Services.GetRequiredService<BffStore>().Migrate();
 if (args.Contains("--migrate")) return;
+app.UseForwardedHeaders();
 app.Use(async (context, next) => {
     context.Response.Headers.CacheControl = "no-store";
     context.Response.Headers.XContentTypeOptions = "nosniff";

@@ -57,4 +57,5 @@ The B1 browser contract (Draft 0.1.1) was reviewed before host code. A Next fa/e
 shell and a private two-host .NET scaffold now exist; account handlers remain
 unavailable. Schema checks, infrastructure HTTP checks and full Playwright
 acceptance are separate evidence. The generated client, opaque-cookie principal,
-CSRF guards, real HTTPS ingress and full account browser acceptance remain open.
+CSRF guards and full account browser acceptance remain open. Development HTTPS
+ingress is now implemented; see [HTTPS_INGRESS.md](HTTPS_INGRESS.md) for evidence limits.

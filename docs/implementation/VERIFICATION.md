@@ -497,3 +497,25 @@ The initial uppercase-method adapter failure is superseded by these fresh runs.
 This evidence covers infrastructure only; task-5/6 guards/account handlers and
 actual browser hydration/HTTPS ingress remain unimplemented.
 The documentation refresh passes 20 archive hashes, 17 documents and 64 links.
+
+### B1 task 4 — development HTTPS ingress
+
+Local Node TLS boundary checks passed with certificate verification enabled:
+independent request/response cookie allowlists, trusted-header overwrite, preserved
+separate Set-Cookie fields, BFF-only routing including undeveloped B2/B3 paths,
+size rejection before dispatch, cross-origin redirect rejection and exactly one
+upstream dispatch after socket failure. Controlled HTTP peers are used in that test.
+Next production build/typecheck, locale/time parity and production HTTP smoke passed.
+Additional Next smoke passed through the actual TLS ingress: fa/en pages, nonce
+preservation, correct same-origin locale redirect and BFF-only routing. Its BFF peers
+are controlled; it is not browser hydration or account E2E evidence.
+
+The two-host PostgreSQL CI smoke now adds a separate TLS key/certificate and sends
+requests through the actual proxy to both real ASP.NET processes. Trusted forwarded
+headers are configured for one symmetric hop from exact loopback addresses only;
+Bff:ExternalOrigin is required rather than inferred from incoming Host. That .NET
+build and runtime check must pass in fresh CI before they are claimed as verified.
+No opaque-cookie principal/CSRF pipeline or browser login has been enabled. The four
+adjacent-error fixtures remain candidate fixtures until live guard tests execute.
+The development proxy is not a production ingress or VPS deployment authorization.
+See HTTPS_INGRESS.md for current scope and commands.
