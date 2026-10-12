@@ -10,7 +10,7 @@ const spki=createHash('sha256').update(certificate.publicKey.export({type:'spki'
 // Trust only this disposable TLS key, never a blanket ignoreHTTPSerrors switch.
 const browser=await chromium.launch({headless:true,args:[`--ignore-certificate-errors-spki-list=${spki}`]});
 const context=await browser.newContext({baseURL:'https://localhost:7443',ignoreHTTPSErrors:false});
-let release;
+let release;let stage="initial login";
 try {
   await context.addInitScript(() => {
     window.__cspViolations=[];
@@ -32,18 +32,21 @@ try {
     const cookie=cookies.find(value=>value.name===name);
     assert(cookie && cookie.secure && cookie.httpOnly && cookie.sameSite==='Lax' && cookie.path==='/','Session cookie attributes');
   }
-  const publicPage=await context.request.get('/en');
-  const html=await publicPage.text();assert(!html.includes(fixture.email),'Public SSR must not contain private profile');
-  const firstNonce=publicPage.headers()['content-security-policy'].match(/nonce-([^']+)/)[1];
-  const secondPage=await context.request.get('/en');
-  assert.notEqual(firstNonce,secondPage.headers()['content-security-policy'].match(/nonce-([^']+)/)[1]);
+  stage='public SSR and nonce';
+  const publicPage=await page.evaluate(async () => {const response=await fetch('/en',{cache:'no-store'});return {html:await response.text(),csp:response.headers.get('content-security-policy')};});
+  assert(!publicPage.html.includes(fixture.email),'Public SSR must not contain private profile');
+  const firstNonce=publicPage.csp.match(/nonce-([^']+)/)[1];
+  const secondPage=await page.evaluate(async () => {const response=await fetch('/en',{cache:'no-store'});return response.headers.get('content-security-policy');});
+  assert.notEqual(firstNonce,secondPage.match(/nonce-([^']+)/)[1]);
   assert.equal(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}).includes('requestToken')),false);
   assert.equal(await page.evaluate(()=>Object.keys(localStorage).some(key=>/token|password|profile/i.test(key))),false);
+  stage='second tab and RTL';
   const peer=await context.newPage();peer.on('pageerror',()=>faults.push('pageerror'));
   await peer.goto('/fa');await peer.getByTestId('profile').waitFor();
   assert.equal(await peer.locator('html').getAttribute('dir'),'rtl');
   await peer.setViewportSize({width:390,height:844});
   assert(await peer.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Mobile RTL must not overflow');
+  stage='delayed read and cross-tab logout';
   // Real /me read is held after response arrives; logout must discard it on the second tab.
   const gate=new Promise(resolve=>{release=resolve;});let mark;
   const held=new Promise(resolve=>{mark=resolve;});
@@ -57,6 +60,7 @@ try {
   await peer.waitForTimeout(300);
   assert.equal(await peer.getByTestId('profile').count(),0,'Delayed read must not resurrect logged-out profile');
   assert.equal(await page.getByTestId('profile').count(),0);
+  stage='second login and locale';
   // Same owner logs in again; peer must reread authoritative session on the event.
   await page.locator('[name=contact]').fill(fixture.email);
   await page.locator('[name=password]').fill(fixture.password);
@@ -70,6 +74,7 @@ try {
   assert.equal(await peer.evaluate(()=>window.__cspViolations.length),0,'RTL production hydration CSP');
   assert.equal(faults.length,0,'Production client runtime');
   await page.getByRole('button',{name:'خروج',exact:true}).click();await page.locator('form').waitFor();await peer.locator('form').waitFor();
+  stage='storage fallback';
   // Storage-event fallback is tested in an independent browser context without BroadcastChannel.
   const fallback=await browser.newContext({baseURL:'https://localhost:7443',ignoreHTTPSErrors:false});
   try {
@@ -85,6 +90,6 @@ try {
   } finally {await fallback.close();}
   console.log('B1 CHROMIUM PASS: real private login; HttpOnly cookie; public SSR isolation; production nonce CSP hydration; fa/en, RTL mobile and locale persistence; BroadcastChannel + storage fallback logout; delayed read discarded; second login rereads session. No B2/B3 claim.');
 } catch {
-  console.error('B1 CHROMIUM FAIL: a browser assertion did not pass. Credential-bearing artifacts suppressed.');
+  console.error(`B1 CHROMIUM FAIL at ${stage}. Credential-bearing artifacts suppressed.`);
   process.exitCode=1;
 } finally {release?.();await context.close();await browser.close();}

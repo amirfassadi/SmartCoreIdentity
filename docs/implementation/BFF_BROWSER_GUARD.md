@@ -1,7 +1,7 @@
 # B1 task 5 — opaque-session and CSRF guard
 
-Status: implemented for Development/Testing; full account handlers and browser
-login remain disconnected. This is not registration/login/logout/reset browser E2E.
+Status: implemented for Development/Testing; the separate opt-in account handlers and browser
+login are tracked in [BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md). The zero-dispatch guard suite keeps them disabled. This is not registration/login/logout/reset browser E2E.
 
 The explicit [BffOpaque handler](../../src/SmartCore.Identity.Bff.Host/OpaqueSessionHandler.cs)
 resolves the MAC of the opaque cookie against BffStore and places only the BFF row

@@ -1,3 +1,8 @@
+Current continuation: private account handlers and fa/en client are implemented in
+[BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md); fresh CI is required before
+claiming their real account/browser acceptance. Historical infrastructure scope below
+remains tied to its recorded revisions.
+
 # B1 browser infrastructure
 
 Status: tasks 2 and 3 started after the 0.1.1 browser contract review. No production
