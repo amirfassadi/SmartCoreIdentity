@@ -9,7 +9,7 @@ using SmartCore.Identity;
 
 namespace SmartCore.Identity.Bff.Host;
 
-public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery antiforgery)
+public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery antiforgery, BrowserAccounts accounts, IConfiguration settings)
 {
     private static readonly Dictionary<string, string> Routes = new(StringComparer.Ordinal) {
         ["/bff/csrf"] = "GET", ["/bff/login"] = "POST", ["/bff/me"] = "POST",
@@ -58,6 +58,10 @@ public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery a
             try {
                 using var json = JsonDocument.Parse(body.ToArray(), new JsonDocumentOptions {MaxDepth = 16});
                 if (!ValidBody(path, json.RootElement)) { await Error(context, 400, "VALIDATION_FAILED"); return; }
+                if (path == "/bff/login") context.Items["browser-login"] = new LoginRequest(
+                    json.RootElement.TryGetProperty("email", out var e) ? e.GetString()!.ToLowerInvariant() : null,
+                    json.RootElement.TryGetProperty("mobile", out var m) ? NormalizeMobile(m.GetString()!) : null,
+                    json.RootElement.GetProperty("password").GetString()!);
             } catch (JsonException) { await Error(context, 400, "VALIDATION_FAILED"); return; }
             if (path != "/bff/login" && context.User.Identity?.IsAuthenticated != true) {
                 ClearCookies(context); await Error(context, 401, "REAUTHENTICATION_REQUIRED"); return;
@@ -65,8 +69,9 @@ public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery a
             if (path == "/bff/login" && context.User.Identity?.IsAuthenticated == true) {
                 await Error(context, 409, "SESSION_ALREADY_ACTIVE"); return;
             }
-            // Task 6 handlers intentionally remain disconnected: no Identity call or login cookie.
-            await Error(context, 503, "BFF_UNAVAILABLE");
+            // Explicit opt-in for private account acceptance; public deployment remains rejected at startup.
+            if (!settings.GetValue("Bff:AccountsEnabled", false)) { await Error(context, 503, "BFF_UNAVAILABLE"); return; }
+            await accounts.Handle(context, path);
         } catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
         catch (Exception) { if (!context.Response.HasStarted) await Error(context, 503, "BFF_UNAVAILABLE"); else context.Abort(); }
     }
@@ -95,20 +100,25 @@ public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery a
         var mobile = body.GetProperty("mobile");
         if (mobile.ValueKind != JsonValueKind.String || mobile.GetString() is not {Length: >= 7 and <= 32} number
             || !Regex.IsMatch(number, @"\A[+0-9۰-۹٠-٩ ()-]+\z")) return false;
+        var canonical = NormalizeMobile(number);
+        return Regex.IsMatch(canonical, @"\A\+989[0-9]{9}\z");
+    }
+    private static string NormalizeMobile(string number)
+    {
         var canonical = string.Concat(number.Select(character => character is >= '۰' and <= '۹' ? (char)('0' + character - '۰') : character is >= '٠' and <= '٩' ? (char)('0' + character - '٠') : character).Where(character => character is not (' ' or '(' or ')' or '-')));
         if (canonical.StartsWith("0098", StringComparison.Ordinal)) canonical = "+98" + canonical[4..];
         else if (canonical.StartsWith("09", StringComparison.Ordinal)) canonical = "+98" + canonical[1..];
-        return Regex.IsMatch(canonical, @"\A\+989[0-9]{9}\z");
+        return canonical;
     }
-    private static void ClearCookies(HttpContext context)
+    internal static void ClearCookies(HttpContext context)
     {
         foreach (var name in new[] {OpaqueSessionHandler.CookieName, "__Host-smartcore-antiforgery"})
             context.Response.Cookies.Append(name, "", new CookieOptions {Secure = true, HttpOnly = true, SameSite = SameSiteMode.Lax, Path = "/", MaxAge = TimeSpan.Zero, Expires = DateTimeOffset.UnixEpoch});
     }
-    private static async Task Error(HttpContext context, int status, string code)
+    internal static async Task Error(HttpContext context, int status, string code, int retry = 60)
     {
         context.Response.StatusCode = status;
-        if (status == 503) { context.Response.Headers.RetryAfter = "60"; await context.Response.WriteAsJsonAsync(new {code, retryAfterSeconds = 60}, context.RequestAborted); }
+        if (status is 503 or 429) { context.Response.Headers.RetryAfter = retry.ToString(System.Globalization.CultureInfo.InvariantCulture); await context.Response.WriteAsJsonAsync(new {code, retryAfterSeconds = retry}, context.RequestAborted); }
         else await context.Response.WriteAsJsonAsync(new {code}, context.RequestAborted);
     }
 }

@@ -1,8 +1,9 @@
 # Stage B — bilingual browser account skeleton
 
 Status: agreed architecture direction and implementation slice specification.
-The Next shell and private .NET infrastructure scaffold now exist; generated
-client, account handlers and complete browser E2E remain open. See BFF_BROWSER_HOST.md.
+Private B1 handlers, generated browser types and fa/en forms now exist. Fresh
+HTTP/Chromium acceptance is tracked in BFF_BROWSER_ACCOUNTS.md; B2/B3 remain open.
+The original ordered design below remains the acceptance specification.
 Framework: Next.js App Router, React, TypeScript, Tailwind CSS. Initial UI locales:
 fa and en. Initial market remains Iran; adding a language does not authorize sending
 SMS to another country. Scope: account UI and a dashboard shell. Business domains,
@@ -278,7 +279,8 @@ not a requirement to ask for another permission. Contract revision 0.1.1 has bee
 task 3 has core and shared-key wiring, with seeded account integration still open.
 Task 4 development HTTPS ingress is now implemented; see HTTPS_INGRESS.md.
 Task 5 guards are now implemented; fresh CI evidence is tracked in BFF_BROWSER_GUARD.md.
-Tasks 6–9 and actual account browser acceptance remain open.
+Tasks 6–9 have private implementations and an actual account/browser acceptance
+suite; fresh CI evidence is tracked in BFF_BROWSER_ACCOUNTS.md. B2/B3 remain open.
 
 ## Browser CI acceptance
 
