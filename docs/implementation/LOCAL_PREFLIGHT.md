@@ -1,6 +1,6 @@
 # Local preflight before VPS work
 
-`bash preflight-local.sh` runs the **implemented private B1** checks without VPS
+`bash preflight-local.sh` runs the **implemented private B1/B2/B3** checks without VPS
 access. It uses current tracked/non-ignored untracked source, copied to a private
 temporary directory. Builds, npm installs, Python packages, caches, browser binaries,
 logs and disposable backup files live there; cleanup removes them and its owned
@@ -14,13 +14,13 @@ package/image/browser downloads still need connectivity. `SMARTCORE_DOTNET`,
 `SMARTCORE_PYTHON` and `SMARTCORE_GITLEAKS` can select explicit executable paths.
 
 ```sh
-bash preflight-local.sh                 # full isolated local B1 verification
+bash preflight-local.sh                 # full isolated local B1/B2/B3 verification
 bash preflight-local.sh --static-only   # intentionally incomplete; exits 2
 BASE_URL=https://localhost:7443 LOCAL_CA_FILE=/absolute/path/local.crt \
   bash preflight-local.sh --probe-only  # strict local TLS probe only; exits 2
 ```
 
-Exit **0**: requested full local B1 checks passed. Exit **1**: failure. Exit **2**:
+Exit **0**: requested full local B1/B2/B3 checks passed. Exit **1**: failure. Exit **2**:
 incomplete due to any skip, including an intentionally limited mode. A zero fail
 count does not turn skipped tests into evidence. No exit code authorizes production.
 

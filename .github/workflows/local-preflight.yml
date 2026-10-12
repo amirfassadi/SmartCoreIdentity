@@ -42,5 +42,5 @@ jobs:
       - run: npm ci --ignore-scripts --prefix web/identity/e2e
       - name: Provision Chromium OS prerequisites in isolated CI runner
         run: npx --prefix web/identity/e2e playwright install-deps chromium
-      - name: Full local B1 runner (own DB and temporary source/builds)
+      - name: Full local browser runner (own DB and temporary source/builds)
         run: bash preflight-local.sh

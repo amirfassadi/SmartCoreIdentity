@@ -75,6 +75,9 @@ def browser_boundary(root):
             for item in value:
                 walk(item)
     walk(contract)
+    for extension in sorted((root / 'contracts').glob('bff-browser*.yaml')):
+        if extension.name != 'bff-browser.openapi.yaml':
+            walk(yaml.safe_load(extension.read_text()))
     # Property declarations/accesses, not explanatory prose or trusted Identity DTOs.
     for path in (root / 'web/identity/src').rglob('*'):
         if path.suffix not in ('.ts', '.tsx'):
