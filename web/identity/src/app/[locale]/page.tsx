@@ -1,9 +1,11 @@
 'use client';
 import {useLocale, useTranslations} from 'next-intl';
+import RegistrationPanel from './RegistrationPanel';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {bootstrap, BrowserError, invalidateCsrf, post, type Person} from '@/lib/bff/client';
 
 const enabled = process.env.NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED === 'true';
+const registrationEnabled = process.env.NEXT_PUBLIC_BFF_REGISTRATION_ENABLED === 'true';
 const events = ['login', 'logout', 'session-lost'] as const;
 type SessionEvent = typeof events[number];
 export default function AccountShell() {
@@ -11,6 +13,7 @@ export default function AccountShell() {
   const a = useTranslations('Account');
   const locale = useLocale();
   const [person, setPerson] = useState<Person>();
+  const [register, setRegister] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [retryUntil, setRetryUntil] = useState(0);
@@ -114,11 +117,12 @@ export default function AccountShell() {
             <button className="rounded-lg border border-slate-300 px-4 py-2" onClick={() => void refresh(true)} disabled={busy || remaining > 0}>{a('continue')}</button>
             <button className="rounded-lg bg-teal-800 px-4 py-2 text-white" onClick={() => void logout()} disabled={busy || remaining > 0}>{a('logout')}</button>
           </div>
-        </div> : <form onSubmit={login} className="grid gap-4">
+        </div> : register && registrationEnabled ? <RegistrationPanel onSignIn={() => setRegister(false)} /> : <form onSubmit={login} className="grid gap-4">
           <h2 className="text-xl font-semibold">{a('login')}</h2>
           <label className="grid gap-2">{a('contact')}<input name="contact" type="text" autoComplete="username" required maxLength={254} dir="ltr" className="rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="grid gap-2">{a('password')}<input name="password" type="password" autoComplete="current-password" required maxLength={128} className="rounded-lg border border-slate-300 px-3 py-2" /></label>
           <button className="rounded-lg bg-teal-800 px-4 py-3 font-semibold text-white" disabled={busy || remaining > 0}>{busy ? a('waiting') : a('login')}</button>
+          {registrationEnabled && <button type="button" onClick={() => setRegister(true)} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('register')}</button>}
         </form>}
         {error && <p role="alert" className="mt-4 text-sm text-red-800">{a(`errors.${knownErrors.includes(error) ? error : 'UNKNOWN'}`)}</p>}
         {remaining > 0 && <p role="status" className="mt-3 text-sm">{a('retry', {seconds: remaining})}</p>}

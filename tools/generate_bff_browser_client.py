@@ -5,7 +5,9 @@ import sys
 import yaml
 root=Path(__file__).resolve().parents[1]
 source=root/'contracts/bff-browser.openapi.yaml'
-contract=yaml.safe_load(source.read_text())
+from bff_browser_contract import load_contract
+contract=load_contract(registration=True)
+extension=root/'contracts/bff-browser-registration.openapi.yaml'
 def kind(schema):
     if '$ref' in schema:return schema['$ref'].rsplit('/',1)[-1]
     if 'oneOf' in schema:
@@ -24,7 +26,7 @@ def kind(schema):
         fields=schema.get('properties',{});required=schema.get('required',[])
         return '{'+''.join(f' {name}{"" if name in required else "?"}: {kind(field)};' for name,field in fields.items())+' }'
     return {'string':'string','integer':'number','number':'number','boolean':'boolean','null':'null','never':'never'}.get(value,'unknown')
-lines=['// Generated from contracts/bff-browser.openapi.yaml; do not edit.', '// SHA256 '+hashlib.sha256(source.read_bytes()).hexdigest()]
+lines=['// Generated from contracts/bff-browser.openapi.yaml; do not edit.', '// SHA256 '+hashlib.sha256(source.read_bytes()+extension.read_bytes()).hexdigest()]
 for name,schema in contract['components']['schemas'].items():lines.append(f'export type {name} = {kind(schema)};')
 lines.append('export type BrowserPostPath = '+ ' | '.join(repr(path) for path,definition in contract['paths'].items() if 'post' in definition)+';')
 requests=[];responses=[]

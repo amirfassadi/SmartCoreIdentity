@@ -5,14 +5,14 @@ export class BrowserError extends Error {
 }
 let csrf: string | undefined;
 export function invalidateCsrf() {csrf = undefined;}
-async function response<T>(request: Promise<Response>): Promise<T> {
+async function response<T>(request: Promise<Response>, maximumRetry = 60): Promise<T> {
   let result: Response;
   try {result = await request;} catch {throw new BrowserError('BFF_UNAVAILABLE');}
   const data = result.status === 204 ? undefined : await result.json().catch(() => undefined);
   if (!result.ok) {
     const seconds = Number(result.headers.get('Retry-After'));
     throw new BrowserError(typeof data?.code === 'string' ? data.code : 'BFF_UNAVAILABLE',
-      Number.isInteger(seconds) && seconds >= 1 && seconds <= 60 && seconds === data?.retryAfterSeconds ? seconds : 0);
+      Number.isInteger(seconds) && seconds >= 1 && seconds <= maximumRetry && seconds === data?.retryAfterSeconds ? seconds : 0);
   }
   return data as T;
 }
@@ -46,6 +46,6 @@ export async function post<P extends BrowserPostPath>(path: P, body: BrowserRequ
     }
     return result;
   }, signal);
-  return response<BrowserResponses[P]>(Promise.resolve(reply));
+  return response<BrowserResponses[P]>(Promise.resolve(reply), path.startsWith('/bff/register') ? 3600 : 60);
 }
 // No retries of credentials or state-changing commands. New user actions honor Retry-After.

@@ -97,7 +97,7 @@ app.Use(async(context,next)=>
     context.Response.Headers.CacheControl="no-store";
     context.Response.Headers["X-Content-Type-Options"]="nosniff";
     try { await next(); }
-    catch(ApiError error) { await WriteError(context,error.Status,error.Code,error.NextAction); }
+    catch(ApiError error) { await WriteError(context,error.Status,error.Code,error.NextAction,error.RetryAfterSeconds); }
     catch(Exception error) when(error is JsonException or BadHttpRequestException)
     { await WriteError(context,400,"VALIDATION_FAILED"); }
     catch(NpgsqlException)
@@ -270,7 +270,7 @@ if(builder.Environment.IsDevelopment() && builder.Configuration["Identity:DevInb
 }
 app.Run();
 
-static Task WriteError(HttpContext context,int status,string code,string? nextAction=null)
+static Task WriteError(HttpContext context,int status,string code,string? nextAction=null,int? retryAfterSeconds=null)
 {
     context.Response.StatusCode=status;
     var key=context.RequestServices.GetRequiredService<IConfiguration>()["Identity:RefreshReceiptKey"];
@@ -282,6 +282,8 @@ static Task WriteError(HttpContext context,int status,string code,string? nextAc
         context.Response.Headers.RetryAfter=retry.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return context.Response.WriteAsJsonAsync(RefreshRejection.Create(key,status,code,reference,retry));
     }
+    if(status==429 && context.Request.Path.StartsWithSegments("/auth/register"))
+        context.Response.Headers.RetryAfter=(retryAfterSeconds ?? 60).ToString(System.Globalization.CultureInfo.InvariantCulture);
     return context.Response.WriteAsJsonAsync(new {error=new {code,message="Request could not be completed.",nextAction},traceId=context.TraceIdentifier});
 }
 

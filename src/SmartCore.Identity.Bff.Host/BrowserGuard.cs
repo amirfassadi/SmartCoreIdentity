@@ -9,7 +9,7 @@ using SmartCore.Identity;
 
 namespace SmartCore.Identity.Bff.Host;
 
-public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery antiforgery, BrowserAccounts accounts, IConfiguration settings)
+public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery antiforgery, BrowserAccounts accounts, BrowserRegistration registration, IConfiguration settings)
 {
     private static readonly Dictionary<string, string> Routes = new(StringComparer.Ordinal) {
         ["/bff/csrf"] = "GET", ["/bff/login"] = "POST", ["/bff/me"] = "POST",
@@ -18,7 +18,9 @@ public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery a
     public async Task Handle(HttpContext context)
     {
         var path = context.Request.Path.Value ?? "";
-        if (!Routes.TryGetValue(path, out var method)) { await Error(context, 404, "NOT_FOUND"); return; }
+        var isRegistration = path is "/bff/register" or "/bff/register/verify" or "/bff/register/resend" or "/bff/register/setup" or "/bff/register/complete";
+        var method = isRegistration && settings.GetValue("Bff:RegistrationEnabled", false) ? "POST" : Routes.GetValueOrDefault(path);
+        if (method is null) { await Error(context, 404, "NOT_FOUND"); return; }
         if (context.Request.Method != method) { context.Response.Headers.Allow = method; await Error(context, 405, "METHOD_NOT_ALLOWED"); return; }
         try {
             if (method == "GET") {
@@ -57,21 +59,23 @@ public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery a
             catch (AntiforgeryValidationException) { await Error(context, 403, "CSRF_REJECTED"); return; }
             try {
                 using var json = JsonDocument.Parse(body.ToArray(), new JsonDocumentOptions {MaxDepth = 16});
-                if (!ValidBody(path, json.RootElement)) { await Error(context, 400, "VALIDATION_FAILED"); return; }
+                if (!(isRegistration ? ValidRegistration(path, json.RootElement) : ValidBody(path, json.RootElement))) { await Error(context, 400, "VALIDATION_FAILED"); return; }
+                if (isRegistration) context.Items["browser-registration"] = json.RootElement.Clone();
                 if (path == "/bff/login") context.Items["browser-login"] = new LoginRequest(
                     json.RootElement.TryGetProperty("email", out var e) ? e.GetString()!.ToLowerInvariant() : null,
                     json.RootElement.TryGetProperty("mobile", out var m) ? NormalizeMobile(m.GetString()!) : null,
                     json.RootElement.GetProperty("password").GetString()!);
             } catch (JsonException) { await Error(context, 400, "VALIDATION_FAILED"); return; }
-            if (path != "/bff/login" && context.User.Identity?.IsAuthenticated != true) {
+            if (!isRegistration && path != "/bff/login" && context.User.Identity?.IsAuthenticated != true) {
                 ClearCookies(context); await Error(context, 401, "REAUTHENTICATION_REQUIRED"); return;
             }
-            if (path == "/bff/login" && context.User.Identity?.IsAuthenticated == true) {
+            if ((isRegistration || path == "/bff/login") && context.User.Identity?.IsAuthenticated == true) {
                 await Error(context, 409, "SESSION_ALREADY_ACTIVE"); return;
             }
             // Explicit opt-in for private account acceptance; public deployment remains rejected at startup.
             if (!settings.GetValue("Bff:AccountsEnabled", false)) { await Error(context, 503, "BFF_UNAVAILABLE"); return; }
-            await accounts.Handle(context, path);
+            if (isRegistration) await registration.Handle(context, path, (JsonElement)context.Items["browser-registration"]!);
+            else await accounts.Handle(context, path);
         } catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
         catch (Exception) { if (!context.Response.HasStarted) await Error(context, 503, "BFF_UNAVAILABLE"); else context.Abort(); }
     }
@@ -103,7 +107,30 @@ public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery a
         var canonical = NormalizeMobile(number);
         return Regex.IsMatch(canonical, @"\A\+989[0-9]{9}\z");
     }
-    private static string NormalizeMobile(string number)
+    private static bool ValidRegistration(string path, JsonElement body)
+    {
+        if (body.ValueKind != JsonValueKind.Object) return false;
+        var names = body.EnumerateObject().Select(p => p.Name).ToArray();
+        if (names.Distinct(StringComparer.Ordinal).Count() != names.Length
+            || !body.TryGetProperty("flowId", out var flow) || flow.ValueKind != JsonValueKind.String || !Input.Secret(flow.GetString())) return false;
+        if (path == "/bff/register") {
+            if (names.Length != 4 || names.Any(n => n is not ("flowId" or "email" or "mobile" or "password" or "displayName"))
+                || !body.TryGetProperty("displayName", out var name) || name.ValueKind != JsonValueKind.String
+                || name.GetString() is not {Length: >=1 and <=100} display || string.IsNullOrWhiteSpace(display)
+                || !body.TryGetProperty("password", out var password) || password.ValueKind != JsonValueKind.String
+                || password.GetString() is not {Length: >=15 and <=128}) return false;
+            // Reuse the exact B1 contact policy after removing B2-only fields.
+            using var contact = JsonDocument.Parse(JsonSerializer.Serialize(body.EnumerateObject().Where(p => p.Name is "email" or "mobile" or "password").ToDictionary(p => p.Name,p => p.Value)));
+            return ValidBody("/bff/login",contact.RootElement);
+        }
+        if (path == "/bff/register/resend") return names.Length == 1;
+        if (!body.TryGetProperty("code", out var code) || code.ValueKind != JsonValueKind.String
+            || !Regex.IsMatch(code.GetString()!, @"\A[0-9]{6}\z")) return false;
+        if (path != "/bff/register/complete") return names.Length == 2;
+        return names.Length == 3 && body.TryGetProperty("newPassword", out var next) && next.ValueKind == JsonValueKind.String
+            && next.GetString() is {Length: >=15 and <=128};
+    }
+    internal static string NormalizeMobile(string number)
     {
         var canonical = string.Concat(number.Select(character => character is >= '۰' and <= '۹' ? (char)('0' + character - '۰') : character is >= '٠' and <= '٩' ? (char)('0' + character - '٠') : character).Where(character => character is not (' ' or '(' or ')' or '-')));
         if (canonical.StartsWith("0098", StringComparison.Ordinal)) canonical = "+98" + canonical[4..];

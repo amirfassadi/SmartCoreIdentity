@@ -83,3 +83,11 @@ Seven focused helper/CLI tests pass. Native application behavior remains unchang
 Local execution where SDK/Docker are unavailable returned INCOMPLETE/2 rather than
 full PASS, even when all available static/frontend controls succeeded. These results
 do not close B2/B3, production delivery, canonical governance or VPS restore gates.
+
+## Additive B2 checks
+
+The current runner also validates the additive B2 contract and runs the isolated
+real Identity/two-host/Chromium registration journey. Both browser flags are enabled
+only inside the throwaway source copy. The historical 37-check B1 result below is
+not evidence for these additional B2 checks; their exact CI result is recorded
+after successful execution. See [B2 boundaries](BFF_BROWSER_REGISTRATION.md).

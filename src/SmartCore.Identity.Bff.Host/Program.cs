@@ -46,6 +46,8 @@ AppContext.SetSwitch("Microsoft.AspNetCore.Authentication.SuppressAutoDefaultSch
 builder.Services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, OpaqueSessionHandler>(OpaqueSessionHandler.SchemeName, _ => { });
 builder.Services.AddSingleton<IdentityAccountHttp>();
 builder.Services.AddScoped<BrowserAccounts>();
+builder.Services.AddSingleton<IdentityRegistrationHttp>();
+builder.Services.AddScoped<BrowserRegistration>();
 builder.Services.AddScoped<BrowserGuard>();
 var app = builder.Build();
 if (await app.Services.GetRequiredService<IAuthenticationSchemeProvider>().GetDefaultAuthenticateSchemeAsync() is not null)

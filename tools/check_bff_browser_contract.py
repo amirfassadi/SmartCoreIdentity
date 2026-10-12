@@ -111,7 +111,7 @@ def validate_response(doc, path, method, status, body, headers):
         assert len(parsed) == 1, 'Use one cookie per header field'
         name, item = next(iter(parsed.items()))
         assert name not in cookies, 'Duplicate cookie actions'
-        assert name in ('__Host-smartcore-session', '__Host-smartcore-antiforgery')
+        assert name in {scheme['name'] for scheme in doc['components']['securitySchemes'].values() if scheme.get('in') == 'cookie'}
         assert item['secure'] and item['httponly'] and item['path'] == '/'
         assert item['samesite'].lower() == 'lax' and not item['domain']
         cookies[name] = item
@@ -125,6 +125,9 @@ def validate_response(doc, path, method, status, body, headers):
             assert cookies[name].value == '' and cookies[name]['max-age'] == '0'
         else:
             assert cookies[name].value and cookies[name]['max-age'] != '0'
+            if name == '__Host-smartcore-registration':
+                assert re.fullmatch(r'[A-Za-z0-9_-]{1,2048}', cookies[name].value)
+                assert 0 < int(cookies[name]['max-age']) <= 660
             if name == '__Host-smartcore-session':
                 assert re.fullmatch(r'[A-Za-z0-9_-]{43}', cookies[name].value)
                 assert 0 < int(cookies[name]['max-age']) <= 86400

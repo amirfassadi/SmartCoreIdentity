@@ -23,7 +23,7 @@ public sealed class RegistrationService(Database db, Secrets secrets, TimeProvid
         // Serialize contact admission across API instances; never look up Person before proof.
         await connection.Execute("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",("key","admission:" + contact));
         var count = await connection.One("SELECT count(*) AS n FROM verification_sessions WHERE contact=@contact AND created_at>@since",("contact",contact),("since",now.AddHours(-1)));
-        Input.Require(count!.Get<long>("n") < 5,"RATE_LIMITED",429);
+        if (count!.Get<long>("n") >= 5) throw new ApiError(429,"RATE_LIMITED") {RetryAfterSeconds=3600};
         var id = Secrets.Token();
         var code = Secrets.Code();
         var expiry = now.AddMinutes(10);

@@ -21,7 +21,9 @@ import yaml
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'tools'))
 from check_bff_browser_contract import validate_response
-contract = yaml.safe_load((root / 'contracts/bff-browser.openapi.yaml').read_text())
+from bff_browser_contract import load_contract
+b2 = os.environ.get('SMARTCORE_B2') == 'yes'
+contract = load_contract(registration=b2)
 dotnet = os.environ.get('SMARTCORE_DOTNET', 'dotnet')
 assembly = str(root / 'src/SmartCore.Identity.Bff.Host/bin/Release/net10.0/SmartCore.Identity.Bff.Host.dll')
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -38,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         'ConnectionStrings__Bff':os.environ.get('ConnectionStrings__Bff', 'Host=127.0.0.1;Database=unused_config_only'),
         'Bff__ExternalOrigin':'https://localhost:7443', 'Bff__IdentityOrigin':'http://127.0.0.1:5157/', 'Bff__ClientKey':secrets.token_urlsafe(32), 'Bff__ReceiptKey':secrets.token_urlsafe(32),
         'Bff__SessionMacKey':base64.b64encode(secrets.token_bytes(32)).decode(), 'Bff__SessionMaterialKey':base64.b64encode(secrets.token_bytes(32)).decode(),
-        'Bff__AccountsEnabled':'true', 'Bff__DataProtection__KeyRing':str(directory/'ring'), 'Bff__DataProtection__CertificatePath':str(directory/'wrap.pfx'), 'Bff__DataProtection__CertificatePassword':password}
+        'Bff__AccountsEnabled':'true', 'Bff__RegistrationEnabled':'true' if b2 else 'false', 'Bff__DataProtection__KeyRing':str(directory/'ring'), 'Bff__DataProtection__CertificatePath':str(directory/'wrap.pfx'), 'Bff__DataProtection__CertificatePassword':password}
     assert run(env, '--validate-config').returncode == 0
     for overrides in [{'ASPNETCORE_ENVIRONMENT':'Production'}, {'ASPNETCORE_URLS':'http://0.0.0.0:5171'}, {'Bff__DataProtection__CertificatePath':str(directory/'missing.pfx')}, {'Bff__ReceiptKey':env['Bff__ClientKey']}, {'Bff__ExternalOrigin':'http://localhost:7443'}]:
         assert run({**env, **overrides}, '--validate-config').returncode != 0
@@ -62,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         'Identity__MaterialKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Identity__AccessSigningKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Identity__RefreshReceiptKey':env['Bff__ReceiptKey'], 'Identity__BffClientKey':env['Bff__ClientKey'],
-        'Identity__AuthenticationEnabled':'true','Identity__WorkerEnabled':'true','Identity__DevInboxKey':secrets.token_urlsafe(32)}
+        'Identity__AuthenticationEnabled':'true','Identity__WorkerEnabled':'false' if b2 else 'true','Identity__DevInboxKey':secrets.token_urlsafe(32)}
     identity_assembly=str(root/'src/SmartCore.Identity.Api/bin/Release/net10.0/SmartCore.Identity.Api.dll')
     subprocess.run([dotnet,identity_assembly,'--migrate'],env=identity_env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     processes = []
@@ -86,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 except OSError: pass
                 time.sleep(.1)
             else: raise AssertionError('BFF host readiness timed out')
-            for path,method,status in [('/bff/register','POST',404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503),('/bff/login','POST',415)]:
+            for path,method,status in [('/bff/register','POST',415 if b2 else 404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503),('/bff/login','POST',415)]:
                 request = urllib.request.Request(f'http://127.0.0.1:{port}{path}',method=method)
                 try: response = opener.open(request,timeout=5)
                 except urllib.error.HTTPError as error: response = error
@@ -102,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
             try:
                 tls.open('https://localhost:7443/bff/register',timeout=1)
             except urllib.error.HTTPError as error:
-                if error.code == 404: break
+                if error.code == (405 if b2 else 404): break
             except OSError: pass
             time.sleep(.1)
         else: raise AssertionError('HTTPS ingress readiness timed out')
@@ -116,7 +118,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 except OSError:pass
                 time.sleep(.1)
             else:raise AssertionError('Next readiness timed out')
-        checks=runpy.run_path(str(root/'scripts/bff-account-checks.py'))['account_checks']
+        checks=runpy.run_path(str(root/('scripts/bff-registration-checks.py' if b2 else 'scripts/bff-account-checks.py')))['registration_checks' if b2 else 'account_checks']
         checks(root,tls,opener,env,identity_env,dotnet,validate_response,contract,identity_process)
     finally:
         for process in processes:
