@@ -15,6 +15,14 @@ helper = importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
 
 
 class LocalPreflightChecks(unittest.TestCase):
+    def test_failure_diagnostics_emit_only_enumerated_markers(self):
+        import runpy
+        summarize=runpy.run_path(str(ROOT/'tools/preflight_failure.py'))['summarize']
+        capture=io.StringIO()
+        with contextlib.redirect_stdout(capture):
+            summarize("password=private-secret-value\nSAFE-TEST-FAIL phase=Registration type=ApiError\nSAFE-TEST-FAIL phase=private-secret-value type=Exception\nSAFE-TEST-FAIL phase=Enrollment type=private-secret-value\nTraceback: private-secret-value")
+        self.assertEqual(capture.getvalue(), '[DIAGNOSTIC] test phase=Registration; failure category=ApiError\n')
+
     def test_every_cookie_attribute_and_field_is_checked(self):
         good = '__Host-smartcore-antiforgery=fixture; Secure; HttpOnly; SameSite=Lax; Path=/'
         helper.cookie_policy([good])

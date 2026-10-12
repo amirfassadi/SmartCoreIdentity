@@ -18,7 +18,7 @@
     "welcome": "Welcome, {name}",
     "continue": "Continue",
     "retry": "Try again in {seconds} seconds.",
-    "recoveryPending": "Recovery setup will be available soon.",
+    "recoveryPending": "Set up a recovery code to protect access to your account.",
     "errors": {
       "UNAUTHORIZED": "Check your contact and password.",
       "REAUTHENTICATION_REQUIRED": "Please sign in again.",
@@ -32,7 +32,9 @@
       "AUTHENTICATION_BUSY": "Sign-in is busy. Please try later.",
       "UNKNOWN": "The request could not be completed."
     },
-    "register": "Create an account"
+    "register": "Create an account",
+    "reset": "Forgot password?",
+    "mutationAccepted": "Your request was accepted. Processing may still be underway; sign in with your new password when ready."
   },
   "Registration": {
     "title": "Create an account",
@@ -72,6 +74,76 @@
       "ORIGIN_REJECTED": "This request could not be verified.",
       "RATE_LIMITED": "Please wait before trying again.",
       "BFF_UNAVAILABLE": "The service is temporarily unavailable. You can retry the same request later.",
+      "UNKNOWN": "The request could not be completed."
+    }
+  },
+  "Recovery": {
+    "enroll": "Recovery code",
+    "change": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password (15–128 characters)",
+    "consent": "I understand this replaces any previous recovery code. I will save the new code securely; losing it may prevent account recovery.",
+    "issue": "Issue recovery code",
+    "submitChange": "Request password change",
+    "oneTime": "Your recovery code — shown once",
+    "keepCode": "Save this code somewhere secure outside this page. It will disappear when you leave or hide this tab.",
+    "saved": "I saved this code",
+    "replace": "Issue a replacement code",
+    "waiting": "Please wait…",
+    "retry": "Try again in {seconds} seconds.",
+    "receipts": {
+      "Issued": "Your recovery code was issued.",
+      "AlreadyIssued": "This code was already issued and cannot be shown again. If you did not save it, explicitly issue a replacement.",
+      "Saved": "The code is hidden. Keep your saved copy secure.",
+      "Hidden": "The code was hidden when you left this tab. It cannot be shown again; issue a replacement if you did not save it."
+    },
+    "errors": {
+      "VALIDATION_FAILED": "Check the entered information.",
+      "CREDENTIALS_REJECTED": "The current password could not be verified.",
+      "REAUTHENTICATION_REQUIRED": "Please sign in again.",
+      "RESET_PROOF_REJECTED": "The recovery information could not be verified. Repeated failures can pause recovery for up to one hour.",
+      "RESET_FLOW_EXPIRED": "This recovery attempt is no longer available in this tab. Start again.",
+      "CSRF_REJECTED": "Refresh this page and try again.",
+      "ORIGIN_REJECTED": "This request could not be verified.",
+      "IDEMPOTENCY_CONFLICT": "This request differs from the earlier attempt. Return to sign in and check your account.",
+      "SESSION_ALREADY_ACTIVE": "You are signed in. Sign out before starting recovery.",
+      "RECOVERY_UNAVAILABLE": "Recovery enrollment is temporarily unavailable.",
+      "RATE_LIMITED": "Please wait before trying again.",
+      "BFF_BUSY": "Your account is busy. Please wait.",
+      "BFF_UNAVAILABLE": "The service is temporarily unavailable. The result may be unknown; check your account before starting a new request.",
+      "UNKNOWN": "The request could not be completed."
+    }
+  },
+  "Reset": {
+    "title": "Recover your account",
+    "contact": "Email or Iranian mobile number",
+    "requirements": "You need access to your contact and a recovery code you saved earlier.",
+    "uniform": "If recovery is available, a code will be sent to your contact. Enter that code and your saved recovery code.",
+    "code": "Verification code",
+    "recoveryCode": "Saved recovery code",
+    "newPassword": "New password (15–128 characters)",
+    "start": "Start recovery",
+    "complete": "Request password reset",
+    "accepted": "Your request was accepted. Processing may still be underway. Go to sign in and use your new password; then set up a replacement recovery code.",
+    "signIn": "Go to sign in",
+    "restart": "Start again",
+    "expired": "This verification expired. Start again.",
+    "waiting": "Please wait…",
+    "retry": "Try again in {seconds} seconds.",
+    "errors": {
+      "VALIDATION_FAILED": "Check the entered information.",
+      "CREDENTIALS_REJECTED": "The current password could not be verified.",
+      "REAUTHENTICATION_REQUIRED": "Please sign in again.",
+      "RESET_PROOF_REJECTED": "The recovery information could not be verified. Repeated failures can pause recovery for up to one hour.",
+      "RESET_FLOW_EXPIRED": "This recovery attempt is no longer available in this tab. Start again.",
+      "CSRF_REJECTED": "Refresh this page and try again.",
+      "ORIGIN_REJECTED": "This request could not be verified.",
+      "IDEMPOTENCY_CONFLICT": "This request differs from the earlier attempt. Return to sign in and check your account.",
+      "SESSION_ALREADY_ACTIVE": "You are signed in. Sign out before starting recovery.",
+      "RECOVERY_UNAVAILABLE": "Recovery enrollment is temporarily unavailable.",
+      "RATE_LIMITED": "Please wait before trying again.",
+      "BFF_BUSY": "Your account is busy. Please wait.",
+      "BFF_UNAVAILABLE": "The service is temporarily unavailable. The result may be unknown; check your account before starting a new request.",
       "UNKNOWN": "The request could not be completed."
     }
   }

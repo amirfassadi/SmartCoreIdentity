@@ -1,5 +1,5 @@
 // Generated from contracts/bff-browser.openapi.yaml; do not edit.
-// SHA256 cb63fabe083282d90510b34955a5d43857ad5bb76938321af3c730d2f303fee7
+// SHA256 a83410fba8abafd05c5c9c447da8862440ea963a04b1f87c02e22836ac4f472c
 export type EmptyRequest = { };
 export type LoginRequest = ({ email: string; mobile?: never; password: string; } | { email?: never; mobile: string; password: string; });
 export type CsrfResponse = { requestToken: string; };
@@ -30,6 +30,15 @@ export type RegistrationCompleted = { status: "PendingCredential" | "Ready"; cre
 export type RegistrationValidationError = { code: "VALIDATION_FAILED" | "VERIFICATION_FAILED" | "REGISTRATION_FLOW_EXPIRED"; };
 export type RegistrationConflictError = { code: "IDEMPOTENCY_CONFLICT" | "SESSION_ALREADY_ACTIVE"; };
 export type RegistrationRateError = { code: "RATE_LIMITED"; retryAfterSeconds: number; };
-export type BrowserPostPath = '/bff/login' | '/bff/me' | '/bff/me/action' | '/bff/logout' | '/bff/register' | '/bff/register/verify' | '/bff/register/resend' | '/bff/register/setup' | '/bff/register/complete';
-export type BrowserRequests = { "/bff/login": LoginRequest; "/bff/me": EmptyRequest; "/bff/me/action": EmptyRequest; "/bff/logout": EmptyRequest; "/bff/register": RegistrationStartRequest; "/bff/register/verify": RegistrationProofRequest; "/bff/register/resend": RegistrationFlowRequest; "/bff/register/setup": RegistrationProofRequest; "/bff/register/complete": RegistrationCompleteRequest; };
-export type BrowserResponses = { "/bff/login": SessionResponse; "/bff/me": SessionResponse; "/bff/me/action": SessionResponse; "/bff/logout": undefined; "/bff/register": RegistrationPending; "/bff/register/verify": RegistrationVerified; "/bff/register/resend": RegistrationAccepted; "/bff/register/setup": RegistrationSetupPending; "/bff/register/complete": RegistrationCompleted; };
+export type RecoveryEnrollRequest = { flowId: string; currentPassword: string; acceptLossRisk: true; };
+export type PasswordChangeRequest = { flowId: string; currentPassword: string; newPassword: string; };
+export type PasswordResetCompleteRequest = { flowId: string; code: string; recoveryCode: string; newPassword: string; };
+export type RecoveryEnrollment = ({ status: "Issued"; recoveryCode: string; } | { status: "AlreadyIssued"; recoveryCode?: never; });
+export type PasswordResetPending = { status: "Accepted"; expiresAt: string; };
+export type PasswordMutationAccepted = { status: "Accepted"; };
+export type RecoveryValidationError = { code: "VALIDATION_FAILED" | "CREDENTIALS_REJECTED" | "RESET_PROOF_REJECTED" | "RESET_FLOW_EXPIRED"; };
+export type RecoveryConflictError = { code: "IDEMPOTENCY_CONFLICT" | "SESSION_ALREADY_ACTIVE" | "RECOVERY_UNAVAILABLE"; };
+export type PasswordResetStartRequest = ({ email: string; mobile?: never; flowId: string; } | { email?: never; mobile: string; flowId: string; });
+export type BrowserPostPath = '/bff/login' | '/bff/me' | '/bff/me/action' | '/bff/logout' | '/bff/register' | '/bff/register/verify' | '/bff/register/resend' | '/bff/register/setup' | '/bff/register/complete' | '/bff/recovery/enroll' | '/bff/password/change' | '/bff/password/reset' | '/bff/password/reset/complete';
+export type BrowserRequests = { "/bff/login": LoginRequest; "/bff/me": EmptyRequest; "/bff/me/action": EmptyRequest; "/bff/logout": EmptyRequest; "/bff/register": RegistrationStartRequest; "/bff/register/verify": RegistrationProofRequest; "/bff/register/resend": RegistrationFlowRequest; "/bff/register/setup": RegistrationProofRequest; "/bff/register/complete": RegistrationCompleteRequest; "/bff/recovery/enroll": RecoveryEnrollRequest; "/bff/password/change": PasswordChangeRequest; "/bff/password/reset": PasswordResetStartRequest; "/bff/password/reset/complete": PasswordResetCompleteRequest; };
+export type BrowserResponses = { "/bff/login": SessionResponse; "/bff/me": SessionResponse; "/bff/me/action": SessionResponse; "/bff/logout": undefined; "/bff/register": RegistrationPending; "/bff/register/verify": RegistrationVerified; "/bff/register/resend": RegistrationAccepted; "/bff/register/setup": RegistrationSetupPending; "/bff/register/complete": RegistrationCompleted; "/bff/recovery/enroll": RecoveryEnrollment; "/bff/password/change": PasswordMutationAccepted; "/bff/password/reset": PasswordResetPending; "/bff/password/reset/complete": PasswordMutationAccepted; };

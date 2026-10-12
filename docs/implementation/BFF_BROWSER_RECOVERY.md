@@ -2,7 +2,7 @@
 
 The additive contract defines enrollment, password change, uniform reset initiation
 and two-factor reset completion. This is a private Development/Testing candidate,
-not implemented runtime acceptance or release approval yet. B1 and B2 contract
+implemented for private acceptance; live CI and release approval remain separate. B1 and B2 contract
 paths/components must stay unchanged. Runtime requires explicit recovery opt-in;
 public/Production startup gates remain enforced.
 
@@ -42,8 +42,47 @@ session access rejection. Only an independently recognized private /me access 40
 may terminalize the matching BFF session. Backend cooldown controls remain covered
 by the native recovery suite, not a fabricated browser countdown.
 
-Acceptance still to implement: real TLS/two-host HTTP proof/cookie controls and the
+Acceptance suite: real TLS/two-host HTTP proof/cookie controls and the
 full Chromium journey from B2 registration through login, one-time enrollment,
 logout, both-factor reset, pending/new-password login, replacement enrollment and
 password change with old-session rejection. Protected inbox and private CLI worker
 fixtures stay outside browser origin. Secret-bearing diagnostics remain suppressed.
+
+## Private implementation and checks
+
+Server opt-in is `Bff__AccountsEnabled=true` plus `Bff__RecoveryEnabled=true`.
+UI opt-in is `NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED=true` plus
+`NEXT_PUBLIC_BFF_RECOVERY_ENABLED=true`; both are false by default. The real B3
+fixture also enables B2 registration. The dedicated adapter projects only safe
+status/code fields and the intentional one-time recovery secret; private operation
+IDs/version/trace IDs never escape. Each command uses a tab random flow and a
+server-derived, purpose-separated operation UUID, bound to the current Identity
+session for authenticated commands. Stable canonical-contact subject MACs bound
+reset initiation/completion source admission across new challenges.
+
+The reset proof cookie is Data Protection authenticated/encrypted using the shared
+ring, bounded by private proof expiry with no sliding lifetime; it holds neither
+password, OTP nor recovery code. Mismatched tab flow fails before Identity work.
+Ingress forwards it only to BFF, never public SSR. The generated browser client
+serializes cookie effects through response headers, including password-change
+clears, and obtains fresh antiforgery after accepted local logout.
+
+The UI explicitly requests new consent for replacement enrollment, hides the code
+on acknowledgment/visibility change/unmount, and resets password/proof inputs after
+accepted commands. Unknown enrollment outcome can be explicitly replayed with the
+same flow; AlreadyIssued returns no secret, and replacement is a separate action.
+There is no automatic replay or new-password login. Cross-tab session-lost events
+contain only the existing transition type.
+
+`scripts/bff-recovery-smoke.py` exercises real Identity, PostgreSQL 17, two BFF hosts
+and TLS. It pauses only its private Credential worker and uses a stdin-only CLI
+to deterministically reconcile accepted intents. No operator route/key enters
+browser origin. HTTP checks include current-password denial/cookie preservation,
+no-code enrollment replay, both factors, proof-flow/DTO rejection, pending fencing
+and old-session rejection, reset receipt replay, new-password login, replacement
+enrollment, password change, outage and local lock failure before upstream dispatch.
+Chromium starts with B2 registration and tests lost one-time response/replay, fresh
+replacement consent, one-time code isolation/acknowledgment, two-factor reset, fresh
+login, replacement enrollment and Persian password change/cross-tab rejection.
+Native builds, type checking, production build, schemas and ingress pass locally;
+exact live CI evidence is added only after all checks complete.

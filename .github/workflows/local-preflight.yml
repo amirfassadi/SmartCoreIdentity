@@ -1,4 +1,4 @@
-name: Local B1+B2 preflight
+name: Local B1+B2+B3 preflight
 on: [push, pull_request]
 permissions:
   contents: read

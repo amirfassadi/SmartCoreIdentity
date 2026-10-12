@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SmartCoreIdentity local B1 verification. Never connects to the VPS or uses an existing DB.
+# SmartCoreIdentity local B1/B2/B3 verification. Never connects to the VPS or uses an existing DB.
 # Build/test writes go to an isolated current-worktree copy. Full mode owns one disposable PG17 container.
 set +x
 set -uo pipefail
@@ -42,13 +42,14 @@ run_check() {
   wait "$CHILD"; result=$?
   CHILD=''
   if [[ "$result" -eq 0 ]]; then ok "$label"; return 0; fi
+  "$PYTHON_BIN" "$ROOT/tools/preflight_failure.py" "$TEMP/check-$LOG_INDEX.log" || true
   bad "$label (exit $result; logs suppressed and removed, no secret-bearing tail)"; return 1
 }
 summary() {
   printf '\nSummary: %s passed, %s failed, %s skipped\n' "$PASS" "$FAIL" "$SKIP"
   if [[ "$FAIL" -gt 0 ]]; then echo 'RESULT: FAILED'; return 1; fi
   if [[ "$SKIP" -gt 0 ]]; then echo 'RESULT: INCOMPLETE — skipped checks are not PASS'; return 2; fi
-  echo 'RESULT: requested local B1 checks passed — no VPS/public-release approval'; return 0
+  echo 'RESULT: requested local B1/B2/B3 checks passed — no VPS/public-release approval'; return 0
 }
 if [[ "$MODE" == --probe-only ]]; then
   if [[ -z "${BASE_URL:-}" ]]; then bad 'BASE_URL required for explicit local probe';
@@ -95,6 +96,7 @@ fi
 cd -- "$TEMP/source" || exit 1
 if [[ "$PY_READY" -eq 1 ]]; then
   run_check 'Browser OpenAPI/schema/precedence candidate checks' 60 "$PYTHON_BIN" tools/check_bff_browser_contract.py || true
+  run_check 'B3 browser contract boundaries' 30 "$PYTHON_BIN" tools/check_bff_recovery_contract.py || true
   run_check 'B2 browser contract boundaries' 30 "$PYTHON_BIN" tools/check_bff_registration_contract.py || true
   run_check 'Generated browser client contract drift' 30 "$PYTHON_BIN" tools/generate_bff_browser_client.py --check || true
 else skip 'Python contract/dependency checks not available'; fi
@@ -110,6 +112,7 @@ for port in (3181,5157,5171,5172,5271,5272,7443):
 if [[ "$NODE_READY" -eq 1 ]]; then
   export NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED=true
   export NEXT_PUBLIC_BFF_REGISTRATION_ENABLED=true
+  export NEXT_PUBLIC_BFF_RECOVERY_ENABLED=true
   if run_check 'Pinned frontend install (no lifecycle hooks)' 240 npm ci --ignore-scripts --prefix web/identity \
     && run_check 'fa/en parity and Node timezone checks' 60 npm run check --prefix web/identity \
     && run_check 'Frontend TypeScript' 120 npm run typecheck --prefix web/identity \
@@ -177,10 +180,11 @@ if [[ "$DB_READY" -eq 1 ]]; then
         export SMARTCORE_BROWSER_E2E=yes
         run_check 'Actual B1 Chromium/Identity/two-host account journey' 240 "$PYTHON_BIN" scripts/bff-account-smoke.py || true
         run_check 'Actual B2 Chromium/Identity/two-host registration journey' 240 "$PYTHON_BIN" scripts/bff-registration-smoke.py || true
+        run_check 'Actual B3 Chromium/Identity/two-host recovery journey' 300 "$PYTHON_BIN" scripts/bff-recovery-smoke.py || true
       fi
     else skip 'Real browser journey prerequisites incomplete'; fi
   fi
 fi
-printf '\nScope: implemented private B1 only. No Down migration exists; no up/down rollback is claimed.\n'
-printf 'B2/B3 browser flows, production gates and VPS/key-ring restore remain outside this result.\n'
+printf '\nScope: implemented private B1/B2/B3 only. No Down migration exists; no up/down rollback is claimed.\n'
+printf 'Production gates and VPS/key-ring restore remain outside this result.\n'
 summary; exit $?

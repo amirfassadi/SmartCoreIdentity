@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using SmartCore.Identity;
 
+if(args.Contains("--browser-recovery-fixture")){await BrowserRecoveryFixture.Run();return;}
+
 if(args.Contains("--browser-registration-fixture")){await BrowserRegistrationFixture.Run();return;}
 
 if(args.Contains("--browser-account-fixture")){await BrowserAccountFixture.Run();return;}
@@ -10,6 +12,8 @@ if(args.Contains("--browser-session-fixture")){await BrowserSessionFixture.Run()
 
 if(args.Contains("--bff-process-peer")){await BffProcessPeer.Run();return;}
 
+var testPhase="Registration";
+try {
 var connection=Environment.GetEnvironmentVariable("SMARTCORE_TEST_DB") ?? throw new Exception("Set SMARTCORE_TEST_DB to a dedicated, disposable PostgreSQL database.");
 if(Environment.GetEnvironmentVariable("SMARTCORE_TEST_ALLOW_RESET")!="yes") throw new Exception("Explicit disposable database reset opt-in required.");
 await using var db=new Database(connection);
@@ -218,17 +222,30 @@ Check((await RegistrationService.Result(sql,failedSetup.Original.RegistrationId)
 await Error(async()=>{await setup.Complete(failedComplete,failedKey);},"VERIFICATION_FAILED");
 Check(true,"consumed setup proof cannot replay after its absolute expiry");
 
+testPhase="AuthenticationStorageChecks";
 passed+=await AuthenticationStorageChecks.Run(db,clock,(await sql.One("SELECT person_id FROM registrations WHERE id=@id",("id",result.Result.RegistrationId)))!.Get<Guid>("person_id"));
+testPhase="AuthenticationChecks";
 passed+=await AuthenticationChecks.Run(db,secrets,clock,clock.Advance,request.Email!,request.Password);
+testPhase="PasswordChangeChecks";
 passed+=await PasswordChangeChecks.Run(db,secrets,clock,clock.Advance,request.Email!,request.Password);
+testPhase="AuthenticationAdmissionChecks";
 passed+=await AuthenticationAdmissionChecks.Run(db,secrets,clock,clock.Advance);
+testPhase="RecoveryEnrollmentChecks";
 passed+=await RecoveryEnrollmentChecks.Run(db,secrets,clock,clock.Advance);
+testPhase="PasswordResetChecks";
 passed+=await PasswordResetChecks.Run(db,secrets,clock,clock.Advance);
+testPhase="BffRefreshChecks";
 passed+=await BffRefreshChecks.Run(db,secrets,clock,clock.Advance,connection).WaitAsync(TimeSpan.FromMinutes(2));
 var events=await sql.Rows("SELECT payload::text AS payload FROM event_outbox UNION ALL SELECT payload::text AS payload FROM auth_domain_event_outbox UNION ALL SELECT payload::text AS payload FROM credential_change_outbox");
 var eventFile=Environment.GetEnvironmentVariable("SMARTCORE_EVENT_FIXTURES");
 if(eventFile is not null) await File.WriteAllTextAsync(eventFile,"["+string.Join(',',events.Select(x=>x.Get<string>("payload")))+"]");
 Console.WriteLine($"RESULT: {passed} checks passed. Backend: {Environment.GetEnvironmentVariable("SMARTCORE_TEST_ENGINE") ?? "PostgreSQL (caller-provided)"}");
+
+} catch(Exception error) {
+    var kind=error is TimeoutException?"TimeoutException":error is ApiError?"ApiError":error is Npgsql.PostgresException?"PostgresException":error is Npgsql.NpgsqlException?"NpgsqlException":error is InvalidOperationException?"InvalidOperationException":"Exception";
+    Console.Error.WriteLine($"SAFE-TEST-FAIL phase={testPhase} type={kind}");
+    Environment.ExitCode=1;
+}
 
 sealed class TestClock : TimeProvider
 {

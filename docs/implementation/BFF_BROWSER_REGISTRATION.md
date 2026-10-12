@@ -98,3 +98,22 @@ network dumps or secret-bearing diagnostics are retained. The private Identity p
 suites so the deliberate HTTP admission controls do not consume Chromium's real
 30/minute registration transport budget. No limiter is disabled or broadened.
 Native builds and static checks passed locally; full live CI evidence will be recorded after those jobs pass.
+
+## Verified B2 acceptance — 2026-10-12
+
+Code `6c6dd7dbac7a48a13eafba7ca1b4feb490890b8e` passed
+[browser 38302098613](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38302098613),
+[backend 38302099674](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38302099674)
+and [documentary 38302098635](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38302098635).
+The browser job log was inspected: actual B1, B2 HTTP, B2 Chromium and B2 outage
+controls passed. Its same-tree integration `f6ca21988cf440f0a99de1a0bbba51c2ec45d537`
+also passed all four workflows, including
+[full preflight 38302102154](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38302102154):
+**39 passed, 0 failed, 0 skipped**. No default feature flag was enabled.
+
+The separate full-preflight run on the review head failed in the existing native
+harness and recovery smoke while its B2 suite passed. The successful integration
+run has the identical full source tree; this is not a claim that failures disappear
+on every runner. Follow-up diagnostics expose only enumerated test phase/type
+markers and continue to fail the run without printing raw credential-bearing logs.
+B3 and production/public-release acceptance remain separate gates.

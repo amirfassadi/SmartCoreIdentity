@@ -39,7 +39,7 @@ export async function post<P extends BrowserPostPath>(path: P, body: BrowserRequ
       result = await fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf!}, body: JSON.stringify(body), signal});
     } catch {throw new BrowserError('BFF_UNAVAILABLE');}
-    if (result.ok && (path === '/bff/login' || path === '/bff/logout')) {
+    if (result.ok && (path === '/bff/login' || path === '/bff/logout' || path === '/bff/password/change')) {
       invalidateCsrf();
       // Failure here does not change the already committed transition outcome.
       try {await loadCsrf(signal);} catch {invalidateCsrf();}
