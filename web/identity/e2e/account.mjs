@@ -28,7 +28,7 @@ try {
   const form=page.locator('form');
   await form.locator('[name=contact]').fill(fixture.email);
   await form.locator('[name=password]').fill(fixture.password);
-  await form.getByRole('button').click();
+  await form.locator('button[type=submit]').click();
   await page.getByTestId('profile').waitFor();
   assert.equal(await page.evaluate(()=>window.__cspViolations.length),0,'English production hydration CSP');
   const cookies=await context.cookies();
@@ -80,7 +80,7 @@ try {
   stage='same-owner second login';
   await page.locator('[name=contact]').fill(fixture.email);
   await page.locator('[name=password]').fill(fixture.password);
-  await page.locator('form').getByRole('button').click();
+  await page.locator('form').locator('button[type=submit]').click();
   await page.getByTestId('profile').waitFor();await peer.getByTestId('profile').waitFor();
   stage='locale switch and CSP';
   await page.getByRole('link',{name:'فارسی',exact:true}).click();await page.getByTestId('profile').waitFor();
@@ -98,7 +98,7 @@ try {
     await fallback.addInitScript(()=>{Object.defineProperty(window,'BroadcastChannel',{value:undefined});});
     const one=await fallback.newPage();const two=await fallback.newPage();await one.goto('/en');
     await one.locator('[name=contact]').fill(fixture.email);await one.locator('[name=password]').fill(fixture.password);
-    await one.locator('form').getByRole('button').click();await one.getByTestId('profile').waitFor();
+    await one.locator('form').locator('button[type=submit]').click();await one.getByTestId('profile').waitFor();
     await two.goto('/en');await two.getByTestId('profile').waitFor();
     await one.getByRole('button',{name:'Sign out',exact:true}).click();await one.locator('form').waitFor();await two.locator('form').waitFor();
     assert.equal(await two.getByTestId('profile').count(),0,'Storage fallback clears peer');
