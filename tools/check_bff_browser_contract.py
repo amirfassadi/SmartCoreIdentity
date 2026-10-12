@@ -133,6 +133,17 @@ def validate_response(doc, path, method, status, body, headers):
                 assert 0 < int(cookies[name]['max-age']) <= 86400
 
 
+def validate_live_response(doc, path, method, status, body, headers):
+    """Live fixtures must fail without jsonschema dumping a one-time code/token."""
+    try:
+        validate_response(doc, path, method, status, body, headers)
+    except Exception:
+        route = path if path in doc['paths'] else 'router'
+        verb = method.upper() if method.upper() in ('GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS') else 'unsupported'
+        code = status if isinstance(status, int) and 100 <= status <= 599 else 'invalid'
+        raise AssertionError(f'Live browser wire contract mismatch: {verb} {route} ({code}); proof-bearing details suppressed') from None
+
+
 def classify_guards(faults):
     """Candidate precedence model, not live middleware or cryptographic verification."""
     for fault, status, code in [('size', 413, 'REQUEST_TOO_LARGE'),

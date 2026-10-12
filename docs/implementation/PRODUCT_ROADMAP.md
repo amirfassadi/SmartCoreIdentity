@@ -32,7 +32,7 @@ services, hours and appointments. Public pages expose customer booking.
 | A | Platform #11 then Identity #1/#2/#4/#5/#6/#7; retarget/rebase as required | All stages on canonical main with successful CI after each base change | Draft stack prepared, not merged |
 | B1 | Contract-first host/proxy, seeded login/me/logout, csrf and fa/en shell | Browser session/CSRF/Origin and two-host single-flight tests | Private Chromium/HTTP B1 verified; exact revisions in BFF_BROWSER_ACCOUNTS.md |
 | B2 | Registration and protected OTP inbox | Browser registration Ready then login; proof/inbox rejection checks | Private B2 Chromium/HTTP verified; exact revisions in BFF_BROWSER_REGISTRATION.md |
-| B3 | Recovery enrollment/reset/password change | Complete Playwright journey through new-password login and replacement enrollment | Private B3 implementation and real-stack suite prepared; live CI pending in BFF_BROWSER_RECOVERY.md |
+| B3 | Recovery enrollment/reset/password change | Complete Playwright journey through new-password login and replacement enrollment | Private B3 Chromium/HTTP verified; complete Stage B evidence in BFF_BROWSER_RECOVERY.md |
 | C | Real-user release controls, SMS, operations and deployment | Closed beta after all evidence in RELEASE_GATES.md is accepted | Open |
 | D | Business registration: one-page blueprint, backend, owner dashboard | Owner creates a business from start to finish; correct Organization/Membership ownership | Future |
 | E | Availability, booking, SMS confirmation, owner calendar, cancellation | Example service business receives a real reservation with tested conflict/cancellation behavior | Future |

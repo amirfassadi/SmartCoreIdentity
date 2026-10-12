@@ -20,7 +20,7 @@ import yaml
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'tools'))
-from check_bff_browser_contract import validate_response
+from check_bff_browser_contract import validate_live_response as validate_response
 from bff_browser_contract import load_contract
 b3 = os.environ.get('SMARTCORE_B3') == 'yes'
 b2 = os.environ.get('SMARTCORE_B2') == 'yes' or b3

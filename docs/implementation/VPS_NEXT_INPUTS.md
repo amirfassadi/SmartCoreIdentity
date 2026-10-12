@@ -2,7 +2,7 @@
 
 The code runs privately in Development/Testing only. No script in this slice
 installs services, migrates a VPS database, binds a public port or restarts Nginx/VPN.
-B2 is privately verified and B3 acceptance is tracked in BFF_BROWSER_RECOVERY.md.
+The complete private B1/B2/B3 journey is verified in BFF_BROWSER_RECOVERY.md.
 All RELEASE_GATES still precede real-user deployment.
 
 Observed host context from the owner's earlier inventory: Ubuntu, SSH botdev on

@@ -60,6 +60,6 @@ a separate suite enables real Identity account flows and Chromium through HTTPS.
 Fresh B1 acceptance is tracked in
 [BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md). Prior guard/ingress evidence stays
 in BFF_BROWSER_GUARD.md and HTTPS_INGRESS.md; it does not substitute for account E2E.
-Additive B2 verification is in BFF_BROWSER_REGISTRATION.md; the implemented B3
-candidate and full real-stack suite are in BFF_BROWSER_RECOVERY.md. Both complete
+Additive B2 verification is in BFF_BROWSER_REGISTRATION.md; the verified complete B3
+journey and exact successful source revision are in BFF_BROWSER_RECOVERY.md. Both complete
 working branches retain identical source trees.

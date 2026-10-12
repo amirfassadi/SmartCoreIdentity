@@ -23,6 +23,26 @@ class LocalPreflightChecks(unittest.TestCase):
             summarize("password=private-secret-value\nSAFE-TEST-FAIL phase=Registration type=ApiError\nSAFE-TEST-FAIL phase=private-secret-value type=Exception\nSAFE-TEST-FAIL phase=Enrollment type=private-secret-value\nTraceback: private-secret-value")
         self.assertEqual(capture.getvalue(), '[DIAGNOSTIC] test phase=Registration; failure category=ApiError\n')
 
+    def test_live_wire_failure_never_formats_one_time_proof(self):
+        import traceback
+        sys.path.insert(0, str(ROOT/'tools'))
+        try:
+            from bff_browser_contract import load_contract
+            from check_bff_browser_contract import validate_live_response
+            sensitive = 'F'*31+'g'
+            try:
+                validate_live_response(load_contract(recovery=True), '/bff/recovery/enroll', 'POST', 200,
+                    {'status':'Issued', 'recoveryCode':sensitive}, {'Content-Type':'application/json', 'Cache-Control':'no-store'})
+            except AssertionError as failure:
+                formatted=''.join(traceback.format_exception(failure))
+                self.assertNotIn(sensitive, formatted)
+                self.assertNotIn('instance', formatted.lower())
+                self.assertIn('POST /bff/recovery/enroll (200)', formatted)
+            else:
+                self.fail('Malformed one-time response must fail')
+        finally:
+            sys.path.remove(str(ROOT/'tools'))
+
     def test_every_cookie_attribute_and_field_is_checked(self):
         good = '__Host-smartcore-antiforgery=fixture; Secure; HttpOnly; SameSite=Lax; Path=/'
         helper.cookie_policy([good])
