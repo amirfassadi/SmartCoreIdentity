@@ -92,7 +92,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 except OSError: pass
                 time.sleep(.1)
             else: raise AssertionError('BFF host readiness timed out')
-            for path,method,status in [('/bff/register','POST',415 if b2 else 404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503),('/bff/login','POST',415)]:
+            for path,method,status in [('/bff/register','POST',415 if b2 else 404),('/bff/password/reset/start','POST',404),('/bff/password/reset/complete','POST',415 if b3 else 404),('/bff/csrf','POST',405),('/bff/login','GET',405),('/bff/me','GET',405),('/bff/me/action','GET',405),('/bff/logout','GET',405),('/bff/csrf','GET',503),('/bff/login','POST',415)]:
                 request = urllib.request.Request(f'http://127.0.0.1:{port}{path}',method=method)
                 try: response = opener.open(request,timeout=5)
                 except urllib.error.HTTPError as error: response = error

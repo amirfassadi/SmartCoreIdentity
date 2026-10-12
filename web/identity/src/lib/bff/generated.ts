@@ -1,4 +1,4 @@
-// Generated from contracts/bff-browser.openapi.yaml; do not edit.
+// Generated from composed B1/B2/B3 browser OpenAPI; do not edit.
 // SHA256 a83410fba8abafd05c5c9c447da8862440ea963a04b1f87c02e22836ac4f472c
 export type EmptyRequest = { };
 export type LoginRequest = ({ email: string; mobile?: never; password: string; } | { email?: never; mobile: string; password: string; });

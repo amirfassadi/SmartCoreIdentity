@@ -28,7 +28,7 @@ def kind(schema):
         fields=schema.get('properties',{});required=schema.get('required',[])
         return '{'+''.join(f' {name}{"" if name in required else "?"}: {kind(field)};' for name,field in fields.items())+' }'
     return {'string':'string','integer':'number','number':'number','boolean':'boolean','null':'null','never':'never'}.get(value,'unknown')
-lines=['// Generated from contracts/bff-browser.openapi.yaml; do not edit.', '// SHA256 '+hashlib.sha256(source.read_bytes()+extension.read_bytes()+recovery.read_bytes()).hexdigest()]
+lines=['// Generated from composed B1/B2/B3 browser OpenAPI; do not edit.', '// SHA256 '+hashlib.sha256(source.read_bytes()+extension.read_bytes()+recovery.read_bytes()).hexdigest()]
 for name,schema in contract['components']['schemas'].items():lines.append(f'export type {name} = {kind(schema)};')
 lines.append('export type BrowserPostPath = '+ ' | '.join(repr(path) for path,definition in contract['paths'].items() if 'post' in definition)+';')
 requests=[];responses=[]

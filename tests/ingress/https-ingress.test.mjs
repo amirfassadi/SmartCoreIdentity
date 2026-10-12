@@ -13,9 +13,9 @@ function echo(peer){return http.createServer((request,response)=>{
   seen.push({peer,url:request.url,headers:request.headers});
   if(request.url==='/bff/fault'){request.socket.destroy();return;}
   response.setHeader('Content-Type','application/json');
-  if(request.url==='/bff/cookie')response.setHeader('Set-Cookie',['__Host-smartcore-session='+ 'A'.repeat(43)+'; Secure; HttpOnly; SameSite=Lax; Path=/','__Host-smartcore-antiforgery='+ 'B'.repeat(64)+'; Secure; HttpOnly; SameSite=Lax; Path=/']);
+  if(request.url==='/bff/cookie')response.setHeader('Set-Cookie',['__Host-smartcore-session='+ 'A'.repeat(43)+'; Secure; HttpOnly; SameSite=Lax; Path=/','__Host-smartcore-antiforgery='+ 'B'.repeat(64)+'; Secure; HttpOnly; SameSite=Lax; Path=/', '__Host-smartcore-registration='+ 'C'.repeat(256)+'; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=600', '__Host-smartcore-reset='+ 'D'.repeat(256)+'; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=600']);
   if(request.url==='/redirect-unsafe')response.setHeader('Location','https://evil.invalid/');
-  if(peer==='next')response.setHeader('Set-Cookie',['smartcore-locale=en; Secure; SameSite=Lax; Path=/; Max-Age=15552000','__Host-smartcore-session='+ 'X'.repeat(43)+'; Secure; HttpOnly; SameSite=Lax; Path=/','future-cookie=blocked; Path=/']);
+  if(peer==='next')response.setHeader('Set-Cookie',['smartcore-locale=en; Secure; SameSite=Lax; Path=/; Max-Age=15552000','__Host-smartcore-session='+ 'X'.repeat(43)+'; Secure; HttpOnly; SameSite=Lax; Path=/','__Host-smartcore-registration='+ 'C'.repeat(256)+'; Secure; HttpOnly; SameSite=Lax; Path=/', '__Host-smartcore-reset='+ 'D'.repeat(256)+'; Secure; HttpOnly; SameSite=Lax; Path=/', 'future-cookie=blocked; Path=/']);
   const unknown=request.url==='/bff/register'||request.url.startsWith('/bff/password/reset');
   response.statusCode=unknown?404:200;response.end(JSON.stringify(unknown?{code:'NOT_FOUND'}:{peer}));
 });}
@@ -32,7 +32,7 @@ try {
       });request.on('error',reject);request.end(body);
     });
   }
-  const cookies=`__Host-smartcore-session=${'A'.repeat(43)}; __Host-smartcore-antiforgery=${'B'.repeat(64)}; smartcore-locale=fa; future-cookie=blocked`;
+  const cookies=`__Host-smartcore-session=${'A'.repeat(43)}; __Host-smartcore-antiforgery=${'B'.repeat(64)}; __Host-smartcore-registration=${'C'.repeat(256)}; __Host-smartcore-reset=${'D'.repeat(256)}; smartcore-locale=fa; future-cookie=blocked`;
   const response=await call('/fa',{Cookie:cookies,'X-Bff-Client-Key':'forged','X-Bff-Subject':'forged','X-Dev-Inbox-Key':'forged','X-Forwarded-For':'203.0.113.1','X-Forwarded-Host':'evil.invalid','X-Forwarded-Proto':'http','X-Nonce':'forged',Authorization:'Bearer forbidden'});
   assert.equal(response.body.peer,'next');assert.equal(seen.at(-1).headers.cookie,'smartcore-locale=fa');
   for(const name of ['x-bff-client-key','x-bff-subject','x-dev-inbox-key','authorization','x-nonce'])assert.equal(seen.at(-1).headers[name],undefined);
@@ -41,8 +41,9 @@ try {
   assert.equal(response.headers['strict-transport-security'],'max-age=31536000');
   for(const locale of ['smartcore-locale=invalid','smartcore-locale=fa; smartcore-locale=en']){await call('/fa',{Cookie:locale});assert.equal(seen.at(-1).headers.cookie,undefined);}
   const bff=await call('/bff/cookie',{Cookie:cookies,Origin:'https://localhost:7443','Sec-Fetch-Site':'same-origin','X-CSRF-Token':'proof'});
-  assert.equal(seen.at(-1).headers.cookie,`__Host-smartcore-session=${'A'.repeat(43)}; __Host-smartcore-antiforgery=${'B'.repeat(64)}`);
-  assert.equal(seen.at(-1).headers['x-csrf-token'],'proof');assert.equal(bff.headers['set-cookie'].length,2);assert.equal(bff.headers['cache-control'],'no-store');
+  assert.equal(seen.at(-1).headers.cookie,`__Host-smartcore-session=${'A'.repeat(43)}; __Host-smartcore-antiforgery=${'B'.repeat(64)}; __Host-smartcore-registration=${'C'.repeat(256)}; __Host-smartcore-reset=${'D'.repeat(256)}`);
+  assert.equal(seen.at(-1).headers['x-csrf-token'],'proof');assert.equal(bff.headers['set-cookie'].length,4);assert.equal(bff.headers['cache-control'],'no-store');
+  for(const name of ['__Host-smartcore-registration','__Host-smartcore-reset']) {await call('/bff/cookie',{Cookie:`${name}=${'C'.repeat(256)}; ${name}=${'D'.repeat(256)}`});assert.equal(seen.at(-1).headers.cookie,undefined,'Duplicate proof cookie is not forwarded');}
   for(const path of ['/bff','/bff/register','/bff/password/reset/start','/bff/password/reset/complete']) {
     const r=await call(path);assert(seen.at(-1).peer.startsWith('bff-'));if(path!=='/bff'){assert.equal(r.status,404);assert.deepEqual(r.body,{code:'NOT_FOUND'});assert.equal(r.headers['cache-control'],'no-store');}
   }
