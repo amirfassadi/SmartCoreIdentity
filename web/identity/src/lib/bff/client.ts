@@ -1,4 +1,4 @@
-import type {BrowserPostPath, CsrfResponse, SessionResponse} from './generated';
+import type {BrowserPostPath, BrowserRequests, BrowserResponses, CsrfResponse} from './generated';
 export type {Person} from './generated';
 export class BrowserError extends Error {
   constructor(public code: string, public retryAfterSeconds = 0) {super(code);}
@@ -19,11 +19,12 @@ async function response<T>(request: Promise<Response>): Promise<T> {
 export async function bootstrap(signal?: AbortSignal) {
   const value = await response<CsrfResponse>(fetch('/bff/csrf', {credentials: 'same-origin', cache: 'no-store', signal}));
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  if (typeof value?.requestToken !== 'string' || value.requestToken.length < 32 || value.requestToken.length > 4096) throw new BrowserError('BFF_UNAVAILABLE');
   csrf = value.requestToken;
 }
-export async function post(path: BrowserPostPath, body: object, signal?: AbortSignal) {
+export async function post<P extends BrowserPostPath>(path: P, body: BrowserRequests[P], signal?: AbortSignal) {
   if (!csrf) await bootstrap(signal);
-  return response<SessionResponse | undefined>(fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
+  return response<BrowserResponses[P]>(fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
     headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf!}, body: JSON.stringify(body), signal}));
 }
 // No retries of credentials or state-changing commands. A caller may initiate a new action after the shown delay.

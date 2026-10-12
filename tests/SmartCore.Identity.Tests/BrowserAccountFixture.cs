@@ -22,6 +22,13 @@ internal static class BrowserAccountFixture
         var row = await sql.One("SELECT id,identity_session_id,status,version FROM bff_sessions WHERE cookie_mac=@mac", ("mac", secrets.Mac("bff-cookie-v1", input.Cookie!)));
         if (row is null) throw new Exception("Missing fixture session.");
         var id = row.Get<Guid>("id");
+        if (input.Action == "Hold") {
+            await using var transaction=await sql.BeginTransactionAsync();
+            await sql.Execute("SELECT id FROM bff_sessions WHERE id=@id FOR UPDATE",("id",id));
+            Console.WriteLine("Ready"); await Console.Out.FlushAsync();
+            await Console.In.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(45));
+            await transaction.RollbackAsync();return;
+        }
         if (input.Action == "Due")
             await sql.Execute("UPDATE bff_sessions SET access_issued_at=@issued,access_expires_at=@end WHERE id=@id", ("issued", DateTimeOffset.UtcNow.AddMinutes(-15)), ("end", DateTimeOffset.UtcNow.AddMinutes(-1)), ("id", id));
         else if (input.Action == "Revoke") {

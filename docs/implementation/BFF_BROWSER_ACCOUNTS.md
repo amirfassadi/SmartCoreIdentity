@@ -49,8 +49,9 @@ non-secret generation/state counters; it exposes no diagnostic HTTP endpoint.
 
 The HTTP suite checks actual login/profile DTOs and cookies, wrong credentials,
 prelogin/session CSRF rebinding, same-owner second login, exactly one rotation for
-four parallel reads, Identity access rejection, outage preservation, durable local
-logout and cookie-free maintenance recovery. Responses use the exact browser
+four parallel reads, Identity access rejection, pre-intent lock-timeout/cookie preservation, outage preservation, durable local
+logout, bound intent replay and cookie-free maintenance recovery. Winter/summer
+2026 Asia/Tehran checks execute in Node, .NET and Chromium. Responses use the exact browser
 OpenAPI validator. The fault database is isolated; no VPS database is modified.
 
 The Chromium suite uses production Next and the same actual TLS/BFF/Identity stack.

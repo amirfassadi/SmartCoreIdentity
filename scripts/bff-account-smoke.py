@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         'Identity__MaterialKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Identity__AccessSigningKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Identity__RefreshReceiptKey':env['Bff__ReceiptKey'], 'Identity__BffClientKey':env['Bff__ClientKey'],
-        'Identity__AuthenticationEnabled':'true','Identity__DevInboxKey':secrets.token_urlsafe(32)}
+        'Identity__AuthenticationEnabled':'true','Identity__WorkerEnabled':'true','Identity__DevInboxKey':secrets.token_urlsafe(32)}
     identity_assembly=str(root/'src/SmartCore.Identity.Api/bin/Release/net10.0/SmartCore.Identity.Api.dll')
     subprocess.run([dotnet,identity_assembly,'--migrate'],env=identity_env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     processes = []

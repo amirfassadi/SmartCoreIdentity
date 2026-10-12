@@ -32,7 +32,7 @@ def account_checks(root, tls, private, env, identity_env, dotnet, validate_respo
     for _ in range(15):
         status,ready,_=trusted('/auth/register/verify',verification)
         if status==200 and ready['status']=='Ready':break
-        time.sleep(.2)
+        time.sleep(1)
     else:raise AssertionError('Private seed did not reach Ready')
     class Browser:
         def __init__(self):self.cookies={};self.token=None
@@ -94,12 +94,29 @@ def account_checks(root, tls, private, env, identity_env, dotnet, validate_respo
             if line.startswith('B1 CHROMIUM FAIL at '):print(line)
         assert child.returncode==0, 'Real browser acceptance failed; only sanitized stage diagnostics are retained.'
         print(child.stdout.strip())
+    # Contended logout must report pre-intent busy, keep cookies and leave local state Active.
+    hold_value={'Connection':env['ConnectionStrings__Bff'],'IdentityConnection':env['ConnectionStrings__Bff'],
+        'MacKey':env['Bff__SessionMacKey'],'MaterialKey':env['Bff__SessionMaterialKey'],'Action':'Hold','Cookie':new_session}
+    hold=subprocess.Popen([dotnet,str(fixture_assembly),'--browser-account-fixture'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env={**os.environ,'SMARTCORE_TEST_ALLOW_RESET':'yes'})
+    try:
+        hold.stdin.write(json.dumps(hold_value)+'\n');hold.stdin.flush()
+        assert hold.stdout.readline().strip()=='Ready','Private row-lock fixture failed'
+        status,data,_=browser.request('/bff/logout',{})
+        assert status==503 and data['code']=='BFF_BUSY' and data['retryAfterSeconds']==1
+        assert browser.cookies['__Host-smartcore-session']==new_session
+    finally:
+        hold.stdin.write('release\n');hold.stdin.flush();hold.wait(timeout=10)
+    assert fixture('Inspect',new_session)['Status']=='Active'
+    print('BFF ACCOUNT PRE-INTENT BUSY PASS: lock contention returns BFF_BUSY with intact cookies and Active state.')
     # Upstream outage: /me preserves cookie; logout succeeds only after durable local intent.
     identity_process.terminate();identity_process.wait(timeout=10)
     assert browser.request('/bff/me',{})[0]==503
     assert browser.cookies['__Host-smartcore-session']==new_session
+    prior_cookies=browser.cookies.copy();prior_token=browser.token
     assert browser.request('/bff/logout',{})[0]==204
     assert not browser.cookies
+    status,_,_=call(tls,origin,'/bff/logout',{}, {'Origin':origin,'Sec-Fetch-Site':'same-origin','Cookie':'; '.join(key+'='+value for key,value in prior_cookies.items()),'X-CSRF-Token':prior_token})
+    assert status==204 # Same bound committed intent is idempotent, with no ordinary access.
     state=fixture('Inspect',new_session);assert state['Status'] in ('LogoutRequested','Closed')
     browser.cookies={'__Host-smartcore-session':new_session};browser.csrf()
     assert browser.request('/bff/me',{})[0]==401
