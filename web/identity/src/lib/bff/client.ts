@@ -30,20 +30,22 @@ async function loadCsrf(signal?: AbortSignal) {
 // first bootstraps cannot overwrite the cookie underlying another tab's request token.
 export async function bootstrap(signal?: AbortSignal) {await csrfLock(() => loadCsrf(signal), signal);}
 export async function post<P extends BrowserPostPath>(path: P, body: BrowserRequests[P], signal?: AbortSignal): Promise<BrowserResponses[P]> {
-  const send = async () => response<BrowserResponses[P]>(fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
-    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf!}, body: JSON.stringify(body), signal}));
-  // Every account response may clear cookies on terminal rejection. Keep its proof
-  // bootstrap and response in the same cross-tab lock as login/logout, so an old
-  // anonymous/terminal read cannot clear a later login cookie.
-  return csrfLock(async () => {
+  // Synchronize through response headers (when browser cookies are applied), not
+  // profile body parsing: a slow old read must not block committed logout.
+  const reply = await csrfLock(async () => {
     await loadCsrf(signal);
-    const result = await send();
-    if (path === '/bff/login' || path === '/bff/logout') {
+    let result: Response;
+    try {
+      result = await fetch(path, {method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf!}, body: JSON.stringify(body), signal});
+    } catch {throw new BrowserError('BFF_UNAVAILABLE');}
+    if (result.ok && (path === '/bff/login' || path === '/bff/logout')) {
       invalidateCsrf();
       // Failure here does not change the already committed transition outcome.
       try {await loadCsrf(signal);} catch {invalidateCsrf();}
     }
     return result;
   }, signal);
+  return response<BrowserResponses[P]>(Promise.resolve(reply));
 }
 // No retries of credentials or state-changing commands. New user actions honor Retry-After.

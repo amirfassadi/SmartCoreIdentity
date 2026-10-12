@@ -31,7 +31,9 @@ Pre-intent failure never reports successful logout.
 
 The fa/en client keeps CSRF only in memory and never retries credential commands.
 Web Locks serialize account requests with their fresh CSRF bootstrap across tabs;
-login is broadcast after fresh CSRF is obtained. This includes reads because an
+login is broadcast after fresh CSRF is obtained. The lock ends after response
+headers/cookie effects; slow profile-body parsing remains outside so it cannot block
+logout. This includes reads because an
 anonymous/terminal 401 can clear cookies and must not arrive after a newer login.
 The lock coordinates browser cookie responses, not Identity token rotation: the BFF
 core remains authoritative and its HTTP concurrency suite proves cross-host single-flight.
