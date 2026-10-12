@@ -71,7 +71,7 @@ try {
   await peer.getByRole('button',{name:'ادامه',exact:true}).click();
   await peer.waitForFunction(()=>window.__held===true);
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
-  await page.locator('form').waitFor();await peer.locator('form').waitFor();await release();
+  await page.locator('input[name=contact]').waitFor();await peer.locator('input[name=contact]').waitFor();await release();
   await peer.waitForTimeout(300);
   assert.equal(await peer.getByTestId('profile').count(),0,'Delayed read must not resurrect logged-out profile');
   assert.equal(await page.getByTestId('profile').count(),0);
@@ -90,7 +90,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__cspViolations.length),0,'Production hydration CSP');
   assert.equal(await peer.evaluate(()=>window.__cspViolations.length),0,'RTL production hydration CSP');
   assert.equal(faults.length,0,'Production client runtime');
-  await page.getByRole('button',{name:'خروج',exact:true}).click();await page.locator('form').waitFor();await peer.locator('form').waitFor();
+  await page.getByRole('button',{name:'خروج',exact:true}).click();await page.locator('input[name=contact]').waitFor();await peer.locator('input[name=contact]').waitFor();
   stage='storage fallback';
   // Storage-event fallback is tested in an independent browser context without BroadcastChannel.
   const fallback=await browser.newContext({baseURL:'https://localhost:7443',ignoreHTTPSErrors:false});
@@ -100,7 +100,7 @@ try {
     await one.locator('[name=contact]').fill(fixture.email);await one.locator('[name=password]').fill(fixture.password);
     await one.locator('form').locator('button[type=submit]').click();await one.getByTestId('profile').waitFor();
     await two.goto('/en');await two.getByTestId('profile').waitFor();
-    await one.getByRole('button',{name:'Sign out',exact:true}).click();await one.locator('form').waitFor();await two.locator('form').waitFor();
+    await one.getByRole('button',{name:'Sign out',exact:true}).click();await one.locator('input[name=contact]').waitFor();await two.locator('input[name=contact]').waitFor();
     assert.equal(await two.getByTestId('profile').count(),0,'Storage fallback clears peer');
     const stored=await one.evaluate(()=>JSON.parse(localStorage.getItem('smartcore-session-event')));
     assert.deepEqual(Object.keys(stored).sort(),['stamp','type']);assert.equal(stored.type,'logout');

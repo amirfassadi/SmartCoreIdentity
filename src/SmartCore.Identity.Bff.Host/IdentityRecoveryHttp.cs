@@ -33,6 +33,9 @@ public sealed class IdentityRecoveryHttp(HostConfiguration configuration) : IDis
     private sealed record Failure(ErrorBody Error,string TraceId);
     private sealed record ErrorBody(string Code,string Message,string? NextAction);
     private async Task<T> Send<T>(string path,object body,string? access,string subject,int success,CancellationToken cancellation) {
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        cancellation=deadline.Token;
         using var request=new HttpRequestMessage(HttpMethod.Post,path) {Content=JsonContent.Create(body,options:Json)};
         request.Headers.Add("X-Bff-Client-Key",configuration.ClientKey);request.Headers.Add("X-Bff-Subject",subject);
         if(access is not null)request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",access);
