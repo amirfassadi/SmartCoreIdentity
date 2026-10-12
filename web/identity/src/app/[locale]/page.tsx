@@ -46,7 +46,7 @@ export default function AccountShell() {
     const current = generation.current;
     try {
       const result = await post(action ? '/bff/me/action' : '/bff/me', {}, controller.signal);
-      if (!controller.signal.aborted && current === generation.current && result) {setPerson(result.person); setError('');}
+      if (!controller.signal.aborted && current === generation.current && result) {setPerson(result.person); setNotice(false); setError('');}
     } catch (failure) {
       if (!controller.signal.aborted && current === generation.current) {
         if (failure instanceof BrowserError && failure.code === 'REAUTHENTICATION_REQUIRED') {clear(); broadcast('session-lost');}
@@ -85,11 +85,11 @@ export default function AccountShell() {
     event.preventDefault(); if (locked.current || remaining) return;
     const form = event.currentTarget; const fields = new FormData(form);
     const contact = String(fields.get('contact') ?? ''); const password = String(fields.get('password') ?? '');
-    clear(); setNotice(false); const current = generation.current; locked.current = true; setBusy(true); setError('');
+    clear(); const current = generation.current; locked.current = true; setBusy(true); setError('');
     try {
       const result = await post('/bff/login', contact.includes('@') ? {email: contact, password} : {mobile: contact, password});
       if (current !== generation.current) return;
-      form.reset(); if (result) setPerson(result.person);
+      form.reset(); if (result) {setPerson(result.person); setNotice(false);}
       await bootstrap(); broadcast('login');
     } catch (failure) {if (current === generation.current) handleError(failure);}
     finally {locked.current = false; setBusy(false);}
@@ -128,8 +128,8 @@ export default function AccountShell() {
           <label className="grid gap-2">{a('contact')}<input name="contact" type="text" autoComplete="username" required maxLength={254} dir="ltr" className="rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="grid gap-2">{a('password')}<input name="password" type="password" autoComplete="current-password" required maxLength={128} className="rounded-lg border border-slate-300 px-3 py-2" /></label>
           <button type="submit" className="rounded-lg bg-teal-800 px-4 py-3 font-semibold text-white" disabled={busy || remaining > 0}>{busy ? a('waiting') : a('login')}</button>
-          {registrationEnabled && <button type="button" onClick={() => setRegister(true)} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('register')}</button>}
-          {recoveryEnabled && <button type="button" onClick={() => {setReset(true); setRegister(false);}} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('reset')}</button>}
+          {registrationEnabled && <button type="button" onClick={() => {setNotice(false); setRegister(true);}} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('register')}</button>}
+          {recoveryEnabled && <button type="button" onClick={() => {setNotice(false); setReset(true); setRegister(false);}} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('reset')}</button>}
         </form>}
         {notice && <p role="status" className="mt-4">{a('mutationAccepted')}</p>}
         {error && <p role="alert" className="mt-4 text-sm text-red-800">{a(`errors.${knownErrors.includes(error) ? error : 'UNKNOWN'}`)}</p>}
