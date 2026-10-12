@@ -108,13 +108,18 @@ def recovery_checks(root,tls,private,env,identity_env,dotnet,validate_response,c
         child=subprocess.Popen(['node',str(root/'web/identity/e2e/recovery.mjs')],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
         try:
             child.stdin.write(json.dumps({'email':chromium_contact,'password':'private B3 Chromium password','newPassword':'private B3 Chromium reset password','finalPassword':'private B3 Chromium changed password','tlsCertificatePath':env['SMARTCORE_ACCOUNT_TLS_CERT']})+'\n');child.stdin.flush()
+            refresh_generation=None
             for line in child.stdout:
                 event=json.loads(line);kind=event.get('event')
                 if kind=='registered':reply={'code':inbox(chromium_contact,True)}
                 elif kind=='provision':fixture(chromium_contact,'Provision',True);reply={}
+                elif kind=='refresh-due':refresh_generation=fixture(chromium_contact,'Due')['Generation'];reply={}
+                elif kind=='refresh-done':
+                    assert fixture(chromium_contact)['Generation']==refresh_generation+1,'Actual browser action did not rotate exactly once'
+                    reply={}
                 elif kind=='reset-started':reply={'code':inbox(chromium_contact)}
                 elif kind=='process':fixture(chromium_contact,'Process');reply={}
-                elif kind=='passed':print('B3 CHROMIUM PASS: registration/login, one-time recovery consent/acknowledgment, logout, two-factor reset, pending/new-password login, replacement enrollment, password change and cross-tab rejection; fa/en/CSP/private storage.');break
+                elif kind=='passed':print('B3 CHROMIUM PASS: registration/login, proven single browser refresh, one-time recovery consent/acknowledgment, logout, two-factor reset, pending/new-password login, replacement enrollment, password change and cross-tab rejection; fa/en/CSP/private storage.');break
                 else:raise AssertionError('B3 Chromium failed at '+event.get('stage','unknown'))
                 child.stdin.write(json.dumps(reply)+'\n');child.stdin.flush()
             assert child.wait(timeout=10)==0,'B3 Chromium failed (proof output suppressed)'

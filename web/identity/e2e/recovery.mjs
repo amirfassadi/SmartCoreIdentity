@@ -35,6 +35,13 @@ try {
     await page.locator('form').locator('button[type=submit]').click();await page.getByTestId('profile').waitFor();
   }
   await login(fixture.password);
+  stage='actual browser refresh';
+  const opaque=(await context.cookies()).find(c=>c.name==='__Host-smartcore-session').value;
+  await exchange('refresh-due');
+  const refreshed=page.waitForResponse(r=>r.url().endsWith('/bff/me/action') && r.status()===200);
+  await page.getByRole('button',{name:'Continue',exact:true}).click();await (await refreshed).finished();
+  assert.equal((await context.cookies()).find(c=>c.name==='__Host-smartcore-session').value,opaque);
+  await exchange('refresh-done');
   stage='one-time enrollment and consent';
   const recovery=page.getByTestId('recovery');
   await recovery.locator('input[name=currentPassword]').fill(fixture.password);
