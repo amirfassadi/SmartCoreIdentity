@@ -34,6 +34,7 @@ run_check() {
   local label=$1 budget=$2 result
   shift 2
   LOG_INDEX=$((LOG_INDEX+1))
+  printf '[RUN] %s\n' "$label"
   # Own a process group so interruption cleans this command and its test-host children only.
   setsid timeout --kill-after=10 "$budget" "$@" >"$TEMP/check-$LOG_INDEX.log" 2>&1 < /dev/null &
   CHILD=$!
@@ -98,7 +99,8 @@ else skip 'Python contract/dependency checks not available'; fi
 if [[ "$DOTNET_READY" -eq 1 ]]; then
   if run_check 'Locked Identity restore' 240 "$DOTNET_BIN" restore src/SmartCore.Identity.Api --locked-mode \
     && run_check 'Release browser host build' 240 "$DOTNET_BIN" build src/SmartCore.Identity.Bff.Host -c Release -m:1 \
-    && run_check 'Release executable-test-harness build' 240 "$DOTNET_BIN" build tests/SmartCore.Identity.Tests -c Release -m:1; then BUILD_READY=1; fi
+    && run_check 'Release executable-test-harness build' 240 "$DOTNET_BIN" build tests/SmartCore.Identity.Tests -c Release -m:1 \
+    && run_check 'Debug API build required by existing HTTP fixtures' 240 "$DOTNET_BIN" build src/SmartCore.Identity.Api -c Debug -m:1; then BUILD_READY=1; fi
 else skip 'Backend build/config/harness prerequisites incomplete'; fi
 if run_check 'Private HTTP fixture ports are free' 15 "$PYTHON_BIN" -c 'import socket; peers=[]
 for port in (3181,5157,5171,5172,5271,5272,7443):
