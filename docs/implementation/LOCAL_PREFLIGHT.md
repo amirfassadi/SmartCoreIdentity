@@ -56,8 +56,9 @@ count does not turn skipped tests into evidence. No exit code authorizes product
 - Fixture ports are checked before any local HTTP tests. No existing listener is
   stopped. Interruption cleans only the owned command process group and container.
 
-B2 registration/OTP and B3 recovery/reset/change browser flows are not implemented
-by this runner. RELEASE_GATES.md, canonical Platform provenance, real delivery,
+B2 registration/OTP and B3 recovery/reset/change browser flows are implemented
+by the current runner; the historical B1-only evidence below does not cover them.
+RELEASE_GATES.md, canonical Platform provenance, real delivery,
 VPS configuration and operator-controlled backups remain independent requirements.
 
 Gitleaks command reference: https://github.com/gitleaks/gitleaks#usage .
