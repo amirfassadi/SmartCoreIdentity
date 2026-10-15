@@ -54,6 +54,12 @@ must cover tenant resolution and cookie isolation before publishing multiple sit
 | Initial users' country | Owner's initial market | Iran, confirmed 2026-10-11; provider selection remains open |
 | OTP channels | Agreed product policy | SMS first for real users; email remains valid; both use test inbox in development |
 
+Owner update, 2026-10-15: Kavenegar is selected but its integration/trial is
+postponed. Continue non-provider work using the persistent
+[private workspace](PRIVATE_WORKSPACE.md). No external messages are sent; the
+previous ten-message ceiling remains binding when the trial resumes. Routine
+email/mobile + account-password sign-in already exists. Stage C remains open.
+
 Release requirements and SMS ambiguity/abuse policy have one current source:
 [RELEASE_GATES.md](RELEASE_GATES.md). Dependency/tree evidence remains in
 [PR_STACK.md](PR_STACK.md). CI counts are cumulative historical evidence, not proof

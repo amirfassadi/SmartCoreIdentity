@@ -1,0 +1,29 @@
+name: Persistent private workspace (no SMS)
+on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  private-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: python -m unittest discover -s tests/private-stack -v
+      - run: python tools/private_stack.py init
+      - run: python tools/private_stack.py build
+      - run: python scripts/private-stack-smoke.py
+      - name: Stop owned database without deleting data
+        if: always()
+        run: python tools/private_stack.py db-stop

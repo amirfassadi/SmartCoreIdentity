@@ -3,6 +3,15 @@
 Status: accepted direction; implementation/evidence still required. This is the
 single current list of public-user release requirements. Historical verification
 reports describe their tested revisions and do not close these gates by themselves.
+
+Owner update, 2026-10-15: Kavenegar was selected on 2026-10-13; integration and
+the capped private trial are now postponed while non-provider work continues.
+The maximum remains ten single-part SMS total when resumed, with a durable
+cross-host/restart reservation before dispatch, ambiguous outcomes counted and no
+automatic resend/voice/fallback. None have been sent. Provider-selection text
+below describes the original selection criteria. The
+[persistent private workspace](PRIVATE_WORKSPACE.md) uses encrypted test inboxes
+only; it does not close delivery, spend or production gates.
 The development/testing-only startup boundary remains enforced. No public release,
 main merge, production/VPS change or real SMS purchase is authorized by this file.
 
