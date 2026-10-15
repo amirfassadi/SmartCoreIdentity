@@ -45,7 +45,7 @@ def run():
 
     def launch():
         process = subprocess.Popen([sys.executable, str(ROOT / 'tools/private_stack.py'), 'run'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    stdout=None, stderr=None)
         until = time.monotonic() + 180
         while time.monotonic() < until:
             if process.poll() is not None:
@@ -67,16 +67,19 @@ def run():
 
     try:
         child = launch()
+        print('Private acceptance phase: initial startup ready.', flush=True)
         token = request('/bff/csrf')[1]['requestToken']
         # Neither inbox nor raw Identity routes are available through the ingress.
         assert request('/dev/inbox/missing')[0] == 404
         assert request('/auth/login', {})[0] == 404
+        print('Private acceptance phase: diagnostic routes blocked.', flush=True)
         contact = secrets.token_hex(12) + '@example.test'
         password = secrets.token_urlsafe(24)
         flow = secrets.token_urlsafe(32)
         assert request('/bff/register', {'flowId': flow, 'email': contact,
                                        'password': password, 'displayName': 'Private workspace test'})[0] == 202
         proof = {'flowId': flow, 'code': stack.inbox('registration', contact)}
+        print('Private acceptance phase: registration requested; local inbox available.', flush=True)
         until = time.monotonic() + 30
         while True:
             status, result = request('/bff/register/verify', proof)
@@ -86,6 +89,7 @@ def run():
             assert result['status'] == 'PendingCredential'
             assert time.monotonic() < until
             time.sleep(.3)
+        print('Private acceptance phase: registration Ready.', flush=True)
         assert request('/bff/login', {'email': contact, 'password': password})[0] == 200
         token = request('/bff/csrf')[1]['requestToken']
         # Ingress alternates between the two real BFF processes.
@@ -93,12 +97,15 @@ def run():
             assert request('/bff/me', {})[0] == 200
         before = {item.name: item.value for item in cookies if item.name == '__Host-smartcore-session'}
         assert before
+        print('Private acceptance phase: login and two-host reads accepted.', flush=True)
         stop(child)
         child = None
         child = launch()
+        print('Private acceptance phase: restarted.', flush=True)
         token = request('/bff/csrf')[1]['requestToken']
         assert request('/bff/me', {})[0] == 200
         assert before == {item.name: item.value for item in cookies if item.name == '__Host-smartcore-session'}
+        print('Private acceptance phase: original session preserved.', flush=True)
         assert request('/bff/logout', {})[0] == 204
         token = request('/bff/csrf')[1]['requestToken']
         assert request('/bff/me', {})[0] == 401

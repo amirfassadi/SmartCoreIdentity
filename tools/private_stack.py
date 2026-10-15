@@ -205,7 +205,9 @@ def start():
         for port in PORTS:
             with socket.socket() as probe:
                 probe.bind(('127.0.0.1', port))
+        print('Private phase: database startup.', flush=True)
         compose(config, 'up', '-d', '--wait', '--wait-timeout', '90', 'db')
+        print('Private phase: Identity migrations.', flush=True)
         checked([DOTNET, api, '--migrate'], env=identity)
         def spawn(command, env, port, path, status):
             child = subprocess.Popen(command, env=env, cwd=ROOT, stdout=subprocess.DEVNULL,
@@ -227,11 +229,15 @@ def start():
             raise KeyboardInterrupt
         previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
         try:
+            print('Private phase: Identity startup.', flush=True)
             spawn([DOTNET, api], identity, 5157, '/health/ready', 200)
             for port in (5171, 5172):
+                print('Private phase: BFF startup.', flush=True)
                 spawn([DOTNET, host], {**bff, 'ASPNETCORE_URLS': f'http://127.0.0.1:{port}'}, port, '/health/ready', 204)
+            print('Private phase: frontend startup.', flush=True)
             spawn(['node', str(ROOT / 'web/identity/node_modules/next/dist/bin/next'), 'start', str(ROOT / 'web/identity'),
                    '--hostname', '127.0.0.1', '--port', '3181'], base_env(), 3181, '/fa', 200)
+            print('Private phase: verified TLS startup.', flush=True)
             ingress = subprocess.Popen(['node', str(ROOT / 'deploy/development/https-ingress.mjs')], cwd=ROOT,
                         env={**base_env(), 'SMARTCORE_INGRESS_ENVIRONMENT': 'Development', 'SMARTCORE_INGRESS_ORIGIN': ORIGIN,
                              'SMARTCORE_TLS_KEY': str(STATE / 'tls.key'), 'SMARTCORE_TLS_CERT': str(STATE / 'tls.crt')},
