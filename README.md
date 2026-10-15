@@ -177,7 +177,11 @@ SmartCoreIdentity does not own:
 
 ## Current Status
 
-**Status:** Registration-first documentation reconciliation / DRAFT — no implementation or generation readiness
+**Status:** Private registration/authentication/recovery/BFF implementation with
+verified Stage B browser flows. Review stack remains Draft; canonical integration,
+real delivery, operations and public deployment gates remain open. See the
+[product roadmap](docs/implementation/PRODUCT_ROADMAP.md) and
+[release gates](docs/implementation/RELEASE_GATES.md) for current scope.
 
 The Kimia implementation must remain consistent with the existing SCI documents and governing ADRs.
 

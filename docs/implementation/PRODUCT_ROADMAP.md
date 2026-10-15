@@ -51,7 +51,7 @@ must cover tenant resolution and cookie isolation before publishing multiple sit
 | --- | --- | --- |
 | Frontend framework | Owner decision; team familiarity is not a constraint | Accepted: Next.js App Router + React + TypeScript; existing ASP.NET Core BFF remains session owner |
 | Business-site domains | Initial hosting/domain plan and tenant isolation | Subdomain vs custom-domain rollout undecided |
-| Initial users' country | Owner's initial market | Iran, confirmed 2026-10-11; provider selection remains open |
+| Initial users' country | Owner's initial market | Iran, confirmed 2026-10-11; Kavenegar selected, integration postponed 2026-10-15 |
 | OTP channels | Agreed product policy | SMS first for real users; email remains valid; both use test inbox in development |
 
 Owner update, 2026-10-15: Kavenegar is selected but its integration/trial is

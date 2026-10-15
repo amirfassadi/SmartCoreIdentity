@@ -189,6 +189,15 @@ def json_request(path, data=None, key=None):
         return json.loads(response.read())
 
 
+def check_ports(ports=PORTS):
+    for port in ports:
+        with socket.socket() as probe:
+            # Like Kestrel/Node, allow the previous owned listener's TIME_WAIT
+            # sockets. An actively listening process must still be rejected.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(('127.0.0.1', port))
+
+
 def start():
     config = load()
     private(STATE / 'build.json')
@@ -202,9 +211,7 @@ def start():
         # Unix socket names are bounded by sockaddr_un; repository paths can be long.
         identity['Identity__AuthOperatorSocket'] = str(Path(runtime) / 'recovery.sock')
         # Before touching the database or starting services, refuse existing listeners.
-        for port in PORTS:
-            with socket.socket() as probe:
-                probe.bind(('127.0.0.1', port))
+        check_ports()
         print('Private phase: database startup.', flush=True)
         compose(config, 'up', '-d', '--wait', '--wait-timeout', '90', 'db')
         print('Private phase: Identity migrations.', flush=True)

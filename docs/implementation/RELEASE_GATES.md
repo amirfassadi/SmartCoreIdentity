@@ -21,7 +21,7 @@ main merge, production/VPS change or real SMS purchase is authorized by this fil
 | --- | --- | --- |
 | Canonical contract | Platform PR #11 merged first; Identity pin/provenance compared to canonical Platform schema 1.2.2; applicable OpenAPI validation passes | Platform merge/provenance open |
 | Browser account path | Same-origin BFF host and Playwright flow: registration, login, refresh, logout, reset, login with new password and replacement recovery enrollment | Private B1/B2/B3 Chromium/HTTP verified, including proven browser refresh and replacement enrollment; exact revision in BFF_BROWSER_RECOVERY.md; production acceptance remains separate |
-| OTP delivery | Real SMS adapter behind a provider-neutral interface and durable notification queue; destination-country delivery and sender/template registration verified | SMS selected first; Iran confirmed; provider undecided |
+| OTP delivery | Real SMS adapter behind a provider-neutral interface and durable notification queue; destination-country delivery and sender/template registration verified | Kavenegar selected; integration/trial postponed by owner on 2026-10-15; no messages sent |
 | SMS pumping | Allowed-country list enforced before enqueue/send; destination and trusted-subject budgets independent of Person; aggregate spend ceiling, provider hard cap and delivered alerts; concurrent-instance enforcement tested | Required before provider activation |
 | Delivery ambiguity | Durable attempt journal, explicit outcomes, safe provider idempotency/status reconciliation, duplicate/reordered webhook tests | Design below; adapter/worker pending |
 | Operational alerts | Circuit opening/probe losses, maintenance failures and account reset limits exported and delivered to an operator; escalation/runbook tested | Signals exist; delivery pending |
@@ -94,8 +94,10 @@ delivery and proof consumption remain separate facts.
 Provider selection priority: reliable idempotency or status lookup by original client
 reference is a prerequisite ahead of price/delivery ranking. Then compare delivery on
 initial-market operators, OTP routes, sender/template registration, authenticated
-receipts, spending controls and a backup with an explicit ambiguity policy. Initial market is Iran (owner-confirmed 2026-10-11); provider remains open. No
-vendor-specific adapter is selected or implemented here.
+receipts, spending controls and a backup with an explicit ambiguity policy. Initial
+market is Iran (owner-confirmed 2026-10-11). Kavenegar was selected on 2026-10-13;
+implementation/trial was postponed on 2026-10-15. No vendor-specific adapter is
+implemented here.
 
 ## Development inbox and browser acceptance
 

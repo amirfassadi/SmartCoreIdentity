@@ -2,6 +2,7 @@ import importlib.util
 import os
 from pathlib import Path
 import tempfile
+import socket
 import unittest
 from unittest.mock import patch
 
@@ -78,6 +79,20 @@ class PrivateStackChecks(unittest.TestCase):
         with self.assertRaises(RuntimeError) as error:
             stack.checked(['python', '-c', 'import sys; print("proof-value"); sys.exit(1)'])
         self.assertNotIn('proof-value', str(error.exception))
+
+    def test_restart_allows_time_wait_but_rejects_active_listener(self):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(('127.0.0.1', 0))
+            port = listener.getsockname()[1]
+            listener.listen()
+            with self.assertRaises(OSError):
+                stack.check_ports((port,))
+            with socket.create_connection(('127.0.0.1', port)) as client:
+                peer, _ = listener.accept()
+                peer.close()  # Server performs the active close and enters TIME_WAIT.
+                self.assertEqual(client.recv(1), b'')
+        stack.check_ports((port,))
 
 
 if __name__ == '__main__':
