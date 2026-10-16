@@ -1,0 +1,121 @@
+# Local preflight before VPS work
+
+`bash preflight-local.sh` runs the **implemented private B1/B2/B3** checks without VPS
+access. It uses current tracked/non-ignored untracked source, copied to a private
+temporary directory. Builds, npm installs, Python packages, caches, browser binaries,
+logs and disposable backup files live there; cleanup removes them and its owned
+PostgreSQL container. It never reads ignored .env files or accepts an existing DB.
+Remote Docker endpoints and external/public BASE_URL probes are not accepted.
+
+Prerequisites: Linux/Bash, Git, Python with venv, .NET 10 SDK, Node 24/npm, OpenSSL,
+Docker with a local Unix-socket daemon, Chromium OS dependencies and Gitleaks with
+`git`/`dir` commands (CI pins 8.28.0). The script installs no OS packages. Dependency
+package/image/browser downloads still need connectivity. `SMARTCORE_DOTNET`,
+`SMARTCORE_PYTHON` and `SMARTCORE_GITLEAKS` can select explicit executable paths.
+
+```sh
+bash preflight-local.sh                 # full isolated local B1/B2/B3 verification
+bash preflight-local.sh --static-only   # intentionally incomplete; exits 2
+BASE_URL=https://localhost:7443 LOCAL_CA_FILE=/absolute/path/local.crt \
+  bash preflight-local.sh --probe-only  # strict local TLS probe only; exits 2
+```
+
+Exit **0**: requested full local B1/B2/B3 checks passed. Exit **1**: failure. Exit **2**:
+incomplete due to any skip, including an intentionally limited mode. A zero fail
+count does not turn skipped tests into evidence. No exit code authorizes production.
+
+## Corrections to the generic template
+
+- Secrets: current tracked/untracked source and available-ref Git history are separate
+  scans. Shallow history is incomplete. Missing Gitleaks cannot be replaced by a full
+  PASS from grep. No source line, token, cookie, connection string or raw failure tail
+  is printed. Private logs are deleted. The exact four legacy refresh-UUID sample
+  occurrences in the byte-pinned archived Blueprint are allowlisted by one path **and**
+  exact literal values; no blanket documentation/test-folder exclusion is used.
+- Browser identifiers: schema/property checks recognize personId casing; prose saying
+  "do not expose personId" is not a DTO leak. Actual response isolation remains the
+  responsibility of the real B1 HTTP/Chromium tests.
+- Backend: this project uses an executable native PostgreSQL harness, not a test-SDK
+  solution. `dotnet test` is not evidence that its 303 existing controls ran.
+- Frontend: use actual `check`, `typecheck`, `build`, `smoke` scripts; nonexistent
+  `lint`/`test` commands cannot silently count as tests. All build writes are isolated.
+- Database: an owned postgres:17 container uses a random password and ephemeral
+  loopback port. Forward migrations are reapplied to the same DB. After the real
+  native harness, pg_dump/pg_restore into a second disposable DB must preserve
+  migration/person/session counts. There is no Down migration and no up/down claim.
+  This database-only local restore does not certify VPS/WAL/key-ring disaster recovery.
+- Required configuration: a healthy Testing startup is the positive control; each
+  of 11 missing BFF settings must independently reject before database/network work.
+  Production refusal is a separate control, not proof of individual variable checks.
+- HTTPS: full mode invokes the real owned two-host/TLS/Next/Chromium suites. Explicit
+  probe-only mode verifies certificate trust (no -k), exact headers and every
+  antiforgery-cookie attribute including HttpOnly, Path=/ and no Domain. Missing
+  cookies fail. Missing Origin/missing CSRF/media rejection require exact status/code;
+  400/401/404 router/business failures cannot masquerade as CSRF evidence. A CSRF
+  bootstrap alone says nothing about session-cookie attributes or account E2E.
+- Fixture ports are checked before any local HTTP tests. No existing listener is
+  stopped. Interruption cleans only the owned command process group and container.
+
+B2 registration/OTP and B3 recovery/reset/change browser flows are implemented
+by the current runner; the historical B1-only evidence below does not cover them.
+RELEASE_GATES.md, canonical Platform provenance, real delivery,
+VPS configuration and operator-controlled backups remain independent requirements.
+
+Gitleaks command reference: https://github.com/gitleaks/gitleaks#usage .
+
+## Verified execution — 2026-10-12
+
+Code `4350f1cd199e6d0b86428c87f8bc0c95b6bf6977` passed
+[Local B1 preflight run 38298164165](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164165).
+Job `114974216318` logs were inspected: **37 passed, 0 failed, 0 skipped**.
+The actual native harness, both migration invocations, disposable pg_dump/pg_restore,
+five existing HTTP smokes, two-host TLS/config guards and Chromium all completed.
+The older temporary-server readiness failure and missing Debug-build failures are
+superseded by this exact successful code revision. No raw failure logs were exposed.
+
+The three existing workflows also passed on that code:
+[backend 38298164186](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164186),
+[browser 38298164246](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164246),
+[documentary 38298164159](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38298164159).
+
+The follow-up canonicalizes a relative TMPDIR before any directory change, with a
+separate regression proving an absolute copy path and complete temporary cleanup.
+Seven focused helper/CLI tests pass. Native application behavior remains unchanged.
+Local execution where SDK/Docker are unavailable returned INCOMPLETE/2 rather than
+full PASS, even when all available static/frontend controls succeeded. These results
+do not close B2/B3, production delivery, canonical governance or VPS restore gates.
+
+## Additive B2 checks
+
+The current runner also validates the additive B2 contract and runs the isolated
+real Identity/two-host/Chromium registration journey. Both browser flags are enabled
+only inside the throwaway source copy. The historical 37-check B1 result below is
+not evidence for these additional B2 checks; their exact CI result is recorded
+after successful execution. See [B2 boundaries](BFF_BROWSER_REGISTRATION.md).
+
+## Additive B3 checks
+
+The runner now also checks the B3 contract and the real recovery browser journey.
+All three UI features are enabled only in the isolated copy. Error logs remain
+suppressed; only an enumerated test phase/type can be emitted, with a regression
+ensuring raw secret/error text cannot appear. Nine focused preflight tests pass.
+The 39-check same-tree B2 result is recorded in
+[B2 acceptance](BFF_BROWSER_REGISTRATION.md); it does not certify B3.
+
+## Verified B1/B2/B3 runner — 2026-10-12
+
+Code `f3851af966ebe36d1e49287a404db0395582f292` passed
+[run 38306669827](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38306669827).
+Job `115002803091` logs were inspected: **41 passed, 0 failed, 0 skipped**.
+The native 303-check harness, five earlier API smokes, actual two-host guards, all
+three real Chromium suites and disposable migration/reapply/dump/restore completed.
+Nine preflight regression checks pass separately. The browser B3 suite proves an
+actual browser refresh generation followed by enrollment/reset/replacement/change.
+See [complete private browser acceptance](BFF_BROWSER_RECOVERY.md).
+This supersedes prior incomplete/failing local-run results for private Stage B;
+it does not close canonical governance, production, provider or VPS restore gates.
+
+Live wire-contract failures retain route/method/status only: schema exceptions cannot
+print the one-time recovery code, antiforgery token or raw headers. The documentary
+validator/negative fixtures remain unchanged. A focused failure regression verifies
+that formatting the live exception cannot recover the rejected proof value.

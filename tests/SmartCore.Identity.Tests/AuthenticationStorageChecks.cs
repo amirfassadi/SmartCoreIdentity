@@ -19,18 +19,15 @@ internal static class AuthenticationStorageChecks
             catch(PostgresException e) when(e.SqlState==state) {return;}
             throw new Exception("Expected storage constraint "+state);
         }
-        // Check the actual PostgreSQL predicate, not only a documentation promise.
-        await using(var constraints=await db.Source.OpenConnectionAsync())
+        // Assert behavior under rollback; do not depend on generated names or expression formatting.
+        foreach(var table in new[]{"persons","credentials"})
         {
-            foreach(var table in new[]{"persons","credentials"})
-            {
-                var constraint=await constraints.One("""
-                    SELECT pg_get_expr(conbin,conrelid) AS predicate FROM pg_constraint
-                    WHERE conrelid=to_regclass(@table) AND conname=@name AND contype='c' AND convalidated
-                    """,("table",table),("name",table+"_status_check"));
-                Check(constraint is not null && constraint.Get<string>("predicate").Replace(" ","",StringComparison.Ordinal)=="(status='Active'::text)",
-                    table+" validated status CHECK permits only Active in the selected MVP");
-            }
+            foreach(var status in new[]{"Suspended","Archived","Revoked","Inactive"})
+                await Rejected("UPDATE "+table+" SET status=@status WHERE "+(table=="persons"?"id":"person_id")+"=@id",
+                    "23514",("status",status),("id",person));
+            await using var c=await db.Source.OpenConnectionAsync();
+            var row=await c.One("SELECT status FROM "+table+" WHERE "+(table=="persons"?"id":"person_id")+"=@id",("id",person));
+            Check(row is not null && row.Get<string>("status")=="Active",table+" rejects inactive writes with 23514 and rollback preserves Active");
         }
         IAuthenticationIssuanceGate gate=new PostgresAuthenticationIssuanceGate();
         await db.Migrate();

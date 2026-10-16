@@ -12,23 +12,27 @@ env.update(ASPNETCORE_ENVIRONMENT='Development',ASPNETCORE_URLS='http://127.0.0.
  Identity__MacKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__MaterialKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__AccessSigningKey=base64.b64encode(secrets.token_bytes(32)).decode(),
- Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
- Identity__DevInboxKey=secrets.token_urlsafe(32),Identity__WorkerEnabled='true',
+ Identity__RefreshReceiptKey=secrets.token_urlsafe(32),Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
+ Identity__ResetTimingDiagnostics='true',Identity__DevInboxKey=secrets.token_urlsafe(32),Identity__WorkerEnabled='true',
  Identity__PasswordChangeEnabled='true',Identity__RecoveryEnrollmentEnabled='true',Identity__AuthOperatorKey=secrets.token_urlsafe(32),
  Identity__ApplicationPort='5159',Identity__AuthOperatorSocket=operator_socket)
 dotnet=env.get('SMARTCORE_DOTNET','dotnet');project=str(root/'src/SmartCore.Identity.Api')
 subprocess.run([dotnet,'run','--project',project,'--no-build','--','--migrate'],env=env,check=True)
 opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 contract=yaml.safe_load((root/'contracts/authentication.openapi.yaml').read_text())
-bff={'X-Bff-Client-Key':env['Identity__BffClientKey'],'X-Bff-Subject':secrets.token_urlsafe(32)}
+bff={'X-Bff-Client-Key':env['Identity__BffClientKey'],'X-Bff-Subject':secrets.token_urlsafe(32),'X-Reset-Timing-Key':env['Identity__DevInboxKey']}
+last_timing={}
+test_phase="Startup"
 class UnixConnection(http.client.HTTPConnection):
  def connect(self):
   self.sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
   self.sock.settimeout(30);self.sock.connect(operator_socket)
 def call(path,body=None,headers=None,private=False):
+ global last_timing
  method='get' if body is None else 'post'
  request=urllib.request.Request('http://127.0.0.1:5159'+path,
   data=None if body is None else json.dumps(body).encode(),headers={'Content-Type':'application/json',**(headers or {})})
+ wire_started=time.perf_counter()
  if private:
   connection=UnixConnection('localhost',timeout=30)
   connection.request(method.upper(),path,body=None if body is None else json.dumps(body),headers={'Content-Type':'application/json',**(headers or {})})
@@ -36,7 +40,12 @@ def call(path,body=None,headers=None,private=False):
  else:
   try:r=opener.open(request,timeout=30)
   except urllib.error.HTTPError as e:r=e
- data=r.read();result=json.loads(data) if data else None
+ data=r.read();wire_ms=(time.perf_counter()-wire_started)*1000
+ diagnostic=r.headers.get('Server-Timing')
+ service={} if not diagnostic else {part.split(';dur=')[0].strip():float(part.split(';dur=')[1]) for part in diagnostic.split(',')}
+ last_timing={'wire_ms':round(wire_ms,3),**service}
+ if not headers or headers.get('X-Reset-Timing-Key')!=env['Identity__DevInboxKey']:assert not diagnostic
+ result=json.loads(data) if data else None
  contract_path='/dev/auth/recovery/{id}' if path.startswith('/dev/auth/recovery/') else path
  if contract_path in contract['paths']:
   definition=contract['paths'][contract_path][method]['responses'][str(r.status)]
@@ -54,6 +63,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
    except OSError:pass
    time.sleep(.1)
   else:raise RuntimeError('API did not become ready')
+  test_phase='Registration'
   email=secrets.token_hex(10)+'@example.test';password='safe recovery enrollment HTTP password';binding=secrets.token_urlsafe(32)
   status,start=call('/auth/register',dict(email=email,password=password,displayName='Recovery',bindingSecret=binding),{'Idempotency-Key':secrets.token_urlsafe(32)})
   assert status==202
@@ -65,12 +75,13 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
    status,ready=call('/auth/register/verify',verification)
    if status==200 and ready['status']=='Ready':break
   else:raise RuntimeError('Registration did not become Ready')
+  test_phase='Enrollment'
   status,login=call('/auth/login',dict(email=email,password=password),bff)
   assert status==200 and login['person']['recoveryEnrollmentRequired'] is True
   import uuid
   operation=str(uuid.uuid4());request=dict(operationId=operation,currentPassword=password,acceptLossRisk=True)
   auth={**bff,'Authorization':'Bearer '+login['session']['accessToken']}
-  assert call('/auth/recovery/enroll',request)[0]==401
+  assert call('/auth/recovery/enroll',request)[0]==403
   assert call('/auth/recovery/enroll',request,bff)[0]==401
   assert call('/auth/recovery/enroll',{**request,'acceptLossRisk':False},auth)[0]==400
   status,enrolled=call('/auth/recovery/enroll',request,auth)
@@ -80,6 +91,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   assert call('/me',headers=auth)[1]['recoveryEnrollmentRequired'] is False
   status,replacement=call('/auth/recovery/enroll',{**request,'operationId':str(uuid.uuid4())},auth)
   assert status==200 and replacement['version']==2 and replacement['recoveryCode']!=enrolled['recoveryCode']
+  test_phase='Initiation'
   reset_bff={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
   reset=dict(operationId=str(uuid.uuid4()),email=email,bindingSecret=secrets.token_urlsafe(32))
   status,pending=call('/auth/password/reset',reset,reset_bff);assert status==202
@@ -104,11 +116,12 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
    label:{'n':len(values),'median_ms':round(__import__('statistics').median(values),2),'max_ms':round(max(values),2)}
    for label,values in timings.items()}))
   assert call('/me',headers=auth)[0]==200
+  test_phase='Completion'
   complete_bff={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
   new_password='new password dual factor HTTP fixture'
   complete=dict(operationId=str(uuid.uuid4()),challengeId=pending['challengeId'],bindingSecret=reset['bindingSecret'],
    code=otp['code'],recoveryCode='  '+replacement['recoveryCode'].lower()+'  ',newPassword=new_password)
-  assert call('/auth/password/reset/complete',complete)[0]==401
+  assert call('/auth/password/reset/complete',complete)[0]==403
   wrong={**complete,'recoveryCode':'0'*32}
   assert call('/auth/password/reset/complete',wrong,complete_bff)[0]==401
   assert call('/me',headers=auth)[0]==200
@@ -130,6 +143,15 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   status,new_factor=call('/auth/recovery/enroll',dict(operationId=str(uuid.uuid4()),currentPassword=new_password,acceptLossRisk=True),new_auth)
   assert status==200 and new_factor['version']==3 and len(new_factor['recoveryCode'])==32
   assert call('/me',headers=new_auth)[1]['recoveryEnrollmentRequired'] is False
+  # Actual reset failures must expose no service timings without the diagnostic key.
+  diagnostic_probe={**complete,'challengeId':unknown['challengeId'],'recoveryCode':'0'*32}
+  no_diagnostic={k:v for k,v in bff.items() if k!='X-Reset-Timing-Key'}
+  no_diagnostic['X-Bff-Subject']=secrets.token_urlsafe(32)
+  assert call('/auth/password/reset/complete',diagnostic_probe,no_diagnostic)[0]==401
+  assert 'reset-total' not in last_timing
+  assert call('/auth/password/reset/complete',diagnostic_probe,{**no_diagnostic,'X-Bff-Subject':secrets.token_urlsafe(32),'X-Reset-Timing-Key':'incorrect'})[0]==401
+  assert 'reset-total' not in last_timing
+  diagnostic_timings={'real':[],'decoy':[],'suppressed':[]}
   failure_timings={'real':[],'decoy':[],'suppressed':[]}
   for _ in range(12):
    for label,ch in [('real',pending),('decoy',unknown),('suppressed',suppressed)]:
@@ -138,13 +160,17 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
     headers={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
     assert call('/auth/password/reset/complete',payload,headers)[0]==401
     failure_timings[label].append((time.perf_counter()-before)*1000)
+    diagnostic_timings[label].append({**last_timing,'whole_call_ms':round(failure_timings[label][-1],3)})
   def percentile(values,fraction):return sorted(values)[__import__('math').ceil(len(values)*fraction)-1]
   summaries={label:{'n':len(values),'p50_ms':round(percentile(values,.5),2),'p90_ms':round(percentile(values,.9),2),'max_ms':round(max(values),2)}
    for label,values in failure_timings.items()}
+  print('RESET TIMING COMPLETION DIAGNOSTICS (authorized loopback test only): '+json.dumps(diagnostic_timings))
+  assert all('reset-total' in sample for samples in diagnostic_timings.values() for sample in samples)
   assert all(min(values)>=190 and max(values)<350 for values in failure_timings.values()),summaries
   assert max(v['p50_ms'] for v in summaries.values())-min(v['p50_ms'] for v in summaries.values())<35,summaries
   assert max(v['p90_ms'] for v in summaries.values())-min(v['p90_ms'] for v in summaries.values())<60,summaries
   print('RESET TIMING HTTP COMPLETION PASS (12/group, controlled CI, not load certification): '+json.dumps(summaries))
+  initiation_diagnostics={'real_replay':[],'decoy_new':[],'suppressed_new':[]}
   initiation_timings={'real_replay':[],'decoy_new':[],'suppressed_new':[]}
   for _ in range(12):
    for label,body in [('real_replay',reset),
@@ -154,13 +180,21 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
     headers={**bff,'X-Bff-Subject':secrets.token_urlsafe(32)}
     assert call('/auth/password/reset',body,headers)[0]==202
     initiation_timings[label].append((time.perf_counter()-before)*1000)
+    initiation_diagnostics[label].append({**last_timing,'whole_call_ms':round(initiation_timings[label][-1],3)})
   start_summaries={label:{'n':len(values),'p50_ms':round(percentile(values,.5),2),'p90_ms':round(percentile(values,.9),2),'max_ms':round(max(values),2)}
    for label,values in initiation_timings.items()}
+  test_phase='TimingInitiation'
+  print('RESET TIMING INITIATION DIAGNOSTICS (authorized loopback test only): '+json.dumps(initiation_diagnostics))
+  assert all('reset-total' in sample for samples in initiation_diagnostics.values() for sample in samples)
   assert all(min(values)>=190 and max(values)<350 for values in initiation_timings.values()),start_summaries
   assert max(v['p50_ms'] for v in start_summaries.values())-min(v['p50_ms'] for v in start_summaries.values())<35,start_summaries
   assert max(v['p90_ms'] for v in start_summaries.values())-min(v['p90_ms'] for v in start_summaries.values())<60,start_summaries
   print('RESET TIMING HTTP INITIATION PASS (12/group; fresh eligible path additionally checked in service acceptance): '+json.dumps(start_summaries))
   print('HTTP RECOVERY PASS: one-time enrollment, uniform initiation, two-factor reset, receipt recovery, old Session denial, bounded replay, fresh-login replacement and pinned response schemas')
+ except Exception as failure:
+  kind=type(failure).__name__ if type(failure).__name__ in ('AssertionError','RuntimeError','OSError') else 'Exception'
+  print('SAFE-TEST-FAIL phase='+test_phase+' type='+kind)
+  raise
  finally:
   process.terminate()
   try:process.wait(timeout=10)

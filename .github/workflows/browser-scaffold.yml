@@ -1,0 +1,75 @@
+name: Browser B1+B2+B3 acceptance
+on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  next-shell:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/identity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/identity/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run smoke
+      - run: node ../../tests/ingress/https-ingress.test.mjs
+  two-host-infrastructure:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: bff_test
+          POSTGRES_PASSWORD: test_only_bff_password
+          POSTGRES_DB: bff_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bff_test -d bff_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: dotnet restore src/SmartCore.Identity.Api --locked-mode
+      - run: dotnet build src/SmartCore.Identity.Bff.Host -c Release -m:1
+      - run: dotnet build tests/SmartCore.Identity.Tests -c Release -m:1
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python scripts/bff-host-smoke.py
+        env:
+          ConnectionStrings__Bff: Host=localhost;Database=bff_test;Username=bff_test;Password=test_only_bff_password
+      - run: python tools/generate_bff_browser_client.py --check
+      - run: npm ci --ignore-scripts --prefix web/identity
+      - run: npm run build --prefix web/identity
+        env:
+          NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED: 'true'
+          NEXT_PUBLIC_BFF_REGISTRATION_ENABLED: 'true'
+          NEXT_PUBLIC_BFF_RECOVERY_ENABLED: 'true'
+      - run: npm ci --ignore-scripts --prefix web/identity/e2e
+      - run: npx --prefix web/identity/e2e playwright install --with-deps chromium
+      - run: python scripts/bff-account-smoke.py
+        env:
+          SMARTCORE_BROWSER_E2E: 'yes'
+          ConnectionStrings__Bff: Host=localhost;Database=bff_test;Username=bff_test;Password=test_only_bff_password
+      - run: python scripts/bff-registration-smoke.py
+        env:
+          SMARTCORE_BROWSER_E2E: 'yes'
+          ConnectionStrings__Bff: Host=localhost;Database=bff_test;Username=bff_test;Password=test_only_bff_password
+      - run: python scripts/bff-recovery-smoke.py
+        env:
+          SMARTCORE_BROWSER_E2E: 'yes'
+          ConnectionStrings__Bff: Host=localhost;Database=bff_test;Username=bff_test;Password=test_only_bff_password

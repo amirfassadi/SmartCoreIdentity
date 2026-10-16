@@ -17,6 +17,7 @@ public sealed class ApiError(int status, string code) : Exception(code)
     public int Status { get; } = status;
     public string Code { get; } = code;
     public string? NextAction { get; init; }
+    public int? RetryAfterSeconds { get; init; }
 }
 
 public static class Input
