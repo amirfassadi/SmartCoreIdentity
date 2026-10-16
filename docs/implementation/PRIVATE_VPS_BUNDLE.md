@@ -90,8 +90,9 @@ production migration/runtime privilege separation is still a release requirement
 The services bind only `127.0.0.1`: API 5157, BFF 5171, Next 3181 and HTTPS 7443.
 Existing listeners are rejected before migrations. Ports 80/443/5433 are unused by
 this bundle; the existing PostgreSQL 17 on 5432 is shared only through a new database.
-The runner does not start or stop that PostgreSQL cluster. Ctrl+C stops only owned
-app process groups. The encrypted persistent key ring and keys remain under
+The runner does not start or stop that PostgreSQL cluster. Ctrl+C or an SSH hangup
+stops only owned app process groups; the restart acceptance sends an actual SIGHUP.
+The encrypted persistent key ring and keys remain under
 `dev-secrets/private-stack`; preserve them with the database for any later recovery.
 
 From the client machine:

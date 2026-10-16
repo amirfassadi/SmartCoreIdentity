@@ -243,7 +243,7 @@ def serve(config, identity, bff, api_command, host_command, next_command,
             raise TimeoutError('Private readiness timed out')
         def stop(_signum, _frame):
             raise KeyboardInterrupt
-        previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
+        previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
         try:
             print('Private phase: Identity startup.', flush=True)
             spawn(api_command, identity, 5157, '/health/ready', 200)

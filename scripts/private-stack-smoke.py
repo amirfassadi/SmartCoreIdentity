@@ -66,8 +66,8 @@ def run():
         process.wait(timeout=60)
         raise AssertionError('Private runner readiness deadline')
 
-    def stop(process):
-        process.send_signal(signal.SIGTERM)
+    def stop(process, requested_signal=signal.SIGTERM):
+        process.send_signal(requested_signal)
         if process.wait(timeout=60) != 0:
             raise AssertionError('Private runner did not stop cleanly')
 
@@ -106,7 +106,9 @@ def run():
         assert before
         peers = 'single-host reads' if BUNDLE else 'two-host reads'
         print('Private acceptance phase: login and ' + peers + ' accepted.', flush=True)
-        stop(child)
+        # An SSH hangup must clean owned process groups, release the lock and
+        # allow the same persistent workspace/session to resume immediately.
+        stop(child, signal.SIGHUP)
         child = None
         child = launch()
         print('Private acceptance phase: restarted.', flush=True)
