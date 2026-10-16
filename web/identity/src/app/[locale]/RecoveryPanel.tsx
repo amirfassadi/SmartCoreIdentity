@@ -1,0 +1,67 @@
+'use client';
+import {useTranslations} from 'next-intl';
+import {useEffect, useRef, useState} from 'react';
+import {BrowserError, post} from '@/lib/bff/client';
+import {newFlow} from '@/lib/bff/flow';
+const input='rounded-lg border border-slate-300 px-3 py-2';
+const button='rounded-lg bg-teal-800 px-4 py-3 text-white disabled:opacity-50';
+export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {onAccepted:()=>void,onEnrolled:()=>void,onSessionLost:()=>void}) {
+  const t=useTranslations('Recovery');
+  const [mode,setMode]=useState<'enroll'|'change'>('enroll');
+  const [code,setCode]=useState<string>();
+  const [receipt,setReceipt]=useState('');
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [until,setUntil]=useState(0);
+  const [remaining,setRemaining]=useState(0);
+  const flow=useRef<string | undefined>(undefined);
+  const lock=useRef(false);const active=useRef(true);
+  useEffect(()=>{
+    active.current=true;
+    const hidden=()=>{if(document.hidden){setCode(undefined);setReceipt(value=>value==='Issued'?'Hidden':value);}};
+    document.addEventListener('visibilitychange',hidden);
+    return()=>{active.current=false;flow.current=undefined;document.removeEventListener('visibilitychange',hidden);};
+  },[]);
+  useEffect(()=>{const update=()=>setRemaining(Math.max(0,Math.ceil((until-Date.now())/1000)));update();const timer=setInterval(update,1000);return()=>clearInterval(timer);},[until]);
+  async function submit(event:React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();if(lock.current || remaining)return;
+    const form=event.currentTarget;const data=new FormData(form);lock.current=true;setBusy(true);setError('');
+    try {
+      flow.current ??= newFlow();const flowId=flow.current;
+      if(mode==='enroll') {
+        if(data.get('acceptLossRisk')!=='on')throw new BrowserError('VALIDATION_FAILED');
+        const result=await post('/bff/recovery/enroll',{flowId,currentPassword:String(data.get('currentPassword')??''),acceptLossRisk:true});
+        if(!active.current)return;form.reset();setReceipt(result.status);setCode(result.status==='Issued'?result.recoveryCode:undefined);
+      } else {
+        await post('/bff/password/change',{flowId,currentPassword:String(data.get('currentPassword')??''),newPassword:String(data.get('newPassword')??'')});
+        if(!active.current)return;form.reset();setCode(undefined);onAccepted();
+      }
+    } catch(failure) {
+      if(active.current){if(failure instanceof BrowserError && failure.code==='REAUTHENTICATION_REQUIRED'){setCode(undefined);onSessionLost();return;}setError(failure instanceof BrowserError?failure.code:'BFF_UNAVAILABLE');
+        if(failure instanceof BrowserError && failure.retryAfterSeconds)setUntil(Date.now()+failure.retryAfterSeconds*1000);}
+    } finally {lock.current=false;if(active.current)setBusy(false);}
+  }
+  function choose(value:'enroll'|'change') {if(busy || remaining || code)return;flow.current=undefined;setMode(value);setReceipt('');setError('');}
+  const known=['VALIDATION_FAILED','CREDENTIALS_REJECTED','REAUTHENTICATION_REQUIRED','CSRF_REJECTED','ORIGIN_REJECTED','IDEMPOTENCY_CONFLICT','RECOVERY_UNAVAILABLE','RATE_LIMITED','BFF_BUSY','BFF_UNAVAILABLE'];
+  return <section data-testid="recovery" className="mt-6 grid gap-4 border-t border-slate-200 pt-6" aria-busy={busy}>
+    <div className="flex flex-wrap gap-3">
+      <button type="button" className={input} disabled={busy || remaining>0 || !!code} onClick={()=>choose('enroll')}>{t('enroll')}</button>
+      <button type="button" className={input} disabled={busy || remaining>0 || !!code} onClick={()=>choose('change')}>{t('change')}</button>
+    </div>
+    {code ? <div role="region" aria-label={t('oneTime')} className="grid gap-4">
+      <p>{t('oneTime')}</p><p data-testid="recovery-code" dir="ltr" className="break-all rounded-lg border border-slate-300 p-3 font-mono">{code}</p>
+      <p>{t('keepCode')}</p>
+      <button type="button" className={button} onClick={()=>{setCode(undefined);setReceipt('Saved');onEnrolled();}}>{t('saved')}</button>
+    </div> : receipt ? <div className="grid gap-3">
+      <p role="status">{t(`receipts.${receipt}`)}</p>
+      <button type="button" className={input} disabled={busy || remaining>0} onClick={()=>choose('enroll')}>{t('replace')}</button>
+    </div> : <form key={mode} onSubmit={submit} className="grid gap-4">
+      <h3 className="font-semibold">{t(mode)}</h3>
+      <label className="grid gap-2">{t('currentPassword')}<input name="currentPassword" type="password" autoComplete="current-password" required maxLength={128} className={input}/></label>
+      {mode==='enroll' ? <label className="flex items-start gap-3"><input name="acceptLossRisk" type="checkbox" required className="mt-1"/>{t('consent')}</label> : <label className="grid gap-2">{t('newPassword')}<input name="newPassword" type="password" autoComplete="new-password" required minLength={15} maxLength={128} className={input}/></label>}
+      <button type="submit" className={button} disabled={busy || remaining>0}>{busy?t('waiting'):t(mode==='enroll'?'issue':'submitChange')}</button>
+    </form>}
+    {error && <p role="alert" className="text-sm text-red-800">{t(`errors.${known.includes(error)?error:'UNKNOWN'}`)}</p>}
+    {remaining>0 && <p role="status">{t('retry',{seconds:remaining})}</p>}
+  </section>;
+}

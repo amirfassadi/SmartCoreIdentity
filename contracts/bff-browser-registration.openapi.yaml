@@ -1,0 +1,555 @@
+openapi: 3.1.0
+info:
+  title: SmartCore browser BFF — private B1+B2 candidate
+  version: 0.2.0
+  description: Additive extension composed by tools/bff_browser_contract.py with bff-browser.openapi.yaml.
+    B1 routes/components unchanged. Not production approval.
+x-extends: bff-browser.openapi.yaml
+paths:
+  /bff/register:
+    post:
+      operationId: browserRegistrationStart
+      x-enabled-setting: Bff:RegistrationEnabled
+      description: Disabled routes return router 404. Explicit opt-in in Development/Testing
+        only. Same ordered B1 transport/CSRF guards; anonymous only. No automatic
+        replay. Each tab sends its own flowId; a mismatched shared cookie is rejected
+        before Identity dispatch. Proof, internal IDs and passwords are never stored
+        in JS storage or returned. Completion never changes a Ready credential; credentialOutcome
+        ExistingWinner requires independent sign-in with the winning password.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationStartRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RegistrationValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RegistrationConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RegistrationRate429'
+        '503':
+          $ref: '#/components/responses/CsrfUnavailable503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '202':
+          description: Explicit private registration result. Never sets an authentication
+            session.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationPending'
+              examples: {}
+          x-cookie-actions:
+            __Host-smartcore-registration: set
+  /bff/register/verify:
+    post:
+      operationId: browserRegistrationVerify
+      x-enabled-setting: Bff:RegistrationEnabled
+      description: Disabled routes return router 404. Explicit opt-in in Development/Testing
+        only. Same ordered B1 transport/CSRF guards; anonymous only. No automatic
+        replay. Each tab sends its own flowId; a mismatched shared cookie is rejected
+        before Identity dispatch. Proof, internal IDs and passwords are never stored
+        in JS storage or returned. Completion never changes a Ready credential; credentialOutcome
+        ExistingWinner requires independent sign-in with the winning password.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+        registrationCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationProofRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RegistrationValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RegistrationConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RegistrationRate429'
+        '503':
+          $ref: '#/components/responses/CsrfUnavailable503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '200':
+          description: Explicit private registration result. Never sets an authentication
+            session.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationVerified'
+              examples: {}
+  /bff/register/resend:
+    post:
+      operationId: browserRegistrationResend
+      x-enabled-setting: Bff:RegistrationEnabled
+      description: Disabled routes return router 404. Explicit opt-in in Development/Testing
+        only. Same ordered B1 transport/CSRF guards; anonymous only. No automatic
+        replay. Each tab sends its own flowId; a mismatched shared cookie is rejected
+        before Identity dispatch. Proof, internal IDs and passwords are never stored
+        in JS storage or returned. Completion never changes a Ready credential; credentialOutcome
+        ExistingWinner requires independent sign-in with the winning password.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+        registrationCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationFlowRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RegistrationValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RegistrationConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RegistrationRate429'
+        '503':
+          $ref: '#/components/responses/CsrfUnavailable503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '202':
+          description: Explicit private registration result. Never sets an authentication
+            session.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationAccepted'
+              examples: {}
+  /bff/register/setup:
+    post:
+      operationId: browserRegistrationSetup
+      x-enabled-setting: Bff:RegistrationEnabled
+      description: Disabled routes return router 404. Explicit opt-in in Development/Testing
+        only. Same ordered B1 transport/CSRF guards; anonymous only. No automatic
+        replay. Each tab sends its own flowId; a mismatched shared cookie is rejected
+        before Identity dispatch. Proof, internal IDs and passwords are never stored
+        in JS storage or returned. Completion never changes a Ready credential; credentialOutcome
+        ExistingWinner requires independent sign-in with the winning password.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+        registrationCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationProofRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RegistrationValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RegistrationConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RegistrationRate429'
+        '503':
+          $ref: '#/components/responses/CsrfUnavailable503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '202':
+          description: Explicit private registration result. Never sets an authentication
+            session.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationSetupPending'
+              examples: {}
+          x-cookie-actions:
+            __Host-smartcore-registration: set
+  /bff/register/complete:
+    post:
+      operationId: browserRegistrationComplete
+      x-enabled-setting: Bff:RegistrationEnabled
+      description: Disabled routes return router 404. Explicit opt-in in Development/Testing
+        only. Same ordered B1 transport/CSRF guards; anonymous only. No automatic
+        replay. Each tab sends its own flowId; a mismatched shared cookie is rejected
+        before Identity dispatch. Proof, internal IDs and passwords are never stored
+        in JS storage or returned. Completion never changes a Ready credential; credentialOutcome
+        ExistingWinner requires independent sign-in with the winning password.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/FetchSite'
+      security:
+      - antiforgeryCookie: []
+        csrfHeader: []
+        registrationCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationCompleteRequest'
+            examples: {}
+      responses:
+        '400':
+          $ref: '#/components/responses/RegistrationValidation400'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/RegistrationConflict409'
+        '413':
+          $ref: '#/components/responses/TooLargeError'
+        '415':
+          $ref: '#/components/responses/MediaTypeError'
+        '429':
+          $ref: '#/components/responses/RegistrationRate429'
+        '503':
+          $ref: '#/components/responses/CsrfUnavailable503'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/RouterFallback'
+        '200':
+          description: Explicit private registration result. Never sets an authentication
+            session.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationCompleted'
+              examples: {}
+components:
+  securitySchemes:
+    registrationCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-smartcore-registration
+      description: Data Protection authenticated/encrypted proof context. Secure,
+        HttpOnly, SameSite=Lax, Path=/, no Domain. Absolute upstream proof expiry,
+        at most 11 minutes from issuance; no sliding lifetime. Not a login session.
+        Reload loses memory flowId and requires restarting.
+  headers:
+    RegistrationRetryAfter:
+      description: Required decimal seconds equal body. Fixed-window transport 60
+        seconds; contact limit 3600 seconds. No automatic command retry.
+      x-required: true
+      schema:
+        type: string
+        pattern: ^(?:[1-9][0-9]{0,2}|[12][0-9]{3}|3[0-5][0-9]{2}|3600)$
+  schemas:
+    RegistrationStartRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - password
+      - flowId
+      - displayName
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          format: email
+        mobile:
+          type: string
+          minLength: 7
+          maxLength: 32
+          pattern: ^[+0-9۰-۹٠-٩ ()-]+$
+          description: 'Iran default normalization: trim approved separators, normalize
+            Persian/Arabic digits; accept +98/0098/09 then canonical E.164 before
+            Identity and budgets. Password unchanged.'
+        password:
+          type: string
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+          description: Unmodified password. Identity login accepts 1..128 UTF-16 code
+            units (registration accepts 15..128); JSON Schema maxLength also bounds
+            Unicode code points. Host must enforce the UTF-16 limit, including supplementary
+            characters.
+          x-max-utf16-code-units: 128
+        flowId: &id001
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: 32 random bytes generated by Web Crypto; per-tab correlation
+            and explicit retry key only. Not Identity authority; memory only.
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: \S
+      oneOf:
+      - required:
+        - email
+        not:
+          required:
+          - mobile
+      - required:
+        - mobile
+        not:
+          required:
+          - email
+    RegistrationFlowRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - flowId
+      properties:
+        flowId: *id001
+    RegistrationProofRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - flowId
+      - code
+      properties:
+        flowId: *id001
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          writeOnly: true
+    RegistrationCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - flowId
+      - code
+      - newPassword
+      properties:
+        flowId:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: 32 random bytes generated by Web Crypto; per-tab correlation
+            and explicit retry key only. Not Identity authority; memory only.
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          writeOnly: true
+        newPassword:
+          type: string
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+    RegistrationPending:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - expiresAt
+      - resendAfterSeconds
+      properties:
+        status:
+          type: string
+          const: AwaitingVerification
+        expiresAt:
+          type: string
+          format: date-time
+        resendAfterSeconds:
+          type: integer
+          const: 60
+    RegistrationAccepted:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - resendAfterSeconds
+      properties:
+        status:
+          type: string
+          const: Accepted
+        resendAfterSeconds:
+          type: integer
+          const: 60
+    RegistrationSetupPending:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - expiresAt
+      properties:
+        status:
+          type: string
+          const: AwaitingSetup
+        expiresAt:
+          type: string
+          format: date-time
+    RegistrationVerified:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - PendingCredential
+          - Ready
+          - SetupRequired
+          - SignInRequired
+    RegistrationCompleted:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - credentialOutcome
+      properties:
+        status:
+          type: string
+          enum:
+          - PendingCredential
+          - Ready
+        credentialOutcome:
+          type: string
+          enum:
+          - CandidateSelected
+          - ExistingWinner
+          - Undetermined
+      allOf:
+      - if:
+          properties:
+            status:
+              const: Ready
+        then:
+          properties:
+            credentialOutcome:
+              enum:
+              - CandidateSelected
+              - ExistingWinner
+    RegistrationValidationError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - VALIDATION_FAILED
+          - VERIFICATION_FAILED
+          - REGISTRATION_FLOW_EXPIRED
+    RegistrationConflictError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - IDEMPOTENCY_CONFLICT
+          - SESSION_ALREADY_ACTIVE
+    RegistrationRateError:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - retryAfterSeconds
+      properties:
+        code:
+          type: string
+          const: RATE_LIMITED
+        retryAfterSeconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+  responses:
+    RegistrationValidation400:
+      description: Invalid DTO, proof, expired or mismatched browser flow; no cookie
+        mutation.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RegistrationValidationError'
+          examples: {}
+    RegistrationConflict409:
+      description: Explicit retry conflicts or active authenticated session; preserve
+        cookies.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RegistrationConflictError'
+          examples: {}
+    RegistrationRate429:
+      description: Exact upstream window; never clamp a contact-hour budget to one
+        minute.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        Retry-After:
+          $ref: '#/components/headers/RegistrationRetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RegistrationRateError'
+          examples: {}

@@ -18,3 +18,574 @@ The harness simulates interruption by stopping between committed stages and resu
 `contracts/events.input.schema.json` is a byte-preserved test input from Platform `240151e25c5d9f67a58a6f4eea729a667934cc2b`; it is not a new approval of every event. The implemented public subset is `contracts/registration.openapi.yaml`. The broader upstream proposals and archived uploaded Blueprint are preserved separately.
 
 Public deployment remains disabled. See [baseline](BASELINE.md) for exact remaining capabilities and review gates.
+
+## Recovered baseline and setup revision — 2026-10-10
+
+The recovered baseline was published unchanged in GitHub commit b4e1407 (source 770486d). [Native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38049944311) completed successfully, including the original C# harness, event checks and HTTP smoke. This is new native evidence for that baseline, not for changes after it.
+
+Setup/completion revision local evidence: .NET SDK 10.0.401, Release and Debug builds with zero warnings/errors; **37 C# checks passed** against PGlite 0.5.8 / pglite-socket 0.2.11. **33 emitted events** passed the pinned Platform schema. Existing registration HTTP smoke and new setup HTTP smoke passed with OpenAPI response validation; OpenAPI 0.2.0 passed the spec validator.
+
+New cases cover separate setup-code purpose, protected binding, challenge replay without delivery/expiry extension, existing automatic winner, automatic/setup concurrency, identical completion concurrency, exhausted attempts, changed candidate replay, expired proof disposal, injected Credential transaction failure and worker completion of accepted material after proof expiry. HTTP cases explicitly reject null/unknown fields and missing idempotency headers. Runtime rejection of malformed input is verified, separately from resolving the compiler's nullable-input error.
+
+The first native PostgreSQL 17 run for this revision [failed](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38050872751) in the automatic/setup concurrency case with SQLSTATE 40P01. Setup completion held a challenge row before taking its registration foreign-key lock, while provisioning held the registration row before clearing challenge material. Completion now acquires the same per-registration Credential advisory guard before locking its challenge. This preserves separate acceptance and Credential transactions while imposing one lock order. The existing automatic/setup race is the regression case; a successful native rerun must be recorded before claiming this revision passes. PGlite multiplexing remains preliminary concurrency evidence.
+
+Formal administrative recovery, OS-kill/network partition/restore tests, provider delivery, login/Session/password reset and production release remain outside this revision's PASS claims.
+
+### Native regression result
+
+GitHub commit `c49e3ee776565c2e2e9adcae2e47ae417c67cf8e` includes the lock-order fix. [PR-triggered PostgreSQL 17 run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38051247469) completed successfully: **37 C# checks**, **33 emitted events** validated against the pinned Platform schema, original HTTP smoke and setup HTTP smoke, and zero-warning/error builds. The automatic/setup and identical-completion concurrency cases both passed under native PostgreSQL. Documentary candidate checks also passed on this commit. This closes the observed 40P01 regression; it does not broaden the failure/concurrency coverage beyond the executable cases.
+
+## Owner-selected A: authentication storage/gate evidence — 2026-10-10
+
+At Amir's explicit design disposition, A retains separate Credential commits; B requires evidence and a separate ADR. Storage code commit `f0969b7f36bc57d924e986b0dfed3589981b3455` adds migration 003 and `IAuthenticationIssuanceGate`, with no new HTTP authentication/reset route. [Native PostgreSQL 17 PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38052874393) completed successfully: **54 C# checks** (37 registration/setup + 17 storage/gate), **33 public event fixtures**, both existing HTTP smokes, locked dependency restore and zero-warning/error builds. Documentary candidate checks also passed.
+
+New executable cases cover migration replay, gate initialization/rollback, competing Current generations, family/Session deadline binding, wrong-Session internal event attribution, immutable absolute and recognition deadlines, consumed predecessor finality, monotonic family generation and Person epoch, persistent blocked state, unresolved-fence release rejection, terminal closure, reconciled-epoch matching and concurrent gate writers advancing distinct epochs without a lost update.
+
+Mutation admission and reconciliation in these tests use **internal preverified fixtures**, not real password/reset proof or actual Credential replacement. Native gate serialization is evidence for this storage adapter; it does not certify cross-store authentication protocol or token issuance. Login/refresh/logout/self endpoints, actual proof-gated mutation, scheduled password reconciliation, restricted operator status, BFF integration, key rotation and sensitive online endpoint enforcement remain future runtime work. Zero replay grace is recorded policy; token-reuse enforcement is not yet an implemented endpoint. General access still has the selected bounded residual lifetime.
+
+## Development authentication and evidence immutability — 2026-10-10
+
+Runtime commit `425fdc30b7209e609659bc0b6d72fccc8fb4eb85` implements opt-in authenticated test-BFF login/self/refresh/logout and forward migration 004. [PostgreSQL 17 PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38054388050) passed **74 C# checks** (37 registration/setup, 21 storage/gate, 16 authentication), **59 emitted public event fixtures**, locked restore, zero-warning/error builds, documentary checks and all three real HTTP smokes. Unlike the prior storage-only evidence, this revision verifies endpoint rotation/reuse enforcement and online self eligibility. Added closure/consumption-field mutation regressions passed.
+
+Authentication cases include Pending denial, uniform unknown/wrong-password errors, bounded signed access, invalid signature/signing key/client, wrong-client and forged-refresh nonrevocation, zero-grace consumed replay, measured reuse latency, concurrent same-generation reuse, logout replay, exact access/idle/absolute expiry, foreground/background idle behavior and epoch/fence eligibility. Internal mutation fixtures still do not replace Credential, activate a public reset or perform actual scheduled/operator recovery. Those paths and production BFF remain unimplemented, with public onboarding disabled.
+
+The first local authentication run found a fixture dependency on pre-existing Pending records; the fixture now creates its own verified Pending registration. The local event checker also caught an extra SessionReference on Session events; only LoginSucceeded's closed schema admits that field. It was corrected before the successful native run above. No failing fixture/event run is counted as PASS.
+
+Two follow-up executable cases add logout/refresh concurrency and access-deadline clipping close to Session expiry. Commit `ae40de8db83c6eee0fadf791dd679b770bf6126b` passed the [final PostgreSQL 17 PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38054593904): **76 checks** (37 registration/setup, 21 storage/gate, 18 authentication), **62 public event fixtures**, all three HTTP smokes, locked restore, zero-warning/error builds and documentary checks. Runtime code is unchanged from the earlier successful authentication revision. Local PGlite also passed 76 checks and 62 event fixtures; it remains preliminary concurrency evidence. This final documentation-only update records those outcomes.
+
+## Latest documentation head independently verified
+
+Commit `37ed79c709a0a9eb5c594996dfac6e89405e5d34` changed only VERIFICATION.md. Its own [PostgreSQL 17 PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38054833309) completed successfully. Job `114221038471` logs explicitly contain `RESULT: 76 checks passed. Backend: PostgreSQL 17`, `PASS: 62 emitted events match pinned Platform schema`, and original registration, setup and authentication HTTP PASS lines. Locked restore and both builds passed; [documentary run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38054833337) also succeeded. This independently checks the documentation head rather than assuming the earlier ae40de8 run applies.
+
+## Password-change recovery candidate
+
+Commit `0a451bedfa1a417a6a84bc0a52a0bf7bec028b47` implements migration 005, authenticated development password change, the independent Credential receipt adapter, scheduled reconciliation and the restricted development operator adapter. Its [PostgreSQL 17 PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38058478681) passed **94 checks** (the prior 76 plus 18 actual password-change/recovery checks), **92 emitted events** validated against the pinned Platform schema, locked restore, zero-warning/error Release and Debug builds and all **four HTTP smokes** (registration, setup, authentication, password change). [Documentary checks](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38058478817) also passed. Job `114231705908` logs were read directly; these counts are not inferred from configured tests.
+
+New cases exercise invalid policy/proof without fencing, identical concurrent admissions, all-Session revocation, a deterministically paused old-password login crossing actual replacement/reconciliation, restart from admitted state, lost Credential result and receipt replay after later changes, immutable receipt, an injected Credential transaction failure at attempt eight, authenticated operator redrive, 24-hour material expiry, terminal not-applied reconciliation with a stale-worker retry, honoring an Applied receipt during operator resolution, transactional operator audit and a real password-change/refresh race. The HTTP password smoke checks BFF versus operator-key isolation and malformed/null/unknown proof input, policy before Session closure, a real scheduled worker, replacement login, old Session/refresh denial and exact accepted-request replay.
+
+These are durable-boundary simulations using real transactions and newly instantiated coordinators, not OS-kill, network partition, restore or a production authorization audit. Local SDK/database runtime are unavailable in this resumed environment; Python syntax, YAML parsing and new relative links were checked locally, while native CI supplied compilation/runtime evidence. Authentication rate-budget and eligibility-transition requirements remain documented conditions, not implemented production controls. Reset proof/delivery/completion and reassigned-number recovery remain absent; real-user onboarding remains disabled.
+
+### Access-expiry admission regression
+
+Runtime commit `da2031a4cb494205078fddfdfcbe5e6b73fd3dcc` additionally revalidates access JWT lifetime under the issuance gate after KDF/lock wait. A deterministic paused-admission test advances the clock to access expiry and proves no intent or epoch advance occurs. Its own [PostgreSQL 17 PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38058787590) passed **95 checks**, **94 emitted events**, all four HTTP smokes, locked restore and zero-warning/error builds; [documentary checks](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38058787566) passed. Job `114232607657` logs were inspected directly. The prior evidence-only head `71b8f0378b98fa5c8c0ab710e7aad99669fe7b2d` also passed its own [94-check PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38058672166). This subsequent update changes only this verification record; runtime remains exactly the verified da2031a4 revision.
+
+## Authentication admission / worker-hardening candidate
+
+Runtime commit `e987808a10915992b001a246bd75225209d6dab0` adds migration 006 and the accompanying worker, password replay, audit, Unix-socket isolation and distributed admission changes. Its [native PostgreSQL 17 PR run](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38060548011) completed successfully: **113 C# checks**, **108 emitted events** validated against the pinned Platform schema, locked restore, zero-warning/error builds and all **four HTTP smokes**. Job `114237753236` logs were read directly. [Documentary checks](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38060547978) also passed.
+
+The new checks cover shared Person failure/backoff behavior across login and password change, parallel accounting and caller budgets, partition allocation/cleanup, unexpected Process/Tick exceptions, replay-verifier erasure, effective operator outcome, and one-time legacy migration. HTTP smokes require the trusted BFF subject and exercise more than 30 same-IP self reads plus refusal of a valid operator key on the application network listener. Local Python syntax/YAML/link checks are preliminary; native CI supplied compilation and PostgreSQL runtime evidence. This subsequent evidence update changes only this verification record.
+
+These remain development controls and durable-boundary simulations. Production BFF integration, refresh single-flight across instances, load acceptance, failure-event retention/aggregation and named operator authorization are not certified by these checks. Deployment must exclude the private operator Unix socket from proxy routing and isolate the proxy OS identity; no deployment/proxy configuration was changed. Eligibility-transition mutation and public password reset remain absent, and real-user onboarding remains disabled. See [authentication admission](AUTH_ADMISSION.md) for budgets, bounded backoff, replay lifetime and remaining release conditions.
+
+## Sealed replay and bounded KDF queue candidate
+
+Migration 007 removes the prior clear Session-side replay encoding while preserving independently sealed Credential recovery material and receipts. Newly admitted changes seal their bounded replay verifier with an operation-specific AES-GCM purpose. Password work retains four running slots and now allows sixteen queued waiters for at most two seconds, with 503 AUTHENTICATION_BUSY separate from 429 RATE_LIMITED. New checks exercise purpose isolation, storage immutability, clear-verifier upgrade, burst draining, bounded queue overflow/timeout, cancellation and slot release after failure. Runtime commit `f18b6c93c124561386e66702fa7238aa4eb1ad58` passed [native PostgreSQL 17 PR CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38061859964): **123 C# checks**, **108 emitted events** against the pinned Platform schema, all four HTTP smokes, locked restore and zero-warning/error builds. Job `114241575863` logs were inspected directly, including the ten new sealed-material/migration/queue checks. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38061859971) also passed. This follow-up only records evidence and updates explanatory docs; runtime remains that verified revision. These are functional checks, not a production load test or a reset authorization decision. The proposed reset proof policy is recorded in [reset decision](RESET_PROOF_DECISION.md) and is not selected automatically.
+
+## Recovery enrollment and initiation candidate
+
+Migration 008 adds opt-in code enrollment/replacement and reset initiation only. New checks exercise 128-bit one-time presentation, lost-response receipt replay, Person/version MAC binding, immutable receipts and version updates, email/mobile policy, atomic account-notification tasks, BFF enrollment state, purpose-separated OTP material, uniform known/unknown initiation, fixed proof expiry, shared Person delivery budget, no initiation fencing, and expiry/password-change races. The new HTTP smoke validates strict authenticated enrollment and the initiation subset, including protected inbox and an absent completion route. Runtime commit `a5f338ca1dce11ede4e39ece1856d51f5a323a98` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38071485737): **143 C# checks**, **127 emitted events** against the unchanged pinned Platform schema, all **five HTTP smokes**, locked restore and zero-warning/error builds. Job `114269619197` logs were inspected directly. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38071485727) also passed. The proposed event schema check separately accepted existing Session context and sessionless recovery context while rejecting missing, ambiguous and secret-bearing contexts; this is proposal conformance, not actual reset completion. Local Python syntax, YAML/security references and new relative links passed, but local jsonschema/SDK runtime are unavailable. This follow-up changes only this verification record; runtime remains the verified revision. The proposed event schema is tested separately in CI and is not a public contract approval or reset runtime PASS.
+
+## Dual-factor reset candidate, 2026-10-10
+
+Platform schema 1.2.2 is pinned from `49ea40a50854c447b18afbdd7c2f3116dbee3136` with source provenance. Migration 009 adds deletable decoys, shared Person proof limits, immutable reset acceptance and receipt-backed recovery-code reservation/consumption. The worker and private recovery operator are reused; no synthetic Session is created. See [PASSWORD_RESET.md](PASSWORD_RESET.md). Initial runtime commit `5110208abacec717e074e39b46d1174e9ff3388a` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38075470199): **161 C# checks**, **155 emitted events** against the selected Platform 1.2.2 schema, all **five HTTP smokes**, locked restore and zero-warning/error builds. Job `114281412555` logs were inspected directly. Documentary run `38075470193` also succeeded. Counts above apply to that exact runtime commit; the final follow-up evidence is recorded below.
+
+The small HTTP timing sample on that commit observed known-contact median 12.23 ms (2 samples), unknown median 2.81 ms (3), and suppressed median 3.74 ms (3). The small sample is not a benchmark, but database-path timing differs; response-shape equality is not account-enumeration resistance. Before real-user release, mitigation and repeated representative timing/adversarial acceptance testing are required. Platform PR 11 has no configured native workflow run on its source SHA; its imported schema is exercised by Identity CI.
+
+Final runtime commit `b51c6b9155ac6fa016d5fee67dce8c2bec4a0306` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38075799202): **168 C# checks**, **171 emitted events** validated against Platform schema 1.2.2, all **five HTTP smokes**, locked restore and zero-warning/error builds. Job `114282375758` logs were inspected directly, including reset/password-change competition, proof expiry during gate wait, competing proof use, FailedClosed preservation/operator recovery, premature-consumption refusal and telephone OTP-only rejection. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38075799225) also succeeded. Exact Platform/Identity schema byte equality was checked through the source connector at the pinned SHA. Local Git tree `c276a36935c84925879e4c496175eea6e6545ce2` equals the published runtime tree; commit metadata differs between the recovered local checkout and GitHub.
+
+The final small timing sample observed known median 5.85 ms (2), unknown median 3.59 ms (3) and suppressed median 4.31 ms (3); maxima were 5.92, 17.48 and 4.40 ms respectively. Both observations are retained to show variability and the small sample limit. They do not establish timing-based enumeration resistance. This follow-up changes documentation only; runtime remains the verified revision above. Neither these functional checks nor queued notifications certify public release, provider delivery or production load capacity.
+
+## Reset timing and abuse-control candidate, 2026-10-10
+
+Migration 010 / OpenAPI 0.6.0 add eight-digit fresh reset OTP, escalating Person cooldown and bounded proof-limit alerts. Both reset endpoints use a common response deadline after disposing locks/connections; service/HTTP timing acceptance covers real/decoy/suppressed branches, with privacy-safe overrun telemetry and explicit load limits. Recovery-code ASCII case and surrounding whitespace are normalized by the API before verifier/receipt binding; passwords are never normalized. Platform merge precedes Identity merge/release. See [PASSWORD_RESET.md](PASSWORD_RESET.md). Runtime commit `16ca5dc8f9074ee92752269397618f41bd51a9f3` passed its own native CI; exact evidence follows. Previous counts refer to recorded revisions.
+
+Runtime `16ca5dc8f9074ee92752269397618f41bd51a9f3` passed [PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38077120454): **195 C# checks**, **188 emitted events** against the unchanged pinned Platform 1.2.2 schema, all **five HTTP smokes**, locked restore and zero-warning/error builds. Job `114286313301` logs were inspected directly. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38077120442) also passed. Local tree `97dfe7142bd125f04bd5bd6f4c731752e3f3a4b3` matches the published runtime tree. New checks cover escalating 15/30/60/120/240/360-minute cooldown, six-hour cap, quiet-period reset, atomic concurrent cap crossing, once-per-crossing alerts, lowercase/whitespace proof and replay normalization, fresh eight-digit OTP, and privacy-safe failed-response overrun instrumentation.
+
+Both reset service paths were measured against real PostgreSQL with 12 samples per real/decoy/suppressed group. Fresh eligible initiation medians were 210.45/205.56/210.34 ms; invalid completion medians 210.58/209.41/208.03 ms. HTTP acceptance additionally checked both routes (12 samples/group each):
+
+| HTTP path | Real p50 / p90 / max (ms) | Decoy p50 / p90 / max (ms) | Suppressed p50 / p90 / max (ms) |
+| --- | --- | --- | --- |
+| Completion, invalid proof | 212.48 / 222.07 / 250.77 | 209.49 / 219.36 / 238.12 | 210.46 / 226.66 / 237.46 |
+| Initiation, bound real replay / fresh other paths | 209.75 / 221.85 / 309.30 | 213.15 / 222.14 / 222.41 | 216.70 / 228.91 / 312.45 |
+
+All measured groups passed the declared floor, maximum and median/tail-spread thresholds. Transport/scheduling maxima exceed the chosen service deadline in some samples; the table preserves those outliers. Twelve samples do not establish statistical indistinguishability or adversarial-load acceptance. A contended/database-slow request can exceed its deadline and expose its processing path; the overrun instrument must be exported and failure overruns monitored before real-user release. Stronger cooldown also increases the accepted denial-of-recovery window when an attacker knows the contact. Alerts here are atomically queued tasks, not delivered messages. This follow-up changes documentation only; the verified runtime is the SHA above. Platform merge must precede Identity merge/release.
+
+## One-hour cooldown follow-up — verified runtime d9b50e7
+
+Migration 011 and the matching runtime cap shorten reset stops to 15/30/60 minutes; tests cover repeated capped windows, upgrading an existing six-hour stop without extending shorter stops, migration replay, and separate success/failure overrun tags. Runtime `d9b50e7db4c4edcf1e90e3fbdb596b4ad7ed3673` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38078342442): **197 C# checks**, **188 emitted-event schema checks**, all **five HTTP smokes**, both reset timing gates, locked restore and successful zero-warning/error builds. Job `114289911400` logs were inspected directly. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38078342435) passed as well. Local/runtime tree is `ba711819f403779085e304cfe04c53d4c49a2041`. Earlier 195/188 counts describe the preceding revision. The current follow-up updates documentation only.
+
+Controlled 12-sample HTTP completion groups real/decoy/suppressed had p50 217.22/210.48/210.52 ms and p90 221.34/222.02/221.03 ms. HTTP initiation real replay/fresh decoy/fresh suppressed had p50 211.80/212.75/209.30 ms and p90 218.56/221.93/222.20 ms. All groups passed the same thresholds; these small samples do not substitute for representative load acceptance. Failure-only overrun monitoring and actual notification delivery remain release requirements. The owner selected retaining Active-only Person MVP scope; future eligibility writers still require the documented epoch/revocation protocol before introduction.
+
+## Active-only constraint and BFF design follow-up — verified f0e3144
+
+The harness now checks PostgreSQL's actual validated Person and Credential status CHECK predicates for exact Active-only scope. The BFF_REFRESH_DESIGN.md document specifies server-side tokens, shared-store row serialization, independently committed dispatch evidence before Identity HTTP, successor commit recognition and BFF-controlled user-action foreground routing. This is design, not implemented BFF or multi-instance acceptance. Runtime/check revision `f0e31440694ca867d86da302bef0bcbcb4d9d46b` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38079795586): **199 C# checks**, **188 emitted-event schema checks**, all **five HTTP smokes**, both reset timing gates and zero-warning/error builds. Job `114294168730` logs were inspected directly, including the two actual validated status CHECK assertions. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38079795582) passed. Local/source tree is `ad65354d8a07d4d66a12b76c7a40057dc1c906c5`. Earlier 197/188 evidence remains revision-specific. This evidence follow-up changes documentation only.
+
+The completion HTTP real/decoy/suppressed p50 values were 213.66/211.25/216.06 ms, p90 220.31/279.22/219.45 ms, and maxima 223.00/303.71/221.94 ms. The p90 spread of 59.77 ms passed the declared <60 ms bound but is close to it. Preserve this observation: no threshold was widened and no test retried to hide it. The small sample cannot attribute the tail to execution, scheduling or transport, establish statistical channel evidence, or prove reliable thresholds under representative load. Initiation p50 values were 212.74/208.26/208.65 ms and p90 221.88/217.81/217.76 ms. The 12/group gate remains regression evidence only; investigate future flakes and require adversarial/load testing with failure-overrun monitoring before real-user release.
+
+## BFF core scaffold and behavioral Active-only checks — verified 779c6ab
+
+Person/Credential status regression now attempts inactive writes inside rolled-back transactions and requires PostgreSQL 23514, without depending on generated constraint names or pg_get_expr formatting. The new BFF class-library scaffold and BffRefreshChecks cover shared-store coordination, native Identity rotation, owner/transport faults and foreground. The test uses two independent data sources/pools, not two deployed browser hosts; controlled HTTP bridge tests also exercise the concrete adapter, real response loss and redirect rejection; complete middleware, production failover/load/browser acceptance remain outstanding. Runtime `779c6ab7d2b15d149b6adfb37b2d714e3691a765` passed [native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38081091659): **224 C# checks**, **230 emitted-event schema checks**, all **five existing API HTTP smoke scripts**, both reset timing gates and zero-warning/error builds. The 26 new BFF checks, including the controlled loopback HTTP bridge, are part of the C# count; they are not a sixth browser smoke suite. Job `114297980653` logs were inspected directly. [Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38081091647) also passed. Local/runtime tree is `db4c7d15e1c3f55d90123ab2fb9102c42c629f07`. Earlier 199/188 results remain revision-specific. This follow-up changes documentation only.
+
+Directly observed PASS: 20 foreground contenders on two independent BFF stores/pools caused one Identity rotation; valid committed access was read during a held refresh lock; an expired-access contender waited past two seconds and reused the committed successor. Fault coverage includes before dispatch, durable dispatch before HTTP, response received before successor write/commit, committed successor before marker cleanup, actual server-side PostgreSQL owner connection termination, injected lost/malformed/timed-out responses and cancellation. Separate loopback HTTP checks observed one authenticated refresh for 20 contenders, an actual connection abort after Identity commit without replay, and a redirect with zero trap calls. Background rotation did not advance foreground time, user action after a fresh background rotation coalesced once, and polling could not pass the thirty-minute boundary. Known revocation was excluded from uncertainty and terminal local cookie closure erased token material.
+
+The first core candidate `92ca8a9` passed compilation and the initial concurrency/fault checks but failed the exact polling-deadline comparison because the test clock retained 100-nanosecond precision while PostgreSQL stored microseconds. The final source normalizes BFF timestamps with the existing Identity Timestamps.Now helper and compares the same precision; the complete rerun passed. No timing threshold was widened or retry used to hide that failure. Latest HTTP reset completion p90 real/decoy/suppressed: 220.34/221.27/220.57 ms; initiation: 223.26/220.16/222.98 ms. These remain small regression samples, not statistical/load certification.
+
+This is a class-library token coordination scaffold, not a deployed browser BFF. The two coordinators share a PostgreSQL store through independent pools in one test process, and the controlled HTTP bridge calls real Identity services without the complete middleware pipeline. Separate-process kill/DB failover durability, pool/load acceptance, browser cookies/CSRF/Origin and real logout/onboarding/provider integration remain release dependencies. The initial uncertainty thresholds are review triggers, not a change to zero-grace policy.
+
+
+## BFF admission receipts and actual OS process death — verified 9a9da68 (recorded 2026-10-11)
+
+Runtime `9a9da68b203036c2beaf8bb37cccc5c1c5616a01`, source tree
+`55ee7a3cad35ccb94654c486ce171f162fbe64b7`, passed
+[native PostgreSQL 17 CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38082500995):
+**242 C# checks (44 BFF checks)**, **256 emitted-event schema checks**, all
+**five existing API HTTP smoke scripts**, both reset timing gates, locked restore
+and zero-warning/error builds. Job `114302131842` logs were inspected directly.
+[Documentary CI](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38082501002)
+also passed. This evidence follow-up modifies documentation only.
+
+Observed admission PASS: signed nonce-bound `NotProcessed` rate/busy receipts
+CAS-clear only their dispatch attempt, retain the active token bundle/version
+and cause `BFF_BUSY` with a bounded retry delay. Twenty cross-instance contenders
+within the shared retry deadline sent no additional HTTP dispatch; later attempts
+rotated the original unconsumed token once. Generic proxy 502/503/504, wrong nonce
+and invalid proof remained uncertain without retry. The real Identity middleware
+HTTP smoke exhausted a subject's session budget, checked the 429 receipt MAC and
+rotated that same token with a fresh admitted subject. The 503 busy receipt is a
+controlled bridge case: current Identity refresh has no KDF, and the contract
+reserves this receipt for pre-invocation admission only.
+
+Observed process PASS: twenty refresh decisions from two independently launched
+OS processes/pools/HTTP clients made exactly one real Identity HTTP rotation.
+The parent forcibly killed a peer paused at each of BeforeDispatch,
+DispatchCommitted, ResponseReceived, SuccessorWritten and SuccessorCommitted.
+Independent recovery safely made the first dispatch when no marker existed,
+recognized the exact committed successor after commit, and never resent the
+predecessor for the three unmatched-marker boundaries. These are actual process
+kill/connection-release tests, distinct from the retained exception seams and
+PostgreSQL connection termination. The PostgreSQL 17 startup guard passed;
+version-16 rejection uses a supplied Version value, not an actual PostgreSQL 16
+server deployment.
+
+The first candidate `86ea1d2cdf4975187b3814d37a0a333585e335ff`
+([run 38082252626](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38082252626))
+passed compilation, admission checks and separate-process contention but failed
+normal peer teardown: DONE reached the parent before clean process exit, and
+cleanup incorrectly required an abnormal kill exit. Cleanup now accepts normal
+completion; explicit kill of a paused fault peer still requires abnormal process
+termination. The complete revised run passed. No timing threshold was widened
+or test retried to conceal the failure.
+
+Counting correction: the 779c6ab job `114297980653` has **26** BFF PASS lines,
+previously reported as 25. Its total of 224 C# checks remains correct. The
+historical BFF count in this file and BFF_CORE.md is corrected; the current count
+is 44, with 18 added executable checks.
+
+Latest controlled HTTP reset completion p90 real/decoy/suppressed:
+222.05/221.57/222.43 ms; initiation: 220.59/218.17/219.77 ms. Twelve samples per
+group remain regression evidence, not statistical channel or load certification.
+A single PostgreSQL server and controlled Identity bridge do not prove replicated
+failover durability, browser cookies/CSRF/Origin, production pool/load behavior,
+upstream logout/resource-401 handling, delivery providers or real onboarding.
+The browser host must call Identity logout before token erasure and terminalize
+its session on Identity 401. Those browser handlers remain unimplemented.
+Platform merge/canonical pin verification must precede Identity merge/release;
+both PRs remain drafts.
+
+
+## BFF configuration protection, upstream logout and random process kills — 2026-10-11
+
+Verified runtime source: `4edc2c392a4413b72865e2c9361fa507721133e1`, tree
+`6c6a7affa5dc5697634c5bf59a6b327dce6b282d`. Native PostgreSQL 17
+[run 38123254599](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38123254599),
+job `114422189289`, completed SUCCESS: **263 C# checks**, including **65 BFF
+checks**, **296 emitted events** matching the pinned Platform schema, all five
+API HTTP smokes, and zero build warnings. Documentary run `38123254595` also
+completed SUCCESS. The subsequent evidence update changes documentation only.
+
+Executable checks cover independent receipt-key validation, wrong client key and
+subject configuration rejection without token erasure, per-session admission
+subjects on a shared adapter, cross-pool latched rejection circuit and trusted
+reset, invalid receipt quarantine without predecessor replay, upstream-first
+idempotent logout including lost response after Identity commit, and trusted
+resource Session-401 handling. In addition to twenty decisions across two actual
+processes producing one rotation and the five named kill boundaries, six random
+real process kills ran without stage probes. Latest seed: `1208417327`; delays
+75, 63, 133, 36, 9 and 33 ms. Recovery checked at most one rotation, no consumed
+predecessor resend, and committed cleanup or terminal reconciliation of each
+marker. This is sampled interleaving coverage, not exhaustive or replicated
+failover certification.
+
+The first candidate `bbae3b4a9212217c8623e9c02d91c6e9822b59ff`
+([run 38122102541](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38122102541),
+job `114418780270`) passed native checks but failed the existing recovery HTTP
+timing maximum: a decoy completion took 359.66 ms against the unchanged 350 ms
+bound. Its cause was not established. Added protected Development/loopback
+server timing diagnostics and separate wire measurements; floor, maximum and
+median/tail spread gates were not widened, and no automatic retry was added.
+The diagnostic revision `871edb2` passed run `38122506072`.
+A subsequent absent/wrong-diagnostic-key smoke in `d9f88dc` failed run
+`38122911693` because its fixture reused an already exhausted admission subject
+and received 429. Each privacy check now uses a fresh subject. The verified
+4edc2c3 run passes both checks: no Server-Timing without the valid protected key.
+The original timing outlier remains an unresolved observation, not a proven fix.
+
+Latest HTTP completion p90 real/decoy/suppressed: 218.46/220.77/217.80 ms;
+initiation: 218.89/220.07/221.87 ms. Twelve samples per group are regression
+evidence only; production load/timing acceptance remains required. Diagnostic
+work latency can reveal account-path differences and must not be enabled for
+public traffic.
+
+Deployment requires an independent Identity:RefreshReceiptKey, distinct from
+the client credential and shared with the trusted BFF adapter. The circuit uses
+durable state and a metric; metrics export, alert delivery and a private operator
+HTTP host are not supplied. Its heuristic may also trip on legitimate bulk
+revocation, and cannot restore sessions closed before its threshold. Browser
+host/cookie/CSRF/Origin handlers, replicated database failover durability, actual
+notification providers and contact-release policy remain release work. Upstream
+logout and Session-401 core methods are now implemented, superseding that earlier
+limitation; browser integration still must call them correctly. Platform PR #11
+merge and canonical pin verification must precede Identity merge/release. Both
+PRs remain drafts; no main merge or production change was performed.
+
+
+## Automatic circuit recovery and immediate logout intent — 2026-10-11
+
+Verified source `6fe9d69b3a680c796e801f98bea62121e4ecc3e0`, tree
+`258db08d31625d1ddf0635014f787d862dec5ec4`: native PostgreSQL 17
+[run 38124562388](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38124562388),
+job `114426124812`, completed SUCCESS with **280 C# checks**, including
+**82 BFF checks**, **305 emitted-event validations**, all five API HTTP smokes
+and zero build warnings. Documentary run `38124562418` also passed. Intermediate
+runs `38124295931` and `38124393325` both completed SUCCESS. Their apparently
+long-running status prompted a two-minute BFF harness watchdog; no deadlock or
+stalled fixture was established, and no retry or acceptance-bound relaxation
+was used. Subsequent evidence commits are documentation-only.
+
+Migration 004 preserves old terminal states and adds irreversible LogoutRequested
+with retained sealed material, plus circuit next_probe_at/probe_session. Checks
+verify known-unconsumed refresh recovers automatically after credential repair,
+twenty cross-pool contenders elect exactly one half-open probe, failed/disappeared
+probes leave a minute of backoff, and only a validated elected success closes the
+circuit. Owner budgets of 60 seconds or more are rejected to prevent overlap with
+the recovery interval. The journal still forbids replay of unmatched dispatches.
+Three separate unverified 403 sessions are required to open the deployment circuit;
+one malformed 403 quarantines only its session. Other unverifiable receipt claims
+retain the immediate integrity guard, and verified configuration receipts can
+open immediately. No permanent circuit latch mode is enabled.
+
+The native contention check held the circuit singleton row FOR UPDATE while twenty
+distinct success sample writes completed through two pools: 3.14 ms elapsed.
+Normal successful refresh no longer takes the singleton lock. This is a controlled
+sample-write contention check, not a full refresh throughput benchmark, production
+load test or exact synchronized failure-ratio measurement.
+
+A paused real HTTP logout proves another instance rejects cached access before
+the upstream response finishes. Lost-response coverage verifies committed
+LogoutRequested, denied refresh/access, database rejection of reactivation, retained
+material for idempotent retry, one upstream logout event and terminal erasure.
+Logout completes independently of an open refresh circuit. No autonomous retry
+worker or browser cookie handler is implied; the future host must expire the cookie
+and schedule bounded completion of retained server intent.
+
+Random process-kill seed in this run: `1588439761`; all six trials and the named
+kill boundaries passed. Latest reset completion p90 real/decoy/suppressed:
+222.91/222.90/223.73 ms, maxima 222.91/223.56/284.99 ms. Initiation p90:
+219.63/218.77/222.08 ms. Existing timing gates remain unchanged; twelve samples
+per group do not prove channel resistance or load behavior.
+
+Release gates remain browser-host cookie/CSRF/Origin integration, alert/metrics
+delivery and operator hosting, production load/timing, replicated database failover,
+notification delivery and contact-release policy. The runbook in BFF_CORE.md
+forbids deleting journals or force-retrying predecessors. A future permanent latch
+policy needs the operator host, delivered alert and an accepted operational runbook.
+Platform PR #11 merge/canonical pin verification still precedes Identity release;
+no main merge or production/VPS change was performed.
+
+
+## Dispatch-only probe election and cookie-free logout maintenance — 2026-10-11
+
+Verified runtime `af2704cd6088229448b7502bf7508ff082cfe230`, tree
+`22034ef64f8511f2480b26c7603bfef28ae612aa`: native PostgreSQL 17
+[run 38125504097](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38125504097),
+job `114428918204`, completed SUCCESS: **298 C# checks**, including **100 BFF
+checks**, **323 emitted-event validations**, all five API HTTP smokes, and zero
+build warnings. Documentary run `38125504091` passed. The subsequent evidence
+commit is documentation-only.
+
+Probe acquisition now follows journal reconciliation, due and admission-backoff
+checks, immediately before durable dispatch. Five non-due refresh calls with an
+open circuit return valid access without acquiring a probe or making HTTP requests.
+The first candidate `197e004` failed run `38125173635`, job `114427924457`, at an
+old expectation: immediate retry expected BFF_UNAVAILABLE but now correctly received
+BFF_BUSY from persisted admission backoff before probe election. The expectation
+was corrected; revision `1fbc05b` passed complete run `38125416118`. No runtime
+acceptance threshold was relaxed or failed run retried in place.
+
+Migration 005 replaces each new logout intent's full sealed bundle with separately
+sealed access-only proof in the same transaction. Native tests decrypt the intent
+proof to verify it is exactly the access token and confirm sealed_tokens is NULL.
+CompleteLogout/SweepLogout use trusted session ids, never a cookie. Tests verify
+initial and increasing persisted backoff, actual hosted-service completion after
+cookie deletion, two independent pools racing a single idempotent completion,
+conversion of legacy intents before network work, and expires_at cleanup with no
+upstream request. Logout intent still cannot restore ordinary access.
+
+BffMaintenance ticks every two seconds and prunes up to one thousand old samples
+per tick before sweeping at most twenty due/expired intents; each tick is bounded
+to ninety seconds. Success-only sample pruning passed without triggering a failure
+path. It is supplied and tested as a BackgroundService, not automatically running
+in a nonexistent browser host: that future host must register the service and
+provide matching BFF store/keys and trusted Identity adapter. Broader retention and
+production maintenance capacity remain release work.
+
+Probe dispatch and ambiguity are durably identified in the journal. One uncertain
+probe terminalization adds exactly one ProbeLossCount and repeated terminal reads
+do not add another; a definitive Identity 401 is excluded. The process metric
+bff.refresh.probe_sessions_lost is emitted after the loss flag commit; the database
+count is authoritative across restart. A real user session may be lost when its
+probe rotation has an ambiguous outcome under zero grace; no synthetic session or
+unsafe retry is introduced. Aggregate persisted counts before future journal purge.
+
+Latest controlled sample-write contention result: twenty distinct sessions across
+two pools completed in 4.28 ms while the circuit singleton was held FOR UPDATE.
+This is not a full refresh load benchmark. Six random real process kills passed
+with seed `1225063783`, as did named-boundary kills and two-process single-flight.
+Reset completion p90 real/decoy/suppressed: 219.99/219.81/220.96 ms; initiation:
+219.79/220.05/222.46 ms. Twelve samples per group remain regression evidence only;
+all original timing gates are unchanged.
+
+Release gates remain alert/metrics delivery, full production load/timing acceptance,
+replicated database failover, browser cookie/CSRF/Origin integration with registered
+maintenance, notification delivery and contact-release policy. Platform PR #11 merge
+and canonical provenance verification precede Identity release. No main merge or
+production/VPS change was performed.
+
+## Logout bounds, maintenance diagnostics and split review stack — 2026-10-11
+
+Runtime `27a12b4c2f797736f15fd84969129e051b7faaf7`, tree
+`5ff4a12c89874b2f6225811cb4428e2bd1893c51`, passed native run
+[38127553725](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38127553725),
+job 114434962504: **303 C# checks, 104 BFF checks, 327 event validations**, all
+five HTTP smokes and builds with zero warnings. Documentation checks also passed.
+BFF checks are counted from the actual `PASS: BFF` log entries. The prior reported
+100 BFF checks for `af2704c` should read 99; this update adds five executed checks.
+
+Logout intent sets transaction-local lock_timeout to LockWait. A real competing
+row lock test returns BFF_BUSY within that budget without intent or upstream work.
+Completion retains SKIP LOCKED. A running hosted maintenance service with a disposed
+store emits bff.maintenance.failures and a structured exception-type warning;
+shutdown cancellation is excluded and raw exception text/secrets are not logged.
+Committed Identity-401 and absolute-expiry closes emit bff.logout_local_only with
+separate reasons; known-204 completion and terminal replay do not double-count.
+This process counter can lose an emission after commit and is not durable audit.
+
+Twenty distinct sessions across two pools completed sample writes in 3.38 ms while
+the circuit row was held. Six randomized real process kills passed with seed
+1698072828. Completion HTTP p90 real/decoy/suppressed was 220.50/220.22/217.65 ms;
+initiation was 222.19/220.70/222.71 ms. These are controlled regression samples,
+not full load, failover or constant-time certification; acceptance gates were not
+relaxed.
+
+The exact same runtime tree independently passed BFF stage #7 run 38127635293,
+job 114435207440: 303 checks / 104 BFF checks / 327 events / five HTTP smokes.
+Sample-write contention: 4.92 ms; random-kill seed 740517349. The three preceding
+stages also passed fresh native CI. See [PR_STACK.md](PR_STACK.md) for scope,
+commit/tree identities, cumulative counts and dependency order. PR #3 is an
+integration reference; no main merge, deployment or production/VPS change occurred.
+Release gates remain delivered alerts, full load, replicated failover and the
+browser host, plus notification/contact-release and canonical Platform provenance.
+
+## B1 candidate browser contract — 2026-10-11
+
+Before host implementation, contracts/bff-browser.openapi.yaml (Draft 0.1.0) now
+specifies exactly GET /bff/csrf and POST /bff/login, /bff/me, /bff/me/action,
+/bff/logout. Request/response DTOs disallow extra fields, errors are stable codes,
+429/503 bind Retry-After to retryAfterSeconds, and explicit cookie actions preserve
+multiple Set-Cookie header fields. Login/session responses never contain Identity
+tokens. Confirmed local logout intent maps to 204 even if upstream completion needs
+maintenance; pre-intent busy does not report success. Contract status is candidate,
+not an implemented browser API or owner approval of every DTO/error choice.
+
+Executed locally with openapi-spec-validator 0.7.2, jsonschema 4.26.0 and PyYAML
+6.0.3: OpenAPI 3.1 structural validation, **91 positive schema/wire-envelope checks
+and 32 rejected negative controls**. The fixtures include extra/secret fields,
+contact exclusivity, empty/oversized passwords, malformed identifiers, missing
+Origin/CSRF/cookies, foreign fetch context, cookie attributes, forbidden 204 body,
+private caching and Retry-After mismatch. Example placeholders are not real secrets.
+Existing preparation schema controls (2 valid /17 negative) and documentary checks
+(20 archives /16 documents /59 local links) also passed.
+
+The new checker is wired into documentary CI and exposes reusable request/response
+validation for future live-host tests. It checks structural envelopes; it does not
+prove cryptographic CSRF binding, Origin enforcement, cookie MAC validity, generated
+client compatibility, proxy/browser correctness or production key protection. No
+C# runtime files, migrations, public routes or deployment changed in this step.
+
+B1 policy specifies style-src-attr 'none' and Tailwind classes, an explicit bounded
+smartcore-locale next-intl cookie, certificate-encrypted shared Data Protection keys
+on Linux, and optional Sec-Fetch-Site rejection in addition to mandatory Origin/CSRF.
+These remain implementation/acceptance requirements, not newly executed host tests.
+
+### B1 contract review revision 0.1.1
+
+Local candidate checks: OpenAPI 3.1 validation; 108 positive schema/wire checks,
+38 rejected negative controls, and 15 pairwise competing-guard precedence controls.
+These counts are not C# runtime tests. Guard classification is a contract model;
+live middleware order and session-bound CSRF cryptography still require B1 host tests.
+POST order: raw size, media type, Origin/Fetch-Site, CSRF, JSON/DTO, then
+authentication/business handling. Cross-site is a 403 rather than a schema enum error.
+Known-route wrong-method 405 requires Allow; unknown /bff paths use JSON 404;
+both preserve cookies and send no-store. Busy codes are narrowed by route, browser
+Person omits personId, and login enforces Identity's 128 UTF-16-unit ceiling as well
+as the JSON Schema bound. Terminal logout 401 is UI success.
+
+B1 Retry-After remains at most 60 seconds: authentication admission and transport
+windows are one minute, password-failure backoff caps at 30 seconds, and BFF
+backoff/circuit responses cap at 60. B3 reset cooldowns are outside this candidate;
+they require explicit contract review without truncating a longer wait.
+Existing documentary checks passed (20 archives, 16 documents, 59 relative links);
+backend preparation candidate checks passed (2 positive / 17 negative).
+No browser host, generated client, live proxy, load or failover evidence is added.
+
+### B1 infrastructure after contract review 0.1.1
+
+Prior reviewed contract commit 574ef27b5524daf9eab3c8c1c93c0d163244e96e:
+Documentary candidate checks run 38141728086 and Registration backend run
+38141728068 both completed successfully. This is workflow status evidence;
+no new runtime test count is inferred from it.
+
+Local infrastructure evidence:
+- Next production build and TypeScript check passed using pinned package lock.
+- fa/en message parity and winter/summer Asia/Tehran 15:30 formatting passed.
+- Next production HTTP smoke passed: fa/en direction, unique response nonce on
+  every emitted script, no style attributes, security headers, locale cookie
+  attributes and JSON/no-store rejection of misrouted B2/B3 requests.
+- .NET 10 Release host build passed with zero warnings/errors (single build node).
+- Configuration-only host smoke passed: Production/public bind/missing certificate/
+  equal receipt-client keys rejected; two distinct processes protected/unprotected
+  the proof using the same encrypted shared ring; XML has no plaintext masterKey.
+- Candidate browser checks now have 112 positive checks, 38 negative controls,
+  15 model precedence pairs and 5 raw-envelope competing-error fixtures. The raw
+  model injects CSRF validity; it does not prove live middleware order.
+- Documentary checks: 20 archives, 17 current documents, 63 relative links.
+
+The new Browser B1 infrastructure workflow adds actual two-host PostgreSQL 17
+startup and contract-based routing tests. That fresh CI must pass before claiming
+this runtime evidence. No real HTTPS ingress, authenticated browser flow, session
+principal/CSRF validation, seeded Identity integration or hydration claim yet.
+Tasks 2/3 infrastructure is documented in BFF_BROWSER_HOST.md; task 3 is partial
+until the seeded account crosses the real task-6 login handler. Tasks 4–9 remain.
+
+Initial infrastructure CI passed the Next production job and reached two-host
+response validation, then exposed an adapter mismatch: actual uppercase HTTP
+methods were not normalized for lowercase OpenAPI operation lookup. The validator
+now normalizes methods and has an uppercase GET fixture; fresh CI is required.
+
+Fresh B1 infrastructure CI is now verified on code commit
+`d3bae2be0ac4289af724cadbd3b561664f1e3ee9` (tree
+`0eca4fc77223fc6f1c5c0392c7ebea2b4f7c6ac7`):
+[run 38142922769](https://github.com/amirfassadi/SmartCoreIdentity/actions/runs/38142922769)
+completed successfully. Job 114480289913 passed the production Next build and HTTP
+checks; job 114480290078 built the host with zero warnings/errors and passed
+actual two-host PostgreSQL 17 readiness/routing, rejected startup configurations
+and the encrypted cross-process key-ring proof. Both jobs' logs were inspected.
+The identical code tree on integration commit
+`135bdafcef525d7f872d7da8c12067660e72ada9` also passed infrastructure run 38142923724.
+Documentary runs 38142922765 and 38142923718 succeeded on those same revisions.
+The initial uppercase-method adapter failure is superseded by these fresh runs.
+This evidence covers infrastructure only; task-5/6 guards/account handlers and
+actual browser hydration/HTTPS ingress remain unimplemented.
+The documentation refresh passes 20 archive hashes, 17 documents and 64 links.
+
+### B1 task 4 — development HTTPS ingress
+
+Local Node TLS boundary checks passed with certificate verification enabled:
+independent request/response cookie allowlists, trusted-header overwrite, preserved
+separate Set-Cookie fields, BFF-only routing including undeveloped B2/B3 paths,
+size rejection before dispatch, cross-origin redirect rejection and exactly one
+upstream dispatch after socket failure. Controlled HTTP peers are used in that test.
+Next production build/typecheck, locale/time parity and production HTTP smoke passed.
+Additional Next smoke passed through the actual TLS ingress: fa/en pages, nonce
+preservation, correct same-origin locale redirect and BFF-only routing. Its BFF peers
+are controlled; it is not browser hydration or account E2E evidence.
+
+The two-host PostgreSQL CI smoke now adds a separate TLS key/certificate and sends
+requests through the actual proxy to both real ASP.NET processes. Trusted forwarded
+headers are configured for one symmetric hop from exact loopback addresses only;
+Bff:ExternalOrigin is required rather than inferred from incoming Host. That .NET
+build and runtime check must pass in fresh CI before they are claimed as verified.
+No opaque-cookie principal/CSRF pipeline or browser login has been enabled. The four
+adjacent-error fixtures remain candidate fixtures until live guard tests execute.
+The development proxy is not a production ingress or VPS deployment authorization.
+See HTTPS_INGRESS.md for current scope and commands.
+
+Task-4 infrastructure runtime evidence is now verified on code commit
+`d6ea1da22cb6bd5d1d9c724ef2b8d649b7935d89` (tree
+`83140f97eafca0b20a16a30ae67c70e974e9d9a6`): infrastructure run 38223166330
+succeeded. Job logs 114724111216 (two real ASP.NET hosts/PostgreSQL 17 through TLS,
+zero build warnings/errors) and 114724111533 (production Next through TLS and
+controlled-peer TLS boundary/no-retry tests) were inspected. Integration commit
+`09834bce323f42f84b256e8875a5f142bd4d4480` has the same code tree and passed
+infrastructure run 38223170805. Documentary runs 38223166277/38223170783 also passed.
+This supersedes the pending task-4 build/runtime statement above. Live guard
+precedence, session binding, browser hydration and full account E2E remain open;
+no login has been enabled and no personId added to a browser DTO.
+
+### B1 task 5 — live session/CSRF guards, pending runtime CI
+
+Local .NET 10 Release host and fixture-executable builds passed with zero warnings
+and errors. The configuration-only shared encrypted key-ring check also passed.
+The host now exposes real antiforgery bootstrap and an explicitly ordered guard;
+account handlers remain disconnected, and no browser login has been enabled.
+The new live guard tests start with the committed adjacent-error fixtures over the
+existing TLS ingress, plus a direct verified-TLS host size check. They cover shared
+ring/session rebinding, synthetic session lifecycle, missing/bad CSRF, strict DTO and
+UTF-16 limits; all responses use the exact browser contract validator. The Identity
+trap must observe zero calls. A disposable database fault probe checks pre-lookup
+media/Origin priority and preserves cookies on lookup unavailability.
+These tests require fresh PostgreSQL 17 CI before their runtime results are claimed.
+Private fixture IPC is captured, not logged; there is no HTTP session-seeding route.
+Actual login/logout transitions and browser hydration/full account E2E remain open.
+
+Fresh live-guard runtime CI is verified on code commit
+`4c4c58f13daf958e36f344c2a00200a1551c7619` (tree
+`7c113b1456a32fc0e6c3418f3718a2250901e28e`): run 38226825957 succeeded and job
+114736278067's log was inspected. Five competing-error requests over real TLS,
+separate direct-TLS host size precedence, shared-ring/session CSRF across two
+hosts, synthetic session-state/UUID binding, strict DTO/UTF16 and database-fault
+priority/fail-closed controls passed. Zero Identity HTTP calls were asserted.
+The host and test fixture builds each had zero warnings/errors. Next/ingress job
+114736277941 passed. Integration has the identical code tree at
+`8e939026f00a43d1c449258279f67847fe933352` and passed infrastructure run 38226829321.
+Documentary runs 38226825911/38226829307 also passed. An initial failure caused
+by missing HostConfiguration registration was corrected before these runs.
+These results supersede the pending live-guard statement above. Actual Identity
+login/logout and browser account E2E remain open; account commands are unavailable.
+No public/production deployment or main merge occurred.
+
+### B1 tasks 6–9 — verified private account and browser path, 2026-10-12
+
+Code `45c6d7ad015c4bda8ebeeb375d7323f4c61aa68c` passed all three workflows;
+see [BFF_BROWSER_ACCOUNTS.md](BFF_BROWSER_ACCOUNTS.md) for exact run/job references.
+Inspected logs prove actual private Identity Ready-account login/profile/logout,
+two BFF hosts with PostgreSQL 17 through real TLS ingress, CSRF rebinding, one
+rotation for four parallel reads, pre-intent logout contention/cookie preservation,
+outage preservation and cookie-free maintenance recovery. Production Next in
+Chromium passed fa/en nonce-CSP hydration, mobile RTL, locale persistence,
+BroadcastChannel/storage fallback, second login and delayed-body logout rejection.
+Generated browser request/response types reproduce from the reviewed B1 OpenAPI.
+Node/.NET/Chromium winter/summer 2026 Tehran formatting checks passed.
+
+Existing native backend remains **303 checks** with all five API HTTP smokes and
+both controlled reset timing gates passed; Release builds have zero warnings/errors.
+Integration `39268fc06a29120a930ec2bba3a061c02cb03b98` has the same complete tree and
+all three workflows passed. Earlier failed candidate executions are superseded by
+these explicitly identified successful code revisions; no test count is inferred
+from a document or replaced with a schema-only count.
+
+B1 is verified privately on Chromium; B2/B3 and the full registration/reset browser
+journey remain open. Web Locks coordinate potentially cookie-changing responses
+through headers while delayed body parsing remains cancelable outside the lock.
+BFF core/journal remains refresh owner. Production/default UI stays disabled;
+there is no main merge, VPS change, real provider activation or public-user approval.

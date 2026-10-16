@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: identity_private
+      POSTGRES_USER: identity_private
+      POSTGRES_PASSWORD: ${SMARTCORE_PRIVATE_DB_PASSWORD:?Initialize the private workspace first}
+    ports:
+      - "127.0.0.1:55437:5432"
+    volumes:
+      - private-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U identity_private -d identity_private"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  private-data:

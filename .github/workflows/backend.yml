@@ -1,5 +1,8 @@
 name: Registration backend
 on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -31,7 +34,20 @@ jobs:
           SMARTCORE_TEST_ENGINE: PostgreSQL 17
           SMARTCORE_EVENT_FIXTURES: /tmp/identity-events.json
       - run: python scripts/check-events.py /tmp/identity-events.json
+      - run: python scripts/check-reset-event-proposal.py /tmp/identity-events.json
       - run: dotnet build src/SmartCore.Identity.Api
       - run: python scripts/api-smoke.py
+        env:
+          ConnectionStrings__Identity: Host=localhost;Database=smartcore_test;Username=smartcore_test;Password=test_only_ci_password
+      - run: python scripts/setup-smoke.py
+        env:
+          ConnectionStrings__Identity: Host=localhost;Database=smartcore_test;Username=smartcore_test;Password=test_only_ci_password
+      - run: python scripts/auth-smoke.py
+        env:
+          ConnectionStrings__Identity: Host=localhost;Database=smartcore_test;Username=smartcore_test;Password=test_only_ci_password
+      - run: python scripts/password-smoke.py
+        env:
+          ConnectionStrings__Identity: Host=localhost;Database=smartcore_test;Username=smartcore_test;Password=test_only_ci_password
+      - run: python scripts/recovery-smoke.py
         env:
           ConnectionStrings__Identity: Host=localhost;Database=smartcore_test;Username=smartcore_test;Password=test_only_ci_password
