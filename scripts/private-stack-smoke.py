@@ -104,7 +104,8 @@ def run():
             assert request('/bff/me', {})[0] == 200
         before = {item.name: item.value for item in cookies if item.name == '__Host-smartcore-session'}
         assert before
-        print('Private acceptance phase: login and two-host reads accepted.', flush=True)
+        peers = 'single-host reads' if BUNDLE else 'two-host reads'
+        print('Private acceptance phase: login and ' + peers + ' accepted.', flush=True)
         stop(child)
         child = None
         child = launch()
@@ -116,7 +117,6 @@ def run():
         assert request('/bff/logout', {})[0] == 204
         token = request('/bff/csrf')[1]['requestToken']
         assert request('/bff/me', {})[0] == 401
-        peers = 'single-host reads' if BUNDLE else 'two-host reads'
         print('Private runner PASS: real registration/login/' + peers + '/logout and session continuity after restart; no provider calls.')
     finally:
         if child is not None and child.poll() is None:
