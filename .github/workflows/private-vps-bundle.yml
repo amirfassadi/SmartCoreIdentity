@@ -34,8 +34,10 @@ jobs:
         shell: bash
         run: |
           dotnet restore src/SmartCore.Identity.Api --locked-mode
-          dotnet publish src/SmartCore.Identity.Api -c Release -r linux-x64 --self-contained true -p:RestorePackagesWithLockFile=false -o "$RUNNER_TEMP/private-publish/api"
-          dotnet publish src/SmartCore.Identity.Bff.Host -c Release -r linux-x64 --self-contained true -p:RestorePackagesWithLockFile=false -o "$RUNNER_TEMP/private-publish/bff"
+          mkdir -p "$RUNNER_TEMP/private-source"
+          cp -a global.json src database "$RUNNER_TEMP/private-source/"
+          dotnet publish "$RUNNER_TEMP/private-source/src/SmartCore.Identity.Api" -c Release -r linux-x64 --self-contained true -o "$RUNNER_TEMP/private-publish/api"
+          dotnet publish "$RUNNER_TEMP/private-source/src/SmartCore.Identity.Bff.Host" -c Release -r linux-x64 --self-contained true -o "$RUNNER_TEMP/private-publish/bff"
       - run: npm ci --ignore-scripts --prefix web/identity
       - run: npm run build --prefix web/identity
         env:
