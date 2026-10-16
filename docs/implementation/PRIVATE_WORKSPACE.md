@@ -1,5 +1,9 @@
 # Persistent private workspace without SMS
 
+For a small Ubuntu 22.04 VPS with existing PostgreSQL 17, Python 3.10 and no SDK
+or Compose, use [the prebuilt private bundle](PRIVATE_VPS_BUNDLE.md). The source
+runner below retains its original disposable/private Docker database path.
+
 Owner direction, 2026-10-15: postpone Kavenegar integration and continue the
 remaining Identity work. The earlier ten-message ceiling still applies whenever
 the provider trial resumes. This runner configures no provider and makes no SMS,

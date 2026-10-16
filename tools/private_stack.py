@@ -120,8 +120,8 @@ def lock():
         yield
 
 
-def environments(config):
-    connection = f"Host=127.0.0.1;Port=55437;Database=identity_private;Username=identity_private;Password={config['db']}"
+def environments(config, connection=None):
+    connection = connection or f"Host=127.0.0.1;Port=55437;Database=identity_private;Username=identity_private;Password={config['db']}"
     identity = {**base_env(), 'ASPNETCORE_ENVIRONMENT': 'Development', 'ASPNETCORE_URLS': 'http://127.0.0.1:5157',
                 'ConnectionStrings__Identity': connection,
                 'Identity__MacKey': config['mac'], 'Identity__MaterialKey': config['material'],
@@ -206,16 +206,25 @@ def start():
     identity, bff = environments(config)
     api = str(ROOT / 'src/SmartCore.Identity.Api/bin/Release/net10.0/SmartCore.Identity.Api.dll')
     host = str(ROOT / 'src/SmartCore.Identity.Bff.Host/bin/Release/net10.0/SmartCore.Identity.Bff.Host.dll')
+    serve(config, identity, bff, [DOTNET, api], [DOTNET, host],
+          ['node', str(ROOT / 'web/identity/node_modules/next/dist/bin/next'), 'start', str(ROOT / 'web/identity'),
+           '--hostname', '127.0.0.1', '--port', '3181'],
+          prepare_database=lambda: compose(config, 'up', '-d', '--wait', '--wait-timeout', '90', 'db'))
+
+
+def serve(config, identity, bff, api_command, host_command, next_command,
+          prepare_database, node='node', bff_ports=(5171, 5172)):
+    """Shared foreground lifecycle for source and prebuilt private workspaces."""
     processes = []
     with lock(), tempfile.TemporaryDirectory(prefix='sci-private-') as runtime:
         # Unix socket names are bounded by sockaddr_un; repository paths can be long.
         identity['Identity__AuthOperatorSocket'] = str(Path(runtime) / 'recovery.sock')
         # Before touching the database or starting services, refuse existing listeners.
-        check_ports()
+        check_ports((5157, 3181, 7443, *bff_ports))
         print('Private phase: database startup.', flush=True)
-        compose(config, 'up', '-d', '--wait', '--wait-timeout', '90', 'db')
+        prepare_database()
         print('Private phase: Identity migrations.', flush=True)
-        checked([DOTNET, api, '--migrate'], env=identity)
+        checked([*api_command, '--migrate'], env=identity)
         def spawn(command, env, port, path, status):
             child = subprocess.Popen(command, env=env, cwd=ROOT, stdout=subprocess.DEVNULL,
                                      stderr=subprocess.DEVNULL, start_new_session=True)
@@ -237,16 +246,17 @@ def start():
         previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
         try:
             print('Private phase: Identity startup.', flush=True)
-            spawn([DOTNET, api], identity, 5157, '/health/ready', 200)
-            for port in (5171, 5172):
+            spawn(api_command, identity, 5157, '/health/ready', 200)
+            for port in bff_ports:
                 print('Private phase: BFF startup.', flush=True)
-                spawn([DOTNET, host], {**bff, 'ASPNETCORE_URLS': f'http://127.0.0.1:{port}'}, port, '/health/ready', 204)
+                spawn(host_command, {**bff, 'ASPNETCORE_URLS': f'http://127.0.0.1:{port}'}, port, '/health/ready', 204)
             print('Private phase: frontend startup.', flush=True)
-            spawn(['node', str(ROOT / 'web/identity/node_modules/next/dist/bin/next'), 'start', str(ROOT / 'web/identity'),
-                   '--hostname', '127.0.0.1', '--port', '3181'], base_env(), 3181, '/fa', 200)
+            spawn(next_command, {**base_env(), 'HOSTNAME': '127.0.0.1', 'PORT': '3181', 'NODE_ENV': 'production'}, 3181, '/fa', 200)
             print('Private phase: verified TLS startup.', flush=True)
-            ingress = subprocess.Popen(['node', str(ROOT / 'deploy/development/https-ingress.mjs')], cwd=ROOT,
+            peers = list(bff_ports) if len(bff_ports) > 1 else [bff_ports[0], bff_ports[0]]
+            ingress = subprocess.Popen([node, str(ROOT / 'deploy/development/https-ingress.mjs')], cwd=ROOT,
                         env={**base_env(), 'SMARTCORE_INGRESS_ENVIRONMENT': 'Development', 'SMARTCORE_INGRESS_ORIGIN': ORIGIN,
+                             'SMARTCORE_BFF_ORIGINS': ','.join(f'http://127.0.0.1:{port}' for port in peers),
                              'SMARTCORE_TLS_KEY': str(STATE / 'tls.key'), 'SMARTCORE_TLS_CERT': str(STATE / 'tls.crt')},
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             processes.append(ingress)
@@ -286,7 +296,7 @@ def start():
             print('Owned app processes stopped. Private database and keys preserved.', flush=True)
 
 
-def inbox(kind, contact):
+def inbox(kind, contact, query_runner=None):
     config = load()
     # SQL contains base64 only; contact text cannot inject SQL or psql commands.
     encoded = base64.b64encode(contact.strip().lower().encode()).decode()
@@ -296,8 +306,11 @@ def inbox(kind, contact):
         'setup': f'SELECT s.id FROM setup_challenges s JOIN verification_sessions v ON v.id=s.verification_id WHERE v.contact={expression} AND s.expires_at>now() ORDER BY s.created_at DESC LIMIT 1',
         'reset': f'SELECT c.id FROM auth_reset_challenges c JOIN persons p ON p.id=c.person_id WHERE p.contact={expression} AND c.expires_at>now() ORDER BY c.created_at DESC LIMIT 1'
     }[kind]
-    identifier = compose(config, 'exec', '-T', 'db', 'psql', '-U', 'identity_private', '-d', 'identity_private',
-                         '-At', '-v', 'ON_ERROR_STOP=1', '-c', query).decode().strip()
+    if query_runner is None:
+        identifier = compose(config, 'exec', '-T', 'db', 'psql', '-U', 'identity_private', '-d', 'identity_private',
+                             '-At', '-v', 'ON_ERROR_STOP=1', '-c', query).decode().strip()
+    else:
+        identifier = query_runner(query).decode().strip()
     if not identifier or not all(c.isalnum() or c in '_-' for c in identifier):
         raise ValueError('No unexpired private proof')
     prefix = {'registration': '/dev/inbox/', 'setup': '/dev/setup-inbox/', 'reset': '/dev/reset-inbox/'}[kind]

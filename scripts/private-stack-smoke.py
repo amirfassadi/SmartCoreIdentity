@@ -6,6 +6,7 @@ volume, never an external/existing database. No production or provider calls.
 import http.cookiejar
 import importlib.util
 import json
+import os
 from pathlib import Path
 import secrets
 import signal
@@ -17,9 +18,14 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('private_stack', ROOT / 'tools/private_stack.py')
+BUNDLE = Path(os.environ['SMARTCORE_PRIVATE_BUNDLE']).resolve() if os.environ.get('SMARTCORE_PRIVATE_BUNDLE') else None
+spec = importlib.util.spec_from_file_location('private_stack', (BUNDLE or ROOT) / 'tools/private_stack.py')
 stack = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(stack)
+if BUNDLE:
+    wrapper_spec = importlib.util.spec_from_file_location('private_bundle', BUNDLE / 'run.py')
+    wrapper = importlib.util.module_from_spec(wrapper_spec)
+    wrapper_spec.loader.exec_module(wrapper)
 
 
 def run():
@@ -44,7 +50,7 @@ def run():
         return response.status, json.loads(raw) if raw else None
 
     def launch():
-        process = subprocess.Popen([sys.executable, str(ROOT / 'tools/private_stack.py'), 'run'],
+        process = subprocess.Popen([sys.executable, str(BUNDLE / 'run.py' if BUNDLE else ROOT / 'tools/private_stack.py'), 'run'],
                     stdout=None, stderr=None)
         until = time.monotonic() + 180
         while time.monotonic() < until:
@@ -78,7 +84,8 @@ def run():
         flow = secrets.token_urlsafe(32)
         assert request('/bff/register', {'flowId': flow, 'email': contact,
                                        'password': password, 'displayName': 'Private workspace test'})[0] == 202
-        proof = {'flowId': flow, 'code': stack.inbox('registration', contact)}
+        proof = {'flowId': flow, 'code': stack.inbox('registration', contact,
+                  query_runner=(lambda sql: wrapper.query(stack.load(), sql)) if BUNDLE else None)}
         print('Private acceptance phase: registration requested; local inbox available.', flush=True)
         until = time.monotonic() + 30
         while True:
@@ -92,7 +99,7 @@ def run():
         print('Private acceptance phase: registration Ready.', flush=True)
         assert request('/bff/login', {'email': contact, 'password': password})[0] == 200
         token = request('/bff/csrf')[1]['requestToken']
-        # Ingress alternates between the two real BFF processes.
+        # Source workspace alternates two peers; the low-memory bundle has one.
         for _ in range(4):
             assert request('/bff/me', {})[0] == 200
         before = {item.name: item.value for item in cookies if item.name == '__Host-smartcore-session'}
@@ -109,7 +116,8 @@ def run():
         assert request('/bff/logout', {})[0] == 204
         token = request('/bff/csrf')[1]['requestToken']
         assert request('/bff/me', {})[0] == 401
-        print('Private runner PASS: real registration/login/two-host reads/logout and session continuity after restart; no provider calls.')
+        peers = 'single-host reads' if BUNDLE else 'two-host reads'
+        print('Private runner PASS: real registration/login/' + peers + '/logout and session continuity after restart; no provider calls.')
     finally:
         if child is not None and child.poll() is None:
             stop(child)
