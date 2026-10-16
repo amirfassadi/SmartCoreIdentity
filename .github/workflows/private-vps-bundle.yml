@@ -30,15 +30,15 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: python -m unittest discover -s tests/private-stack -v
-      - name: Publish self-contained hosts outside checkout
+      - name: Publish hosts for the bundled shared runtime outside checkout
         shell: bash
         run: |
           dotnet restore src/SmartCore.Identity.Api --locked-mode
           mkdir -p "$RUNNER_TEMP/private-api-source" "$RUNNER_TEMP/private-bff-source"
           git archive HEAD global.json src database | tar -x -C "$RUNNER_TEMP/private-api-source"
           git archive HEAD global.json src database | tar -x -C "$RUNNER_TEMP/private-bff-source"
-          dotnet publish "$RUNNER_TEMP/private-api-source/src/SmartCore.Identity.Api" -c Release -r linux-x64 --self-contained true -o "$RUNNER_TEMP/private-publish/api"
-          dotnet publish "$RUNNER_TEMP/private-bff-source/src/SmartCore.Identity.Bff.Host" -c Release -r linux-x64 --self-contained true -o "$RUNNER_TEMP/private-publish/bff"
+          dotnet publish "$RUNNER_TEMP/private-api-source/src/SmartCore.Identity.Api" -c Release --self-contained false -p:UseAppHost=false -o "$RUNNER_TEMP/private-publish/api"
+          dotnet publish "$RUNNER_TEMP/private-bff-source/src/SmartCore.Identity.Bff.Host" -c Release --self-contained false -p:UseAppHost=false -o "$RUNNER_TEMP/private-publish/bff"
       - run: npm ci --ignore-scripts --prefix web/identity
       - run: npm run build --prefix web/identity
         env:
@@ -48,7 +48,7 @@ jobs:
       - name: Package private runtime without keys or database credentials
         shell: bash
         run: |
-          python tools/package_private_bundle.py --output "$RUNNER_TEMP/bundle/smartcore-identity-private" --api "$RUNNER_TEMP/private-publish/api" --bff "$RUNNER_TEMP/private-publish/bff" --node "$(command -v node)"
+          python tools/package_private_bundle.py --output "$RUNNER_TEMP/bundle/smartcore-identity-private" --api "$RUNNER_TEMP/private-publish/api" --bff "$RUNNER_TEMP/private-publish/bff" --node "$(command -v node)" --dotnet "$(command -v dotnet)"
           echo "SMARTCORE_PRIVATE_BUNDLE=$RUNNER_TEMP/bundle/smartcore-identity-private" >> "$GITHUB_ENV"
       - name: Initialize private keys and test bounded database provisioning
         run: |

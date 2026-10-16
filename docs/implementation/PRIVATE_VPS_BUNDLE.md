@@ -8,8 +8,8 @@ Kavenegar remains postponed; no SMS/email/voice provider is connected.
 
 ## Package contents
 
-CI builds on Ubuntu 22.04 and publishes Linux x64 self-contained .NET 10 API/BFF
-executables, the production Next standalone app and its static assets, a separate
+CI builds on Ubuntu 22.04 and publishes the API/BFF assemblies with a shared
+Linux x64 .NET/ASP.NET 10 runtime, the production Next standalone app and its static assets, a separate
 Node 24 executable, the HTTPS ingress and Python 3.10-compatible control scripts.
 The archive requires no build, npm install, .NET SDK/runtime installation, Docker,
 Compose, or replacement of system Node/Python. OpenSSL and the existing `psql`
@@ -34,7 +34,7 @@ Download the `smartcore-identity-private-linux-x64` artifact from the successful
 
 The tar archive is created **before** any test initialization. CI uploads only these
 two files, never the initialized directory, generated keys or database credentials.
-The manifest records source SHA, bundled Node version, target and file hashes.
+The manifest records source SHA, bundled Node/.NET versions, target and file hashes.
 Check the archive SHA against the trusted Actions run's package output, not only an
 untrusted checksum delivered alongside a possibly modified archive.
 

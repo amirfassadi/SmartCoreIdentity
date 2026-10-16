@@ -11,6 +11,9 @@ bundle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bundle)
 bundle.verify()
 config = bundle.stack.load()
+runtime_env = {**bundle.stack.base_env(), 'DOTNET_ROOT': str(root / 'dotnet'), 'DOTNET_ROOT_X64': str(root / 'dotnet'), 'DOTNET_MULTILEVEL_LOOKUP': '0'}
+assert not bundle.stack.checked([str(root / 'dotnet/dotnet'), '--list-sdks'], env=runtime_env).strip()
+print('Bundled runtime PASS: no .NET SDK included or resolved.')
 admin = ['docker', 'exec', '-i', os.environ['CI_PG_CONTAINER'], 'psql', '-U', 'postgres', '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1']
 
 def sql(value):

@@ -114,9 +114,12 @@ def run(config):
     # Limit processor heuristics for this small private workspace, not public load.
     identity['DOTNET_PROCESSOR_COUNT'] = '1'
     bff['DOTNET_PROCESSOR_COUNT'] = '1'
+    for env in (identity, bff):
+        env.update(DOTNET_ROOT=str(ROOT / 'dotnet'), DOTNET_ROOT_X64=str(ROOT / 'dotnet'), DOTNET_MULTILEVEL_LOOKUP='0')
     node = str(ROOT / 'node/bin/node')
-    stack.serve(config, identity, bff, [str(ROOT / 'api/SmartCore.Identity.Api')],
-                [str(ROOT / 'bff/SmartCore.Identity.Bff.Host')],
+    dotnet = str(ROOT / 'dotnet/dotnet')
+    stack.serve(config, identity, bff, [dotnet, str(ROOT / 'api/SmartCore.Identity.Api.dll')],
+                [dotnet, str(ROOT / 'bff/SmartCore.Identity.Bff.Host.dll')],
                 [node, str(ROOT / 'web/server.js')], node=node,
                 prepare_database=lambda: check_database(config), bff_ports=(5171,))
 
