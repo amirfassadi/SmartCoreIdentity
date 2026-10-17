@@ -26,6 +26,10 @@ if BUNDLE:
     wrapper_spec = importlib.util.spec_from_file_location('private_bundle', BUNDLE / 'run.py')
     wrapper = importlib.util.module_from_spec(wrapper_spec)
     wrapper_spec.loader.exec_module(wrapper)
+    wrapper.verify()
+    runtime_env = {**stack.base_env(), 'DOTNET_ROOT': str(BUNDLE / 'dotnet'),
+                   'DOTNET_ROOT_X64': str(BUNDLE / 'dotnet'), 'DOTNET_MULTILEVEL_LOOKUP': '0'}
+    assert not stack.checked([str(BUNDLE / 'dotnet/dotnet'), '--list-sdks'], env=runtime_env).strip()
 
 
 def run():

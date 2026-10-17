@@ -1,4 +1,4 @@
-name: Ubuntu 22.04 private VPS bundle
+name: Debian 12 and Ubuntu private VPS bundle
 on: [push, pull_request]
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_PASSWORD: disposable_ci_only_password
         ports: ["5432:5432"]
@@ -58,6 +58,15 @@ jobs:
           CI_PG_CONTAINER: ${{ job.services.postgres.id }}
       - name: Real prebuilt account flow and immediate session-preserving restart
         run: python scripts/private-stack-smoke.py
+      - name: Run the same prebuilt bundle on Debian 12 without SDK or system Node
+        shell: bash
+        run: |
+          docker build -t smartcore-private-debian12-check -f deploy/private/Dockerfile.debian12-check deploy/private
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            --mount "type=bind,src=$SMARTCORE_PRIVATE_BUNDLE,dst=$SMARTCORE_PRIVATE_BUNDLE" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/source,readonly" \
+            -e SMARTCORE_PRIVATE_BUNDLE smartcore-private-debian12-check \
+            python3 /source/scripts/private-stack-smoke.py
       - name: Publish only the pre-initialization archive and checksum
         uses: actions/upload-artifact@v4
         with:

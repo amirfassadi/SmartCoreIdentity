@@ -1,4 +1,4 @@
-"""Ubuntu 22.04 x64 private bundle; Python 3.10+, no SDK/npm/Docker required."""
+"""Debian 12 / Ubuntu 22.04 x64 private bundle; Python 3.10+, PostgreSQL 18."""
 import argparse
 import hashlib
 import json
@@ -27,7 +27,7 @@ def verify():
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         raise ValueError('Linux x86_64 required')
     manifest = json.loads((ROOT / 'manifest.json').read_text())
-    if manifest.get('platform') != 'ubuntu-22.04-linux-x64':
+    if manifest.get('platform') != 'linux-x64-glibc':
         raise ValueError('Unsupported bundle target')
     for name, expected in manifest['sha256'].items():
         path = ROOT / name
@@ -55,8 +55,8 @@ def query(config, sql):
 
 def check_database(config):
     version = int(query(config, 'SHOW server_version_num;').strip())
-    if version < 170000 or version >= 180000:
-        raise ValueError('PostgreSQL 17 required')
+    if version < 180000 or version >= 190000:
+        raise ValueError('PostgreSQL 18 required')
     # A similarly named pre-existing database is never silently adopted.
     result = query(config, "SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database();").decode().strip()
     if result != config['project']:
@@ -73,8 +73,8 @@ def provisioning_sql(config):
 SELECT pg_advisory_lock(641017);
 DO $guard$
 BEGIN
- IF current_setting('server_version_num')::int NOT BETWEEN 170000 AND 179999 THEN
-   RAISE EXCEPTION 'PostgreSQL 17 required';
+ IF current_setting('server_version_num')::int NOT BETWEEN 180000 AND 189999 THEN
+   RAISE EXCEPTION 'PostgreSQL 18 required';
  END IF;
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='{DATABASE}' AND
    (shobj_description(oid,'pg_authid') IS DISTINCT FROM '{marker}' OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication)) THEN

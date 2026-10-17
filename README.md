@@ -6,7 +6,7 @@ SmartCoreIdentity is the identity and authentication foundation of the SmartCore
 
 For a persistent private fa/en account workspace without SMS, see
 [private workspace setup](docs/implementation/PRIVATE_WORKSPACE.md).
-For the existing Ubuntu 22.04 VPS with PostgreSQL 17 and no build tools, see
+For Debian 12 / Ubuntu 22.04 x64 with PostgreSQL 18 and no build tools, see
 [the prebuilt private VPS bundle](docs/implementation/PRIVATE_VPS_BUNDLE.md).
 Kavenegar integration is postponed by owner direction (2026-10-15). Existing
 registration/login/recovery functionality remains available for private testing;

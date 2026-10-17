@@ -1,0 +1,6 @@
+# Disposable CI compatibility check only; no container engine is needed on the VPS.
+FROM debian:12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 openssl postgresql-client ca-certificates libc6 libgcc-s1 \
+    libgssapi-krb5-2 libicu72 libssl3 libstdc++6 tzdata zlib1g \
+    && rm -rf /var/lib/apt/lists/*

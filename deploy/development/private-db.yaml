@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     environment:
       POSTGRES_DB: identity_private
       POSTGRES_USER: identity_private
@@ -8,7 +8,7 @@ services:
     ports:
       - "127.0.0.1:55437:5432"
     volumes:
-      - private-data:/var/lib/postgresql/data
+      - private-data:/var/lib/postgresql
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U identity_private -d identity_private"]
       interval: 2s

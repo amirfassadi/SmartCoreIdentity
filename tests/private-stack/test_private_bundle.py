@@ -20,7 +20,7 @@ class PrivateBundleChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'runtime').write_bytes(b'verified binary')
-            manifest = {'platform': 'ubuntu-22.04-linux-x64', 'sha256':
+            manifest = {'platform': 'linux-x64-glibc', 'sha256':
                         {'runtime': hashlib.sha256(b'verified binary').hexdigest()}}
             (root / 'manifest.json').write_text(json.dumps(manifest))
             with patch.object(bundle, 'ROOT', root):
@@ -41,6 +41,16 @@ class PrivateBundleChecks(unittest.TestCase):
         self.assertEqual(env['PGHOST'], '127.0.0.1')
         self.assertEqual(env['PGPORT'], '5432')
         self.assertEqual(env['PGDATABASE'], 'smartcore_identity_private')
+
+    def test_database_gate_accepts_18_and_refuses_other_majors(self):
+        config = {'project': 'smartcore-private-' + 'a' * 12}
+        for version in (b'180000', b'180006', b'189999'):
+            with patch.object(bundle, 'query', side_effect=[version, config['project'].encode()]):
+                bundle.check_database(config)
+        for version in (b'170011', b'190000'):
+            with patch.object(bundle, 'query', return_value=version):
+                with self.assertRaisesRegex(ValueError, 'PostgreSQL 18 required'):
+                    bundle.check_database(config)
 
     def test_provisioning_rejects_arbitrary_marker_or_password_sql(self):
         valid = {'project': 'smartcore-private-' + 'a' * 12, 'db': 'b' * 64}
