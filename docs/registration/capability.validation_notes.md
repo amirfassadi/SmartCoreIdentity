@@ -103,3 +103,7 @@ For this revision, the command passed on 2026-09-28 after adding this note and i
 [Current Platform review status](platform-review-status.md) records the new input. Content matrix and analyst architecture/legacy review exist; full certification remains incomplete. Updated Platform subset: 557 focused checks, 433 limited package checks and 297 PASS / 6 WARN / 97 INFO. No complete 064/065 acceptance or runtime behavior is certified. Generation remains BLOCKED. All four applicable documentary gates precede implementation; ADR signature alone is insufficient. Archive bytes/manifest and historical source pins remain preserved.
 
 Change v0.1.13: new review input and code-entry clarification; no governance decision or historical PASS adopted.
+
+### Registration setup implementation follow-up — 2026-10-10
+
+The recovered runtime baseline is now published as b4e1407; native PostgreSQL CI passed for that baseline. The active development revision adds distinct setup proof, immutable candidate acceptance, truthful completion outcome and durable worker recovery. See [phase baseline](../implementation/BASELINE.md) and [verification](../implementation/VERIFICATION.md) for actual scope/evidence; historical no-code/source-request statements are superseded. Full-MVP architectural/readiness/production gates remain separate.

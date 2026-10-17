@@ -10,7 +10,16 @@ public sealed class Database(string connectionString) : IAsyncDisposable
         await using var connection = await Source.OpenConnectionAsync();
         // Advisory lock serializes migration runners; script owns its transaction.
         await connection.Execute("SELECT pg_advisory_lock(640901)");
-        try { await connection.Execute(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"database/001_registration.sql"))); }
+        try
+        {
+            foreach(var file in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory,"database"),"*.sql").Order())
+            {
+                var version=int.Parse(Path.GetFileName(file).Split('_')[0]);
+                var table=await connection.One("SELECT to_regclass('schema_versions') IS NOT NULL AS present");
+                if(table!.Get<bool>("present") && await connection.One("SELECT version FROM schema_versions WHERE version=@version",("version",version)) is not null) continue;
+                await connection.Execute(await File.ReadAllTextAsync(file));
+            }
+        }
         finally { await connection.Execute("SELECT pg_advisory_unlock(640901)"); }
     }
     public ValueTask DisposeAsync() => Source.DisposeAsync();

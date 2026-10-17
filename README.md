@@ -4,6 +4,14 @@
 
 SmartCoreIdentity is the identity and authentication foundation of the SmartCore ecosystem.
 
+For a persistent private fa/en account workspace without SMS, see
+[private workspace setup](docs/implementation/PRIVATE_WORKSPACE.md).
+For Debian 12 / Ubuntu 22.04 x64 with PostgreSQL 18 and no build tools, see
+[the prebuilt private VPS bundle](docs/implementation/PRIVATE_VPS_BUNDLE.md).
+Kavenegar integration is postponed by owner direction (2026-10-15). Existing
+registration/login/recovery functionality remains available for private testing;
+public deployment and the release gates remain open.
+
 > Identity proves who the actor is and provides identity, organization, membership, and session context. Business authorization belongs to consuming capabilities.
 
 
@@ -171,7 +179,11 @@ SmartCoreIdentity does not own:
 
 ## Current Status
 
-**Status:** Registration-first documentation reconciliation / DRAFT — no implementation or generation readiness
+**Status:** Private registration/authentication/recovery/BFF implementation with
+verified Stage B browser flows. Review stack remains Draft; canonical integration,
+real delivery, operations and public deployment gates remain open. See the
+[product roadmap](docs/implementation/PRODUCT_ROADMAP.md) and
+[release gates](docs/implementation/RELEASE_GATES.md) for current scope.
 
 The Kimia implementation must remain consistent with the existing SCI documents and governing ADRs.
 

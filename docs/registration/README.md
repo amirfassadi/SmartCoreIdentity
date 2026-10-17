@@ -52,3 +52,7 @@ No implementation or running service is delivered by this documentation change.
 ## Integrated review follow-up — 2026-10-04
 
 [Latest Platform review status](platform-review-status.md) pins the unaccepted integrated candidate and remaining code-entry conditions. Older pins above preserve historical review provenance. Select final authoritative revisions and complete all four applicable 064 gates plus 065 quality/governance evidence before implementation; no archived readiness claim or latest proposal pin grants permission.
+
+### Registration setup implementation follow-up — 2026-10-10
+
+The recovered runtime baseline is now published as b4e1407; native PostgreSQL CI passed for that baseline. The active development revision adds distinct setup proof, immutable candidate acceptance, truthful completion outcome and durable worker recovery. See [phase baseline](../implementation/BASELINE.md) and [verification](../implementation/VERIFICATION.md) for actual scope/evidence; historical no-code/source-request statements are superseded. Full-MVP architectural/readiness/production gates remain separate.

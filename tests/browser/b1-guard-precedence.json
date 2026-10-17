@@ -1,0 +1,7 @@
+[
+  {"name":"size before media", "path":"/bff/login", "method":"POST", "bodyBytes":16385, "headers":{"Content-Type":"text/plain","Origin":"https://localhost:7443"}, "body":"{", "csrfValid":true, "status":413,"code":"REQUEST_TOO_LARGE"},
+  {"name":"media before Origin", "path":"/bff/login", "method":"POST", "bodyBytes":1, "headers":{"Content-Type":"text/plain","Origin":"https://foreign.invalid"}, "body":"{", "csrfValid":true, "status":415,"code":"UNSUPPORTED_MEDIA_TYPE"},
+  {"name":"Origin before CSRF", "path":"/bff/login", "method":"POST", "bodyBytes":1, "headers":{"Content-Type":"application/json","Origin":"https://foreign.invalid"}, "body":"{", "csrfValid":false, "status":403,"code":"ORIGIN_REJECTED"},
+  {"name":"CSRF before malformed JSON", "path":"/bff/login", "method":"POST", "bodyBytes":1, "headers":{"Content-Type":"application/json","Origin":"https://localhost:7443"}, "body":"{", "csrfValid":false, "status":403,"code":"CSRF_REJECTED"},
+  {"name":"cross-site before malformed JSON", "path":"/bff/login", "method":"POST", "bodyBytes":1, "headers":{"Content-Type":"application/json","Origin":"https://localhost:7443","Sec-Fetch-Site":"cross-site"}, "body":"{", "csrfValid":true, "status":403,"code":"ORIGIN_REJECTED"}
+]

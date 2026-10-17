@@ -1,0 +1,114 @@
+// Complete real B2+B3 browser journey. Private pipe for inbox/worker only; no proof artifacts.
+import assert from 'node:assert/strict';
+import {createHash,X509Certificate} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {createInterface} from 'node:readline';
+import {chromium} from 'playwright';
+const input=createInterface({input:process.stdin,terminal:false})[Symbol.asyncIterator]();
+const receive=async()=>JSON.parse((await input.next()).value);
+const fixture=await receive();
+const exchange=async(event)=>{process.stdout.write(JSON.stringify({event})+'\n');return receive();};
+const certificate=new X509Certificate(await readFile(fixture.tlsCertificatePath));
+const spki=createHash('sha256').update(certificate.publicKey.export({type:'spki',format:'der'})).digest('base64');
+const browser=await chromium.launch({headless:true,args:[`--ignore-certificate-errors-spki-list=${spki}`]});
+const context=await browser.newContext({baseURL:'https://localhost:7443',ignoreHTTPSErrors:false});
+let stage='registration';
+const deadline=setTimeout(()=>{process.stdout.write(JSON.stringify({event:'failed',stage:'deadline'})+'\n');process.exit(1);},120000);deadline.unref();
+try {
+  await context.addInitScript(()=>{
+    window.__cspViolations=[];
+    document.addEventListener('securitypolicyviolation',e=>window.__cspViolations.push(e.effectiveDirective));
+  });
+  const page=await context.newPage();const faults=[];page.on('pageerror',()=>faults.push('pageerror'));
+  await page.goto('/en');await page.getByRole('button',{name:'Create an account',exact:true}).click();
+  const registration=page.getByTestId('registration');
+  await registration.locator('input[name=displayName]').fill('Browser recovery fixture');
+  await registration.locator('input[name=contact]').fill(fixture.email);await registration.locator('input[name=password]').fill(fixture.password);
+  await registration.getByRole('button',{name:'Send verification code',exact:true}).click();await registration.locator('input[name=code]').waitFor();
+  const registered=await exchange('registered');await registration.locator('input[name=code]').fill(registered.code);
+  await registration.getByRole('button',{name:'Verify code',exact:true}).click();await registration.getByRole('button',{name:'Check account readiness',exact:true}).waitFor();
+  await exchange('provision');await registration.getByRole('button',{name:'Check account readiness',exact:true}).click();
+  await registration.getByText('Your account is ready. Sign in to continue.',{exact:true}).waitFor();
+  await registration.getByRole('button',{name:'Go to sign in',exact:true}).click();
+  async function login(password) {
+    await page.locator('input[name=contact]').fill(fixture.email);await page.locator('input[name=password]').fill(password);
+    await page.locator('form').locator('button[type=submit]').click();await page.getByTestId('profile').waitFor();
+  }
+  await login(fixture.password);
+  stage='actual browser refresh';
+  const opaque=(await context.cookies()).find(c=>c.name==='__Host-smartcore-session').value;
+  await exchange('refresh-due');
+  const refreshed=page.waitForResponse(r=>r.url().endsWith('/bff/me/action') && r.status()===200);
+  await page.getByRole('button',{name:'Continue',exact:true}).click();await (await refreshed).finished();
+  assert.equal((await context.cookies()).find(c=>c.name==='__Host-smartcore-session').value,opaque);
+  await exchange('refresh-done');
+  stage='one-time enrollment and consent';
+  const recovery=page.getByTestId('recovery');
+  await recovery.locator('input[name=currentPassword]').fill(fixture.password);
+  await recovery.locator('input[name=acceptLossRisk]').check();
+  await page.evaluate(()=>{
+    const native=fetch.bind(window);let lost=false;
+    window.fetch=async(input,options)=>{
+      const response=await native(input,options);
+      if(input==='/bff/recovery/enroll' && response.status===200 && !lost){lost=true;throw new Error('Fixture lost one-time response');}
+      return response;
+    };
+  });
+  await recovery.getByRole('button',{name:'Issue recovery code',exact:true}).click();await recovery.getByRole('alert').waitFor();
+  stage='explicit lost-enrollment replay and replacement consent';
+  await recovery.getByRole('button',{name:'Issue recovery code',exact:true}).click();
+  await recovery.getByText(/This code was already issued/).waitFor();assert.equal(await recovery.getByTestId('recovery-code').count(),0);
+  await recovery.getByRole('button',{name:'Issue a replacement code',exact:true}).click();
+  await recovery.locator('input[name=currentPassword]').fill(fixture.password);
+  assert.equal(await recovery.locator('input[name=acceptLossRisk]').isChecked(),false);
+  await recovery.locator('input[name=acceptLossRisk]').check();
+  await recovery.getByRole('button',{name:'Issue recovery code',exact:true}).click();await recovery.getByTestId('recovery-code').waitFor();
+  const code=await recovery.getByTestId('recovery-code').textContent();assert(/^[A-F0-9]{32}$/.test(code));
+  assert.equal(await recovery.locator('input[name=currentPassword]').count(),0);
+  const html=await page.evaluate(async()=>await (await fetch('/en',{cache:'no-store'})).text());assert(!html.includes(code),'One-time code cannot enter public SSR');
+  const stored=await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}));assert(!stored.includes(code));
+  await recovery.getByRole('button',{name:'I saved this code',exact:true}).click();assert.equal(await recovery.getByTestId('recovery-code').count(),0);
+  stage='logout and uniform reset start';
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.locator('input[name=contact]').waitFor();
+  await page.getByRole('button',{name:'Forgot password?',exact:true}).click();const reset=page.getByTestId('reset');
+  await reset.locator('input[name=contact]').fill(fixture.email);await reset.getByRole('button',{name:'Start recovery',exact:true}).click();await reset.locator('input[name=code]').waitFor();
+  const resetProof=await exchange('reset-started');
+  const cookie=(await context.cookies()).find(c=>c.name==='__Host-smartcore-reset');assert(cookie && cookie.httpOnly && cookie.secure && cookie.sameSite==='Lax' && cookie.path==='/');
+  assert.equal(await page.evaluate(()=>document.cookie.includes('__Host-smartcore-reset')),false);
+  stage='both-factor reset acceptance';
+  await reset.locator('input[name=code]').fill(resetProof.code);await reset.locator('input[name=recoveryCode]').fill(code.toLowerCase());
+  await reset.locator('input[name=newPassword]').fill(fixture.newPassword);
+  await reset.getByRole('button',{name:'Request password reset',exact:true}).click();
+  await reset.getByText(/Your request was accepted/).waitFor();
+  assert.equal(await reset.locator('input').count(),0);assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));
+  stage='pending reset preserves processing explanation';
+  await reset.getByRole('button',{name:'Go to sign in',exact:true}).click();
+  await page.locator('input[name=contact]').fill(fixture.email);await page.locator('input[name=password]').fill(fixture.newPassword);
+  await page.locator('form').locator('button[type=submit]').click();await page.getByRole('alert').waitFor();
+  await page.getByText('Your request was accepted. Processing may still be underway; sign in with your new password when ready.',{exact:true}).waitFor();
+  assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));
+  stage='new-password login and replacement enrollment';
+  await exchange('process');await login(fixture.newPassword);
+  assert.equal(await page.getByText('Your request was accepted. Processing may still be underway; sign in with your new password when ready.',{exact:true}).count(),0);
+  await recovery.locator('input[name=currentPassword]').fill(fixture.newPassword);await recovery.locator('input[name=acceptLossRisk]').check();
+  await recovery.getByRole('button',{name:'Issue recovery code',exact:true}).click();await recovery.getByTestId('recovery-code').waitFor();
+  const replacement=await recovery.getByTestId('recovery-code').textContent();assert.notEqual(replacement,code);
+  await recovery.getByRole('button',{name:'I saved this code',exact:true}).click();
+  stage='Persian password change and peer session rejection';
+  await page.getByRole('link',{name:'فارسی',exact:true}).click();await page.getByTestId('profile').waitFor();
+  assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.setViewportSize({width:390,height:844});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  const peer=await context.newPage();peer.on('pageerror',()=>faults.push('pageerror'));await peer.goto('/en');await peer.getByTestId('profile').waitFor();
+  await page.bringToFront();await recovery.getByRole('button',{name:'تغییر رمز عبور',exact:true}).click();
+  await recovery.locator('input[name=currentPassword]').fill(fixture.newPassword);await recovery.locator('input[name=newPassword]').fill(fixture.finalPassword);
+  await recovery.getByRole('button',{name:'درخواست تغییر رمز',exact:true}).click();await page.locator('input[name=contact]').waitFor();await peer.locator('input[name=contact]').waitFor();
+  assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));assert.equal(await peer.getByTestId('profile').count(),0);
+  await exchange('process');await login(fixture.finalPassword);
+  stage='private storage and CSP';
+  const finalStorage=await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}));
+  for(const value of [code,replacement,fixture.password,fixture.newPassword,fixture.finalPassword,registered.code,resetProof.code])assert(!finalStorage.includes(value),'No proof/password storage');
+  assert.equal(await page.evaluate(()=>window.__cspViolations.length),0);assert.equal(faults.length,0);
+  process.stdout.write(JSON.stringify({event:'passed'})+'\n');
+} catch {
+  process.stdout.write(JSON.stringify({event:'failed',stage})+'\n');process.exitCode=1;
+} finally {clearTimeout(deadline);await context.close();await browser.close();process.stdin.destroy();}
