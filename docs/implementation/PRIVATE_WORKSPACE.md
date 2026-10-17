@@ -1,6 +1,6 @@
 # Persistent private workspace without SMS
 
-For a small Ubuntu 22.04 VPS with existing PostgreSQL 17, Python 3.10 and no SDK
+For a Debian 12 / Ubuntu 22.04 VPS with PostgreSQL 18, Python 3.10+ and no SDK
 or Compose, use [the prebuilt private bundle](PRIVATE_VPS_BUNDLE.md). The source
 runner below retains its original disposable/private Docker database path.
 
@@ -108,7 +108,7 @@ recovery procedure. Existing disposable restore tests do not establish that clai
 permissions and symlink rejection, partial initialization, environment isolation,
 exclusive runner locks and failure-output redaction. The new
 `private-workspace.yml` workflow builds the real source, starts its own PostgreSQL
-17 volume, starts Identity/two BFFs/Next/verified TLS, registers and signs in through
+18 volume, starts Identity/two BFFs/Next/verified TLS, registers and signs in through
 the BFF, reads across both peers, restarts all app processes, checks the original
 session still works and logs out. CI results must be reported against the exact
 commit; adding this workflow is not proof it passed.

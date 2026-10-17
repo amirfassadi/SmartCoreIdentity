@@ -132,7 +132,7 @@ if command -v docker >/dev/null 2>&1; then
 fi
 if [[ "$BUILD_READY" -eq 1 && "$PY_READY" -eq 1 && "$NODE_READY" -eq 1 && "$DOCKER_LOCAL" -eq 1 ]]; then
   PASSWORD=$("$PYTHON_BIN" -c 'import secrets; print(secrets.token_urlsafe(32))')
-  if docker run -d --rm -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=smartcore_preflight -p 127.0.0.1::5432 postgres:17 >"$TEMP/cid" 2>"$TEMP/docker.log"; then
+  if docker run -d --rm -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=smartcore_preflight -p 127.0.0.1::5432 postgres:18 >"$TEMP/cid" 2>"$TEMP/docker.log"; then
     CID=$(cat "$TEMP/cid")
     if [[ "$CID" =~ ^[0-9a-f]{12,64}$ ]]; then
       VERSION=''
@@ -144,12 +144,12 @@ if [[ "$BUILD_READY" -eq 1 && "$PY_READY" -eq 1 && "$NODE_READY" -eq 1 && "$DOCK
       done
       if [[ "$DB_READY" -eq 1 ]]; then
         PORT=$(docker port "$CID" 5432/tcp); PORT=${PORT##*:}
-        if [[ ! "$PORT" =~ ^[0-9]+$ || ! "$VERSION" =~ ^17[0-9]{4}$ ]]; then DB_READY=0; bad 'Disposable PostgreSQL 17 version/loopback port check';
+        if [[ ! "$PORT" =~ ^[0-9]+$ || ! "$VERSION" =~ ^18[0-9]{4}$ ]]; then DB_READY=0; bad 'Disposable PostgreSQL 18 version/loopback port check';
         else
           export ConnectionStrings__Identity="Host=127.0.0.1;Port=$PORT;Database=smartcore_preflight;Username=postgres;Password=$PASSWORD"
           export ConnectionStrings__Bff="$ConnectionStrings__Identity" SMARTCORE_TEST_DB="$ConnectionStrings__Identity"
-          export SMARTCORE_TEST_ALLOW_RESET=yes SMARTCORE_TEST_ENGINE='PostgreSQL 17' SMARTCORE_EVENT_FIXTURES="$TEMP/identity-events.json"
-          ok 'Owned disposable PostgreSQL 17 ready on an ephemeral loopback port'
+          export SMARTCORE_TEST_ALLOW_RESET=yes SMARTCORE_TEST_ENGINE='PostgreSQL 18' SMARTCORE_EVENT_FIXTURES="$TEMP/identity-events.json"
+          ok 'Owned disposable PostgreSQL 18 ready on an ephemeral loopback port'
         fi
       else bad 'Owned PostgreSQL container did not become ready'; fi
     else bad 'Docker returned no valid owned container identifier'; fi

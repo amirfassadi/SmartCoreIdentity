@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
     print('BFF host config PASS: Production/public bind/missing certificate/equal keys rejected; two-process encrypted shared-ring proof accepted.')
     if '--config-only' in sys.argv:
         sys.exit(0)
-    assert os.environ.get('ConnectionStrings__Bff'), 'Provide a disposable PostgreSQL 17 test database'
+    assert os.environ.get('ConnectionStrings__Bff'), 'Provide a disposable PostgreSQL 17+ test database'
     # TLS endpoints use their own key, separate from Data Protection wrapping material.
     subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1','-keyout',str(directory/'tls.key'),'-out',str(directory/'tls.crt')],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     subprocess.run(['openssl','pkcs12','-export','-out',str(directory/'tls.pfx'),'-inkey',str(directory/'tls.key'),'-in',str(directory/'tls.crt'),'-passout','stdin'],input=(password+'\n').encode(),check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

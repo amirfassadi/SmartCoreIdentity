@@ -62,7 +62,9 @@ def package(output, api, bff, node, dotnet):
         shutil.copy2(ROOT / source, target)
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     version = subprocess.check_output([str(node), '--version'], text=True).strip()
-    manifest = {'source': source, 'platform': 'ubuntu-22.04-linux-x64', 'node': version, 'dotnet': runtime, 'sha256': {}}
+    manifest = {'source': source, 'platform': 'linux-x64-glibc',
+                'build_os': 'ubuntu-22.04', 'test_os': ['ubuntu-22.04', 'debian-12'],
+                'postgres_major': 18, 'node': version, 'dotnet': runtime, 'sha256': {}}
     for path in sorted(output.rglob('*')):
         if path.is_file():
             name = path.relative_to(output).as_posix()
