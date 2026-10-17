@@ -7,7 +7,7 @@ const input='rounded-lg border border-slate-300 px-3 py-2';
 const button='rounded-lg bg-teal-800 px-4 py-3 text-white disabled:opacity-50';
 export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {onAccepted:()=>void,onEnrolled:()=>void,onSessionLost:()=>void}) {
   const t=useTranslations('Recovery');
-  const [mode,setMode]=useState<'enroll'|'change'>('enroll');
+  const [mode,setMode]=useState<'overview'|'enroll'|'change'>('overview');
   const [code,setCode]=useState<string>();
   const [receipt,setReceipt]=useState('');
   const [error,setError]=useState('');
@@ -24,7 +24,7 @@ export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {on
   },[]);
   useEffect(()=>{const update=()=>setRemaining(Math.max(0,Math.ceil((until-Date.now())/1000)));update();const timer=setInterval(update,1000);return()=>clearInterval(timer);},[until]);
   async function submit(event:React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();if(lock.current || remaining)return;
+    event.preventDefault();if(lock.current || remaining || mode==='overview')return;
     const form=event.currentTarget;const data=new FormData(form);lock.current=true;setBusy(true);setError('');
     try {
       flow.current ??= newFlow();const flowId=flow.current;
@@ -41,12 +41,15 @@ export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {on
         if(failure instanceof BrowserError && failure.retryAfterSeconds)setUntil(Date.now()+failure.retryAfterSeconds*1000);}
     } finally {lock.current=false;if(active.current)setBusy(false);}
   }
-  function choose(value:'enroll'|'change') {if(busy || remaining || code)return;flow.current=undefined;setMode(value);setReceipt('');setError('');}
+  function choose(value:'overview'|'enroll'|'change') {if(busy || remaining || code)return;flow.current=undefined;setMode(value);setReceipt('');setError('');}
   const known=['VALIDATION_FAILED','CREDENTIALS_REJECTED','REAUTHENTICATION_REQUIRED','CSRF_REJECTED','ORIGIN_REJECTED','IDEMPOTENCY_CONFLICT','RECOVERY_UNAVAILABLE','RATE_LIMITED','BFF_BUSY','BFF_UNAVAILABLE'];
   return <section data-testid="recovery" className="mt-6 grid gap-4 border-t border-slate-200 pt-6" aria-busy={busy}>
+    <h3 className="font-semibold">{t('securityTitle')}</h3>
+    <p className="text-sm leading-7 text-slate-600">{t('securityDescription')}</p>
     <div className="flex flex-wrap gap-3">
-      <button type="button" className={input} disabled={busy || remaining>0 || !!code} onClick={()=>choose('enroll')}>{t('enroll')}</button>
-      <button type="button" className={input} disabled={busy || remaining>0 || !!code} onClick={()=>choose('change')}>{t('change')}</button>
+      <button type="button" className={input} aria-expanded={mode==='enroll'} disabled={busy || remaining>0 || !!code} onClick={()=>choose('enroll')}>{t('enroll')}</button>
+      <button type="button" className={input} aria-expanded={mode==='change'} disabled={busy || remaining>0 || !!code} onClick={()=>choose('change')}>{t('change')}</button>
+      {mode!=='overview' && <button type="button" className={input} disabled={busy || remaining>0 || !!code} onClick={()=>choose('overview')}>{t('backToAccount')}</button>}
     </div>
     {code ? <div role="region" aria-label={t('oneTime')} className="grid gap-4">
       <p>{t('oneTime')}</p><p data-testid="recovery-code" dir="ltr" className="break-all rounded-lg border border-slate-300 p-3 font-mono">{code}</p>
@@ -55,8 +58,9 @@ export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {on
     </div> : receipt ? <div className="grid gap-3">
       <p role="status">{t(`receipts.${receipt}`)}</p>
       <button type="button" className={input} disabled={busy || remaining>0} onClick={()=>choose('enroll')}>{t('replace')}</button>
-    </div> : <form key={mode} onSubmit={submit} className="grid gap-4">
+    </div> : mode!=='overview' && <form key={mode} onSubmit={submit} className="grid gap-4">
       <h3 className="font-semibold">{t(mode)}</h3>
+      <p className="text-sm leading-7 text-slate-600">{t(mode==='enroll'?'enrollDescription':'changeDescription')}</p>
       <label className="grid gap-2">{t('currentPassword')}<input name="currentPassword" type="password" autoComplete="current-password" required maxLength={128} className={input}/></label>
       {mode==='enroll' ? <label className="flex items-start gap-3"><input name="acceptLossRisk" type="checkbox" required className="mt-1"/>{t('consent')}</label> : <label className="grid gap-2">{t('newPassword')}<input name="newPassword" type="password" autoComplete="new-password" required minLength={15} maxLength={128} className={input}/></label>}
       <button type="submit" className={button} disabled={busy || remaining>0}>{busy?t('waiting'):t(mode==='enroll'?'issue':'submitChange')}</button>

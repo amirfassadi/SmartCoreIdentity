@@ -117,9 +117,10 @@ export default function AccountShell() {
         {!enabled ? <p>{t('status')}</p> : person ? <div data-testid="profile">
           <h2 className="text-2xl font-semibold">{a('welcome', {name: person.displayName})}</h2>
           <p className="mt-3" dir="ltr">{person.email ?? person.mobile}</p>
+          <p role="status" className="mt-3 text-sm text-teal-800">{a('signedIn')}</p>
           {person.recoveryEnrollmentRequired && <p className="mt-3 text-sm text-slate-600">{a('recoveryPending')}</p>}
           <div className="mt-6 flex flex-wrap gap-3">
-            <button className="rounded-lg border border-slate-300 px-4 py-2" onClick={() => void refresh(true)} disabled={busy || remaining > 0}>{a('continue')}</button>
+            <button className="rounded-lg border border-slate-300 px-4 py-2" onClick={() => void refresh(true)} disabled={busy || remaining > 0}>{a('refreshAccount')}</button>
             <button className="rounded-lg bg-teal-800 px-4 py-2 text-white" onClick={() => void logout()} disabled={busy || remaining > 0}>{a('logout')}</button>
           </div>
           {recoveryEnabled && <RecoveryPanel onSessionLost={() => {clear(); setNotice(false); broadcast('session-lost');}} onEnrolled={() => void refresh(true)} onAccepted={() => {clear(); setRegister(false); setReset(false); setNotice(true); broadcast('session-lost');}} />}

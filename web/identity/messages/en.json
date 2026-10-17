@@ -2,7 +2,7 @@
   "Shell": {
     "brand": "SmartCore",
     "title": "Your account, the start of your business",
-    "description": "Manage your account and return to your workspace.",
+    "description": "Manage your sign-in, account information and security settings.",
     "account": "Account",
     "dashboard": "Business dashboard",
     "language": "فارسی",
@@ -16,9 +16,8 @@
     "password": "Password",
     "waiting": "Please wait…",
     "welcome": "Welcome, {name}",
-    "continue": "Continue",
     "retry": "Try again in {seconds} seconds.",
-    "recoveryPending": "Set up a recovery code to protect access to your account.",
+    "recoveryPending": "You have not set up a recovery code yet. Use Account security to create and save one in case you forget your password.",
     "errors": {
       "UNAUTHORIZED": "Check your contact and password.",
       "REAUTHENTICATION_REQUIRED": "Please sign in again.",
@@ -34,7 +33,9 @@
     },
     "register": "Create an account",
     "reset": "Forgot password?",
-    "mutationAccepted": "Your request was accepted. Processing may still be underway; sign in with your new password when ready."
+    "mutationAccepted": "Your request was accepted. Processing may still be underway; sign in with your new password when ready.",
+    "refreshAccount": "Refresh account status",
+    "signedIn": "You are signed in. Manage your account security here."
   },
   "Registration": {
     "title": "Create an account",
@@ -112,7 +113,12 @@
       "BFF_BUSY": "Your account is busy. Please wait.",
       "BFF_UNAVAILABLE": "The service is temporarily unavailable. The result may be unknown; check your account before starting a new request.",
       "UNKNOWN": "The request could not be completed."
-    }
+    },
+    "securityTitle": "Account security",
+    "securityDescription": "Choose an option to manage your account security.",
+    "backToAccount": "Back to account",
+    "enrollDescription": "Create and save this code for use if you forget your password. Issuing a code does not change your current password.",
+    "changeDescription": "Enter your current and new passwords. Once the request is accepted, all sessions are closed and you will need to sign in again."
   },
   "Reset": {
     "title": "Recover your account",

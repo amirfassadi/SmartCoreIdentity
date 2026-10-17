@@ -39,11 +39,19 @@ try {
   const opaque=(await context.cookies()).find(c=>c.name==='__Host-smartcore-session').value;
   await exchange('refresh-due');
   const refreshed=page.waitForResponse(r=>r.url().endsWith('/bff/me/action') && r.status()===200);
-  await page.getByRole('button',{name:'Continue',exact:true}).click();await (await refreshed).finished();
+  await page.getByRole('button',{name:'Refresh account status',exact:true}).click();await (await refreshed).finished();
   assert.equal((await context.cookies()).find(c=>c.name==='__Host-smartcore-session').value,opaque);
   await exchange('refresh-done');
   stage='one-time enrollment and consent';
   const recovery=page.getByTestId('recovery');
+  assert.equal(await recovery.locator('form').count(),0,'Account opens without a recovery or password form');
+  await page.getByText('You are signed in. Manage your account security here.',{exact:true}).waitFor();
+  await recovery.getByRole('button',{name:'Change password',exact:true}).click();
+  await recovery.locator('input[name=newPassword]').waitFor();
+  await recovery.getByRole('button',{name:'Back to account',exact:true}).click();
+  assert.equal(await recovery.locator('form').count(),0,'Back to account closes the security form');
+  await recovery.getByRole('button',{name:'Recovery code',exact:true}).click();
+  await recovery.getByText('Create and save this code for use if you forget your password. Issuing a code does not change your current password.',{exact:true}).waitFor();
   await recovery.locator('input[name=currentPassword]').fill(fixture.password);
   await recovery.locator('input[name=acceptLossRisk]').check();
   await page.evaluate(()=>{
@@ -90,12 +98,15 @@ try {
   stage='new-password login and replacement enrollment';
   await exchange('process');await login(fixture.newPassword);
   assert.equal(await page.getByText('Your request was accepted. Processing may still be underway; sign in with your new password when ready.',{exact:true}).count(),0);
+  assert.equal(await recovery.locator('form').count(),0);
+  await recovery.getByRole('button',{name:'Recovery code',exact:true}).click();
   await recovery.locator('input[name=currentPassword]').fill(fixture.newPassword);await recovery.locator('input[name=acceptLossRisk]').check();
   await recovery.getByRole('button',{name:'Issue recovery code',exact:true}).click();await recovery.getByTestId('recovery-code').waitFor();
   const replacement=await recovery.getByTestId('recovery-code').textContent();assert.notEqual(replacement,code);
   await recovery.getByRole('button',{name:'I saved this code',exact:true}).click();
   stage='Persian password change and peer session rejection';
   await page.getByRole('link',{name:'فارسی',exact:true}).click();await page.getByTestId('profile').waitFor();
+  assert.equal(await recovery.locator('form').count(),0,'Persian account also opens without a security form');
   assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.setViewportSize({width:390,height:844});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   const peer=await context.newPage();peer.on('pageerror',()=>faults.push('pageerror'));await peer.goto('/en');await peer.getByTestId('profile').waitFor();

@@ -68,7 +68,7 @@ try {
     };
   });
   release=async () => {try {await peer.evaluate(()=>window.__releaseHeld?.());}catch {/* Context may already be gone. */}};
-  await peer.getByRole('button',{name:'ادامه',exact:true}).click();
+  await peer.getByRole('button',{name:'به‌روزرسانی وضعیت حساب',exact:true}).click();
   await peer.waitForFunction(()=>window.__held===true);
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
   await page.locator('input[name=contact]').waitFor();await peer.locator('input[name=contact]').waitFor();await release();
