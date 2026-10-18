@@ -8,3 +8,6 @@ dev-secrets/
 **/.next/
 **/*.tsbuildinfo
 **/__pycache__/
+**/.env*
+!**/.env.example
+.vercel/
