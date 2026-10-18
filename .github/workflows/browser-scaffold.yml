@@ -20,9 +20,11 @@ jobs:
           cache-dependency-path: web/identity/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run check
+      - run: npm run test:bridge
       - run: npm run typecheck
       - run: npm run build
       - run: npm run smoke
+      - run: npm run smoke:bridge
       - run: node ../../tests/ingress/https-ingress.test.mjs
   two-host-infrastructure:
     runs-on: ubuntu-latest

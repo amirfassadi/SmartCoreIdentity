@@ -11,6 +11,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check": "node scripts/check-shell.mjs",
+    "test:bridge": "node --test scripts/test-bridge.mjs",
+    "smoke:bridge": "node scripts/smoke-bridge.mjs",
     "smoke": "node scripts/smoke-shell.mjs"
   },
   "dependencies": {

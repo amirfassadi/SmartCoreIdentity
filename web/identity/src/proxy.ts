@@ -3,8 +3,9 @@ import {NextRequest, NextResponse} from 'next/server';
 import {routing} from './i18n/routing';
 const localize = createMiddleware(routing);
 export function proxy(request: NextRequest) {
-  // Defence in depth: a misrouted /bff request must never become an HTML page.
+  // No locale rewrite or page rendering for BFF traffic. Transport stays opt-in.
   if (request.nextUrl.pathname === '/bff' || request.nextUrl.pathname.startsWith('/bff/')) {
+    if (process.env.SMARTCORE_BFF_BRIDGE_ENABLED === 'true') return NextResponse.next();
     return NextResponse.json({code: 'NOT_FOUND'}, {status: 404, headers: {'Cache-Control': 'no-store'}});
   }
   const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('base64');
