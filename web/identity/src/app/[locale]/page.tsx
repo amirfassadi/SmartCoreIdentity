@@ -52,6 +52,7 @@ export default function AccountShell() {
       if (!controller.signal.aborted && current === generation.current && result) {setPerson(result.person); setNotice(false); setError('');}
     } catch (failure) {
       if (!controller.signal.aborted && current === generation.current) {
+        setChecking(false);
         if (failure instanceof BrowserError && failure.code === 'REAUTHENTICATION_REQUIRED') {clear(); broadcast('session-lost');}
         else handleError(failure);
       }
