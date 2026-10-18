@@ -61,6 +61,8 @@ jobs:
           NEXT_PUBLIC_BFF_RECOVERY_ENABLED: 'true'
       - run: npm ci --ignore-scripts --prefix web/identity/e2e
       - run: npx --prefix web/identity/e2e playwright install --with-deps chromium
+      - name: Production account interface with synthetic backend
+        run: node web/identity/e2e/account-ui.mjs
       - run: python scripts/bff-account-smoke.py
         env:
           SMARTCORE_BROWSER_E2E: 'yes'
