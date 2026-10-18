@@ -11,6 +11,8 @@ const cookies = new Set(['__Host-smartcore-session', '__Host-smartcore-antiforge
   '__Host-smartcore-registration', '__Host-smartcore-reset']);
 const safeHeaders = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer'};
+// Shared pure transport policy for the separately hosted VPS gateway.
+export {routes as browserRoutes, requestCookies as filterRequestCookies, responseCookie as filterResponseCookie};
 function error(status, code, extra = {}) {
   return Response.json(status === 503 ? {code, retryAfterSeconds: 60} : {code},
     {status, headers: {...safeHeaders, ...(status === 503 ? {'Retry-After': '60'} : {}), ...extra}});

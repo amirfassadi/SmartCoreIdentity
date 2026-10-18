@@ -1,7 +1,7 @@
 # Vercel to VPS transport preparation
 
-Status: transport implemented; disabled by default. This does not enable public
-accounts or close RELEASE_GATES. The VPS gateway and external-origin acceptance
+Status: Next transport and standalone VPS gateway implemented; disabled by default. This does not enable public
+accounts or close RELEASE_GATES. VPS installation and external-origin acceptance
 are still required. No deployed backend, database, runtime or provider was changed.
 
 ## Intended request path
@@ -49,11 +49,11 @@ retains JSON 404 and all existing account UI flags remain false by default.
 
 1. Obtain the Debian host's public address, current listeners and selected free or
    purchased backend DNS name. Preserve services and occupied ports.
-2. Implement the VPS gateway: validate its dedicated key in constant time before
-   dispatch; accept only the account paths; rebuild trusted forwarded headers from
-   fixed configuration and the trusted connection; preserve cookie allowlists,
-   body bounds, no-store, no retries and restricted redirects. TLS verification
-   stays enabled. The bridge key alone is not a browser session or CSRF proof.
+2. Install the standalone VPS gateway after staging acceptance. Its implementation
+   is `deploy/gateway/server.mjs`; it validates the dedicated key in constant time
+   before dispatch, accepts only account paths and rebuilds forwarded headers.
+   See `VPS_GATEWAY.md`. TLS verification stays enabled. The gateway key alone is
+   not a browser session or CSRF proof.
 3. Add and test an explicit restricted staging deployment policy in ASP.NET.
    Current HostConfiguration rejects non-loopback browser origins and Production;
    changing a Vercel environment variable cannot bypass that requirement.

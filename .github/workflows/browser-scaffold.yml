@@ -26,6 +26,7 @@ jobs:
       - run: npm run smoke
       - run: npm run smoke:bridge
       - run: node ../../tests/ingress/https-ingress.test.mjs
+      - run: node --test ../../tests/ingress/gateway.test.mjs
   two-host-infrastructure:
     runs-on: ubuntu-latest
     services:
