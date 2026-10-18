@@ -45,6 +45,7 @@ jobs:
           NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED: 'true'
           NEXT_PUBLIC_BFF_REGISTRATION_ENABLED: 'true'
           NEXT_PUBLIC_BFF_RECOVERY_ENABLED: 'true'
+          NEXT_PUBLIC_PRIVATE_TEST_MODE: 'true'
       - name: Package private runtime without keys or database credentials
         shell: bash
         run: |

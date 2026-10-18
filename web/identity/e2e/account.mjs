@@ -25,6 +25,10 @@ try {
     && new Intl.DateTimeFormat('fa-IR',{calendar:'persian',numberingSystem:'arabext',timeZone:'Asia/Tehran'}).resolvedOptions().calendar==='persian')),'Browser Tehran/calendar formatting');
   assert.equal(await page.locator('html').getAttribute('dir'),'ltr');
   assert.equal(await page.locator('input[name=password]').getAttribute('autocomplete'),'current-password');
+  await page.getByRole('button',{name:'Show password',exact:true}).click();
+  assert.equal(await page.locator('input[name=password]').getAttribute('type'),'text');
+  await page.getByRole('button',{name:'Hide password',exact:true}).click();
+  assert.equal(await page.locator('input[name=password]').getAttribute('type'),'password');
   const form=page.locator('form');
   await form.locator('[name=contact]').fill(fixture.email);
   await form.locator('[name=password]').fill(fixture.password);
@@ -36,6 +40,8 @@ try {
     const cookie=cookies.find(value=>value.name===name);
     assert(cookie && cookie.secure && cookie.httpOnly && cookie.sameSite==='Lax' && cookie.path==='/','Session cookie attributes');
   }
+  await page.getByRole('button',{name:'Overview',exact:true}).waitFor();
+  assert.equal(await page.getByTestId('profile').locator('input[name=currentPassword]').isVisible(),false);
   stage='public SSR and nonce';
   const publicPage=await page.evaluate(async () => {const response=await fetch('/en',{cache:'no-store'});return {html:await response.text(),csp:response.headers.get('content-security-policy')};});
   assert(!publicPage.html.includes(fixture.email),'Public SSR must not contain private profile');

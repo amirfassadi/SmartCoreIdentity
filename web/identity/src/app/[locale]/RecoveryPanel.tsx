@@ -1,11 +1,12 @@
 'use client';
+import PasswordField from './PasswordField';
 import {useTranslations} from 'next-intl';
 import {useEffect, useRef, useState} from 'react';
 import {BrowserError, post} from '@/lib/bff/client';
 import {newFlow} from '@/lib/bff/flow';
 const input='rounded-lg border border-slate-300 px-3 py-2';
 const button='rounded-lg bg-teal-800 px-4 py-3 text-white disabled:opacity-50';
-export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {onAccepted:()=>void,onEnrolled:()=>void,onSessionLost:()=>void}) {
+export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost,visible=true}: {visible?:boolean,onAccepted:()=>void,onEnrolled:()=>void,onSessionLost:()=>void}) {
   const t=useTranslations('Recovery');
   const [mode,setMode]=useState<'overview'|'enroll'|'change'>('overview');
   const [code,setCode]=useState<string>();
@@ -16,6 +17,8 @@ export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {on
   const [remaining,setRemaining]=useState(0);
   const flow=useRef<string | undefined>(undefined);
   const lock=useRef(false);const active=useRef(true);
+  const shown=useRef(visible);shown.current=visible;
+  useEffect(()=>{if(!visible){setCode(undefined);setReceipt(value=>value==='Issued'?'Hidden':value);}},[visible]);
   useEffect(()=>{
     active.current=true;
     const hidden=()=>{if(document.hidden){setCode(undefined);setReceipt(value=>value==='Issued'?'Hidden':value);}};
@@ -31,7 +34,7 @@ export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {on
       if(mode==='enroll') {
         if(data.get('acceptLossRisk')!=='on')throw new BrowserError('VALIDATION_FAILED');
         const result=await post('/bff/recovery/enroll',{flowId,currentPassword:String(data.get('currentPassword')??''),acceptLossRisk:true});
-        if(!active.current)return;form.reset();setReceipt(result.status);setCode(result.status==='Issued'?result.recoveryCode:undefined);
+        if(!active.current)return;form.reset();const canShow=shown.current && !document.hidden;setReceipt(result.status==='Issued' && !canShow?'Hidden':result.status);setCode(result.status==='Issued' && canShow?result.recoveryCode:undefined);
       } else {
         await post('/bff/password/change',{flowId,currentPassword:String(data.get('currentPassword')??''),newPassword:String(data.get('newPassword')??'')});
         if(!active.current)return;form.reset();setCode(undefined);onAccepted();
@@ -61,8 +64,8 @@ export default function RecoveryPanel({onAccepted,onEnrolled,onSessionLost}: {on
     </div> : mode!=='overview' && <form key={mode} onSubmit={submit} className="grid gap-4">
       <h3 className="font-semibold">{t(mode)}</h3>
       <p className="text-sm leading-7 text-slate-600">{t(mode==='enroll'?'enrollDescription':'changeDescription')}</p>
-      <label className="grid gap-2">{t('currentPassword')}<input name="currentPassword" type="password" autoComplete="current-password" required maxLength={128} className={input}/></label>
-      {mode==='enroll' ? <label className="flex items-start gap-3"><input name="acceptLossRisk" type="checkbox" required className="mt-1"/>{t('consent')}</label> : <label className="grid gap-2">{t('newPassword')}<input name="newPassword" type="password" autoComplete="new-password" required minLength={15} maxLength={128} className={input}/></label>}
+      <PasswordField name="currentPassword" label={t('currentPassword')} autoComplete="current-password"/>
+      {mode==='enroll' ? <label className="flex items-start gap-3"><input name="acceptLossRisk" type="checkbox" required className="mt-1"/>{t('consent')}</label> : <PasswordField name="newPassword" label={t('newPassword')} autoComplete="new-password" minLength={15}/>}
       <button type="submit" className={button} disabled={busy || remaining>0}>{busy?t('waiting'):t(mode==='enroll'?'issue':'submitChange')}</button>
     </form>}
     {error && <p role="alert" className="text-sm text-red-800">{t(`errors.${known.includes(error)?error:'UNKNOWN'}`)}</p>}

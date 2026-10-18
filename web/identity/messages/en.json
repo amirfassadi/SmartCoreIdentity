@@ -1,13 +1,21 @@
 {
   "Shell": {
     "brand": "SmartCore",
-    "title": "Your account, the start of your business",
-    "description": "Manage your sign-in, account information and security settings.",
+    "title": "One account.\nRoom for everything.",
+    "description": "Welcome to SmartCore. Sign in to your account or get started in a few simple steps.",
     "account": "Account",
     "dashboard": "Business dashboard",
     "language": "فارسی",
-    "stage": "Account foundation",
-    "status": "Under construction"
+    "stage": "YOUR SMARTCORE ACCOUNT",
+    "status": "Under construction",
+    "accountTitle": "Your space.\nPeace of mind.",
+    "accountDescription": "Your account information and security, together in one place.",
+    "promise": "Your identity connects you to your businesses and workspaces.",
+    "footer": "PERSONAL ACCOUNT · WORKSPACE ACCESS",
+    "skip": "Skip to account content",
+    "privateNotice": "Private test environment: no real email or SMS is sent. Retrieve verification codes from the server test inbox.",
+    "previewTitle": "Account interface preview",
+    "previewDescription": "Sign-in and registration are disabled on this deployment. They will be enabled once the tested backend is connected."
   },
   "Account": {
     "login": "Sign in",
@@ -35,7 +43,23 @@
     "reset": "Forgot password?",
     "mutationAccepted": "Your request was accepted. Processing may still be underway; sign in with your new password when ready.",
     "refreshAccount": "Refresh account status",
-    "signedIn": "You are signed in. Manage your account security here."
+    "signedIn": "You are signed in. Manage your account security here.",
+    "loginHeading": "Welcome back",
+    "loginDescription": "Sign in with your email or mobile number and password.",
+    "resetHeading": "Recover access",
+    "accountHome": "YOUR PERSONAL ACCOUNT",
+    "checking": "Checking your sign-in status…",
+    "navigation": "Account sections",
+    "overview": "Overview",
+    "security": "Account security",
+    "details": "Account information",
+    "displayName": "Display name",
+    "recoveryStatus": "Recovery code status",
+    "recoveryMissing": "Not set up",
+    "recoveryReady": "Set up",
+    "setupRecovery": "Open security settings",
+    "newAccount": "New to SmartCore?",
+    "passwordPrivacy": "Use a device you trust to sign in to your account."
   },
   "Registration": {
     "title": "Create an account",
@@ -76,7 +100,12 @@
       "RATE_LIMITED": "Please wait before trying again.",
       "BFF_UNAVAILABLE": "The service is temporarily unavailable. You can retry the same request later.",
       "UNKNOWN": "The request could not be completed."
-    }
+    },
+    "intro": "Create your personal account. You will verify your contact in the next step.",
+    "stepDetails": "1. Account details",
+    "stepVerify": "2. Verify contact",
+    "stepReady": "3. Ready to sign in",
+    "passwordHint": "Use 15–128 characters. A long, memorable passphrase works well."
   },
   "Recovery": {
     "enroll": "Recovery code",
@@ -152,5 +181,11 @@
       "BFF_UNAVAILABLE": "The service is temporarily unavailable. The result may be unknown; check your account before starting a new request.",
       "UNKNOWN": "The request could not be completed."
     }
+  },
+  "Fields": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "show": "Show",
+    "hide": "Hide"
   }
 }

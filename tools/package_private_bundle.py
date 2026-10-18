@@ -55,6 +55,7 @@ def package(output, api, bff, node, dotnet):
             shutil.copy2(dotnet_root / name, output / 'dotnet' / name)
     for source, destination in [('tools/private_stack.py', 'tools/private_stack.py'),
                                 ('deploy/private/run.py', 'run.py'),
+                                ('deploy/private/service.py', 'service.py'),
                                 ('deploy/development/https-ingress.mjs', 'deploy/development/https-ingress.mjs'),
                                 ('docs/implementation/PRIVATE_VPS_BUNDLE.md', 'README.md')]:
         target = output / destination

@@ -1,6 +1,7 @@
 'use client';
 import {useTranslations} from 'next-intl';
 import {useEffect, useRef, useState} from 'react';
+import PasswordField from './PasswordField';
 import {BrowserError, post} from '@/lib/bff/client';
 
 function newFlow() {
@@ -37,7 +38,7 @@ export default function RegistrationPanel({onSignIn}: {onSignIn: () => void}) {
     try {
       flow.current ??= newFlow(); const flowId = flow.current;
       if (stage === 'Start') {
-        const contact = String(data.get('contact') ?? '');
+        const contact = String(data.get('contact') ?? '').trim();
         const fields = {flowId, password: String(data.get('password') ?? ''), displayName: String(data.get('displayName') ?? '')};
         const value = await post('/bff/register', contact.includes('@') ? {...fields, email: contact} : {...fields, mobile: contact});
         if (!active.current) return;
@@ -82,17 +83,23 @@ export default function RegistrationPanel({onSignIn}: {onSignIn: () => void}) {
   const known = ['VALIDATION_FAILED','VERIFICATION_FAILED','REGISTRATION_FLOW_EXPIRED','IDEMPOTENCY_CONFLICT','SESSION_ALREADY_ACTIVE','CSRF_REJECTED','ORIGIN_REJECTED','RATE_LIMITED','BFF_UNAVAILABLE'];
   return <section data-testid="registration" aria-busy={busy} className="grid gap-4">
     <h2 className="text-xl font-semibold">{t('title')}</h2>
+    <ol className="registration-steps" aria-label={t('title')}>
+      <li aria-current={stage==='Start'?'step':undefined}>{t('stepDetails')}</li>
+      <li aria-current={!['Start','Ready','SignInRequired'].includes(stage)?'step':undefined}>{t('stepVerify')}</li>
+      <li aria-current={['Ready','SignInRequired'].includes(stage)?'step':undefined}>{t('stepReady')}</li>
+    </ol>
+    {stage==='Start' && <p className="step-description">{t('intro')}</p>}
     {stage !== 'Start' && <p role="status">{t(`states.${stage}`)}</p>}
     {outcome === 'ExistingWinner' && <p>{t('existingWinner')}</p>}
     {expired && stage !== 'Ready' && stage !== 'SignInRequired' && <p role="status">{t('expired')}</p>}
     {stage !== 'Ready' && stage !== 'SignInRequired' && <form key={stage === 'Start' ? 'start' : stage === 'AwaitingSetup' || outcome ? 'complete' : stage === 'SetupRequired' ? 'setup' : 'verify'} onSubmit={action} className="grid gap-4">
       {stage === 'Start' ? <>
         <label className="grid gap-2">{t('displayName')}<input name="displayName" autoComplete="name" required maxLength={100} className={input} /></label>
-        <label className="grid gap-2">{t('contact')}<input name="contact" autoComplete="username" required maxLength={254} dir="ltr" className={input} /></label>
-        <label className="grid gap-2">{t('password')}<input name="password" type="password" autoComplete="new-password" required minLength={15} maxLength={128} className={input} /></label>
+        <label className="grid gap-2">{t('contact')}<input name="contact" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} dir="ltr" className={input} /></label>
+        <PasswordField name="password" label={t('password')} autoComplete="new-password" minLength={15}/><p className="password-hint">{t('passwordHint')}</p>
       </> : <>
-        <label className="grid gap-2">{stage === 'SetupRequired' ? t('originalCode') : t('code')}<input name="code" inputMode="numeric" autoComplete="one-time-code" required minLength={6} maxLength={6} pattern="[0-9۰-۹٠-٩]{6}" dir="ltr" className={input} /></label>
-        {(stage === 'AwaitingSetup' || outcome) && <label className="grid gap-2">{t('password')}<input name="newPassword" type="password" autoComplete="new-password" required minLength={15} maxLength={128} className={input} /></label>}
+        <label className="grid gap-2">{stage === 'SetupRequired' ? t('originalCode') : t('code')}<input name="code" inputMode="numeric" autoComplete="one-time-code" required minLength={6} maxLength={6} pattern="[0-9۰-۹٠-٩]{6}" dir="ltr" className={`${input} otp-field`} /></label>
+        {(stage === 'AwaitingSetup' || outcome) && <PasswordField name="newPassword" label={t('password')} autoComplete="new-password" minLength={15}/>}
       </>}
       <button className={button} disabled={blocked || expired && stage !== 'Start'}>{busy ? t('waiting') : t(stage === 'Start' ? 'start' : stage === 'SetupRequired' ? 'requestSetup' : stage === 'AwaitingSetup' || outcome ? 'complete' : stage === 'PendingCredential' ? 'check' : 'verify')}</button>
     </form>}

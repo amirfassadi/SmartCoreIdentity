@@ -3,6 +3,7 @@ import {useLocale, useTranslations} from 'next-intl';
 import RecoveryPanel from './RecoveryPanel';
 import ResetPanel from './ResetPanel';
 import RegistrationPanel from './RegistrationPanel';
+import PasswordField from './PasswordField';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {bootstrap, BrowserError, invalidateCsrf, post, type Person} from '@/lib/bff/client';
 
@@ -15,6 +16,8 @@ export default function AccountShell() {
   const t = useTranslations('Shell');
   const a = useTranslations('Account');
   const locale = useLocale();
+  const [checking, setChecking] = useState(enabled);
+  const [accountView, setAccountView] = useState<'overview'|'security'>('overview');
   const [person, setPerson] = useState<Person>();
   const [register, setRegister] = useState(false);
   const [reset, setReset] = useState(false);
@@ -28,7 +31,7 @@ export default function AccountShell() {
   const channel = useRef<BroadcastChannel | null>(null);
   const locked = useRef(false);
   const clear = useCallback(() => {
-    generation.current++; read.current?.abort(); invalidateCsrf(); setPerson(undefined);
+    generation.current++; read.current?.abort(); invalidateCsrf(); setPerson(undefined); setAccountView('overview');
   }, []);
   const broadcast = useCallback((type: SessionEvent) => {
     if (channel.current) channel.current.postMessage(type);
@@ -52,7 +55,7 @@ export default function AccountShell() {
         if (failure instanceof BrowserError && failure.code === 'REAUTHENTICATION_REQUIRED') {clear(); broadcast('session-lost');}
         else handleError(failure);
       }
-    }
+    } finally {if (!controller.signal.aborted && current === generation.current) setChecking(false);}
   }, [clear, handleError, broadcast]);
   useEffect(() => {
     if (!enabled) return;
@@ -84,7 +87,7 @@ export default function AccountShell() {
   async function login(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (locked.current || remaining) return;
     const form = event.currentTarget; const fields = new FormData(form);
-    const contact = String(fields.get('contact') ?? ''); const password = String(fields.get('password') ?? '');
+    const contact = String(fields.get('contact') ?? '').trim(); const password = String(fields.get('password') ?? '');
     clear(); const current = generation.current; locked.current = true; setBusy(true); setError('');
     try {
       const result = await post('/bff/login', contact.includes('@') ? {email: contact, password} : {mobile: contact, password});
@@ -104,38 +107,53 @@ export default function AccountShell() {
     finally {locked.current = false; setBusy(false);}
   }
   const knownErrors = ['UNAUTHORIZED','REAUTHENTICATION_REQUIRED','CSRF_REJECTED','ORIGIN_REJECTED','VALIDATION_FAILED','SESSION_ALREADY_ACTIVE','RATE_LIMITED','BFF_BUSY','BFF_UNAVAILABLE','AUTHENTICATION_BUSY'];
-  return <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8 sm:px-10">
-    <header className="flex items-center justify-between border-b border-slate-200 pb-6">
-      <span className="text-xl font-bold tracking-tight">{t('brand')}</span>
-      <a className="rounded-full border border-slate-300 px-4 py-2 text-sm" href={locale === 'fa' ? '/en' : '/fa'} lang={locale === 'fa' ? 'en' : 'fa'}>{t('language')}</a>
+  return <main className="identity-shell">
+    <a className="skip-link" href="#account-content">{t('skip')}</a>
+    <header className="site-header">
+      <a className="brand" href={`/${locale}`} aria-label={t('brand')}><span className="brand-symbol" aria-hidden="true">S</span><span>{t('brand')}<small>SMARTCORE IDENTITY</small></span></a>
+      <a className="language-link" href={locale === 'fa' ? '/en' : '/fa'} lang={locale === 'fa' ? 'en' : 'fa'}>{t('language')} <span aria-hidden="true">↗</span></a>
     </header>
-    <section className="my-auto py-16 text-start">
-      <p className="mb-5 text-sm font-semibold text-teal-700">{t('stage')}</p>
-      <h1 className="max-w-2xl text-4xl font-semibold leading-snug sm:text-5xl">{t('title')}</h1>
-      <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">{t('description')}</p>
-      <div className="mt-10 max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-busy={busy}>
-        {!enabled ? <p>{t('status')}</p> : person ? <div data-testid="profile">
-          <h2 className="text-2xl font-semibold">{a('welcome', {name: person.displayName})}</h2>
-          <p className="mt-3" dir="ltr">{person.email ?? person.mobile}</p>
-          <p role="status" className="mt-3 text-sm text-teal-800">{a('signedIn')}</p>
-          {person.recoveryEnrollmentRequired && <p className="mt-3 text-sm text-slate-600">{a('recoveryPending')}</p>}
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button className="rounded-lg border border-slate-300 px-4 py-2" onClick={() => void refresh(true)} disabled={busy || remaining > 0}>{a('refreshAccount')}</button>
-            <button className="rounded-lg bg-teal-800 px-4 py-2 text-white" onClick={() => void logout()} disabled={busy || remaining > 0}>{a('logout')}</button>
-          </div>
-          {recoveryEnabled && <RecoveryPanel onSessionLost={() => {clear(); setNotice(false); broadcast('session-lost');}} onEnrolled={() => void refresh(true)} onAccepted={() => {clear(); setRegister(false); setReset(false); setNotice(true); broadcast('session-lost');}} />}
-        </div> : reset && recoveryEnabled ? <ResetPanel onSignIn={() => setReset(false)} onAccepted={() => {clear(); setNotice(true); broadcast('session-lost');}} /> : register && registrationEnabled ? <RegistrationPanel onSignIn={() => setRegister(false)} /> : <form onSubmit={login} className="grid gap-4">
-          <h2 className="text-xl font-semibold">{a('login')}</h2>
-          <label className="grid gap-2">{a('contact')}<input name="contact" type="text" autoComplete="username" required maxLength={254} dir="ltr" className="rounded-lg border border-slate-300 px-3 py-2" /></label>
-          <label className="grid gap-2">{a('password')}<input name="password" type="password" autoComplete="current-password" required maxLength={128} className="rounded-lg border border-slate-300 px-3 py-2" /></label>
-          <button type="submit" className="rounded-lg bg-teal-800 px-4 py-3 font-semibold text-white" disabled={busy || remaining > 0}>{busy ? a('waiting') : a('login')}</button>
-          {registrationEnabled && <button type="button" onClick={() => {setNotice(false); setRegister(true);}} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('register')}</button>}
-          {recoveryEnabled && <button type="button" onClick={() => {setNotice(false); setReset(true); setRegister(false);}} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2">{a('reset')}</button>}
+    <div className={`identity-layout ${person ? 'is-account' : ''}`}>
+      <aside className="identity-story" aria-labelledby="story-title">
+        <p className="eyebrow"><span className="status-dot"/>{t('stage')}</p>
+        <h1 id="story-title">{t(person ? 'accountTitle' : 'title')}</h1>
+        <p className="story-description">{t(person ? 'accountDescription' : 'description')}</p>
+        <div className="identity-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="core-tile">S<span>SMARTCORE</span></div><span className="art-label art-label-one">IDENTITY</span><span className="art-label art-label-two">YOUR WORKSPACE</span><span className="art-node node-one"/><span className="art-node node-two"/></div>
+        <div className="story-bottom"><span className="story-number">01 /</span><p>{t('promise')}</p></div>
+      </aside>
+      <section id="account-content" className="account-surface" tabIndex={-1} aria-label={t('account')}>
+        <div className="surface-heading"><span className="eyebrow">{person ? a('accountHome') : register ? a('register') : reset ? a('resetHeading') : a('loginHeading')}</span><span className="section-number" aria-hidden="true">{person ? '02' : '01'}</span></div>
+        {process.env.NEXT_PUBLIC_PRIVATE_TEST_MODE === 'true' && <p className="environment-notice">{t('privateNotice')}</p>}
+        <div aria-busy={busy || checking}>
+        {!enabled ? <div className="empty-state"><h2>{t('previewTitle')}</h2><p>{t('previewDescription')}</p></div> : checking ? <p role="status" className="loading-state">{a('checking')}</p> : person ? <div data-testid="profile">
+          <div className="profile-heading"><span className="avatar" aria-hidden="true">{person.displayName.slice(0,1)}</span><div><h2>{a('welcome', {name: person.displayName})}</h2><p className="profile-contact" dir="ltr">{person.email ?? person.mobile}</p></div></div>
+          <p role="status" className="success-notice">{a('signedIn')}</p>
+          <nav className="account-navigation" aria-label={a('navigation')}>
+            <button type="button" aria-pressed={accountView==='overview'} onClick={()=>setAccountView('overview')}>{a('overview')}</button>
+            {recoveryEnabled && <button type="button" aria-pressed={accountView==='security'} onClick={()=>setAccountView('security')}>{a('security')}</button>}
+          </nav>
+          <section hidden={accountView!=='overview'} className="overview-panel">
+            <h3>{a('details')}</h3>
+            <dl className="account-details"><div><dt>{a('displayName')}</dt><dd>{person.displayName}</dd></div><div><dt>{a('contact')}</dt><dd dir="ltr">{person.email ?? person.mobile}</dd></div><div><dt>{a('recoveryStatus')}</dt><dd>{a(person.recoveryEnrollmentRequired ? 'recoveryMissing' : 'recoveryReady')}</dd></div></dl>
+            {recoveryEnabled && person.recoveryEnrollmentRequired && <div className="recovery-reminder"><p>{a('recoveryPending')}</p><button type="button" className="text-button" onClick={()=>setAccountView('security')}>{a('setupRecovery')}</button></div>}
+          </section>
+          {recoveryEnabled && <div hidden={accountView!=='security'}><RecoveryPanel visible={accountView==='security'} onSessionLost={() => {clear(); setNotice(false); broadcast('session-lost');}} onEnrolled={() => void refresh(true)} onAccepted={() => {clear(); setRegister(false); setReset(false); setNotice(true); broadcast('session-lost');}} /></div>}
+          <div className="account-actions"><button className="secondary-button" onClick={() => void refresh(true)} disabled={busy || remaining > 0}>{a('refreshAccount')}</button><button className="text-button" onClick={() => void logout()} disabled={busy || remaining > 0}>{a('logout')}</button></div>
+        </div> : reset && recoveryEnabled ? <ResetPanel onSignIn={() => {setReset(false);setError('');}} onAccepted={() => {clear(); setNotice(true); broadcast('session-lost');}} /> : register && registrationEnabled ? <RegistrationPanel onSignIn={() => {setRegister(false);setError('');}} /> : <form onSubmit={login} className="auth-form">
+          <div className="form-intro"><h2>{a('loginHeading')}</h2><p>{a('loginDescription')}</p></div>
+          <label className="field-label">{a('contact')}<input name="contact" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} dir="ltr" aria-invalid={error==='UNAUTHORIZED'} aria-describedby={error ? 'account-error' : undefined}/></label>
+          <PasswordField name="password" label={a('password')} autoComplete="current-password" invalid={error==='UNAUTHORIZED'} describedBy={error ? 'account-error' : undefined}/>
+          {recoveryEnabled && <button type="button" onClick={() => {setNotice(false);setError('');setReset(true);setRegister(false);}} disabled={busy} className="text-button forgot-button">{a('reset')}</button>}
+          <button type="submit" className="primary-button" disabled={busy || remaining > 0}>{busy ? a('waiting') : a('login')} <span aria-hidden="true">↗</span></button>
+          {registrationEnabled && <div className="form-alternative"><p>{a('newAccount')}</p><button type="button" onClick={() => {setNotice(false);setError('');setRegister(true);}} disabled={busy} className="secondary-button">{a('register')}</button></div>}
+          <p className="form-footnote">{a('passwordPrivacy')}</p>
         </form>}
-        {notice && <p role="status" className="mt-4">{a('mutationAccepted')}</p>}
-        {error && <p role="alert" className="mt-4 text-sm text-red-800">{a(`errors.${knownErrors.includes(error) ? error : 'UNKNOWN'}`)}</p>}
-        {remaining > 0 && <p role="status" className="mt-3 text-sm">{a('retry', {seconds: remaining})}</p>}
-      </div>
-    </section>
+        {notice && <p role="status" className="success-notice">{a('mutationAccepted')}</p>}
+        {error && <p id="account-error" role="alert" className="error-notice">{a(`errors.${knownErrors.includes(error) ? error : 'UNKNOWN'}`)}</p>}
+        {remaining > 0 && <p role="status" className="environment-notice">{a('retry', {seconds: remaining})}</p>}
+        </div>
+      </section>
+    </div>
+    <footer className="site-footer"><span>{t('brand')} · {t('account')}</span><span>{t('footer')}</span></footer>
   </main>;
 }

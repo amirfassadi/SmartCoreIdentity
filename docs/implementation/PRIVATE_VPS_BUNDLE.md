@@ -149,3 +149,27 @@ CI evidence is tied to the tested source/run, not proof of deployment on the VPS
 Delivered alerts, accepted load/failover/coordinated-backup evidence, canonical
 provenance, retention/contact-release policy, production configuration and legal
 notices still gate real users. See [release gates in the source repository](https://github.com/amirfassadi/SmartCoreIdentity/blob/review/identity-bff/docs/implementation/RELEASE_GATES.md).
+
+## Optional private systemd service
+
+New bundles include `service.py`. Stop any existing foreground runner before installing:
+
+```sh
+cd /home/amir/smartcore-identity-private
+sudo -v
+python3 service.py install
+sudo systemctl status smartcore-identity-private --no-pager
+```
+
+It keeps the existing keys/database, refuses occupied application ports and an
+existing service definition, and runs as the normal application user. Systemd
+owns the entire process group and restarts failed runs with a bounded rate limit.
+This is still private loopback testing; it does not enable public release or
+configure Vercel. For updates, stop the service before moving application files:
+
+```sh
+sudo systemctl stop smartcore-identity-private
+# Install the verified replacement bundle while preserving dev-secrets.
+sudo systemctl start smartcore-identity-private
+sudo journalctl -u smartcore-identity-private -n 40 --no-pager
+```

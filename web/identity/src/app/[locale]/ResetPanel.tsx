@@ -1,4 +1,5 @@
 'use client';
+import PasswordField from './PasswordField';
 import {useTranslations} from 'next-intl';
 import {useEffect,useRef,useState} from 'react';
 import {BrowserError,post} from '@/lib/bff/client';
@@ -17,7 +18,7 @@ export default function ResetPanel({onSignIn,onAccepted}: {onSignIn:()=>void,onA
     try {
       flow.current ??= newFlow();const flowId=flow.current;
       if(stage==='Start') {
-        const contact=String(data.get('contact')??'');
+        const contact=String(data.get('contact')??'').trim();
         const result=await post('/bff/password/reset',contact.includes('@')?{flowId,email:contact}:{flowId,mobile:contact});
         if(!active.current)return;setExpires(Date.parse(result.expiresAt));setStage('Proof');form.reset();
       } else {
@@ -37,7 +38,7 @@ export default function ResetPanel({onSignIn,onAccepted}: {onSignIn:()=>void,onA
       {stage==='Start' ? <label className="grid gap-2">{t('contact')}<input name="contact" autoComplete="username" required maxLength={254} dir="ltr" className={input}/></label> : <>
         <label className="grid gap-2">{t('code')}<input name="code" autoComplete="one-time-code" inputMode="numeric" minLength={6} maxLength={8} pattern="[0-9۰-۹٠-٩]{6}|[0-9۰-۹٠-٩]{8}" required dir="ltr" className={input}/></label>
         <label className="grid gap-2">{t('recoveryCode')}<input name="recoveryCode" autoComplete="off" autoCapitalize="characters" spellCheck={false} required maxLength={64} dir="ltr" className={input}/></label>
-        <label className="grid gap-2">{t('newPassword')}<input name="newPassword" type="password" autoComplete="new-password" required minLength={15} maxLength={128} className={input}/></label>
+        <PasswordField name="newPassword" label={t('newPassword')} autoComplete="new-password" minLength={15}/>
       </>}
       <button type="submit" className="rounded-lg bg-teal-800 px-4 py-3 text-white disabled:opacity-50" disabled={busy || remaining>0 || expired}>{busy?t('waiting'):t(stage==='Start'?'start':'complete')}</button>
     </form>}

@@ -43,6 +43,8 @@ try {
   assert.equal((await context.cookies()).find(c=>c.name==='__Host-smartcore-session').value,opaque);
   await exchange('refresh-done');
   stage='one-time enrollment and consent';
+  assert.equal(await page.getByTestId('profile').locator('form').count(),0,'Account starts without a security form');
+  await page.getByRole('button',{name:'Account security',exact:true}).click();
   const recovery=page.getByTestId('recovery');
   assert.equal(await recovery.locator('form').count(),0,'Account opens without a recovery or password form');
   await page.getByText('You are signed in. Manage your account security here.',{exact:true}).waitFor();
@@ -98,6 +100,7 @@ try {
   stage='new-password login and replacement enrollment';
   await exchange('process');await login(fixture.newPassword);
   assert.equal(await page.getByText('Your request was accepted. Processing may still be underway; sign in with your new password when ready.',{exact:true}).count(),0);
+  await page.getByRole('button',{name:'Account security',exact:true}).click();
   assert.equal(await recovery.locator('form').count(),0);
   await recovery.getByRole('button',{name:'Recovery code',exact:true}).click();
   await recovery.locator('input[name=currentPassword]').fill(fixture.newPassword);await recovery.locator('input[name=acceptLossRisk]').check();
@@ -110,7 +113,7 @@ try {
   assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.setViewportSize({width:390,height:844});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   const peer=await context.newPage();peer.on('pageerror',()=>faults.push('pageerror'));await peer.goto('/en');await peer.getByTestId('profile').waitFor();
-  await page.bringToFront();await recovery.getByRole('button',{name:'تغییر رمز عبور',exact:true}).click();
+  await page.bringToFront();await page.getByRole('button',{name:'امنیت حساب',exact:true}).click();await recovery.getByRole('button',{name:'تغییر رمز عبور',exact:true}).click();
   await recovery.locator('input[name=currentPassword]').fill(fixture.newPassword);await recovery.locator('input[name=newPassword]').fill(fixture.finalPassword);
   await recovery.getByRole('button',{name:'درخواست تغییر رمز',exact:true}).click();await page.locator('input[name=contact]').waitFor();await peer.locator('input[name=contact]').waitFor();
   assert(!(await context.cookies()).some(c=>c.name==='__Host-smartcore-session'));assert.equal(await peer.getByTestId('profile').count(),0);
