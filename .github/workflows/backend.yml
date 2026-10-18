@@ -1,13 +1,20 @@
 name: Registration backend
 on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   postgres-registration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: [17, 18]
     services:
       postgres:
-        image: postgres:17
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_USER: smartcore_test
           POSTGRES_PASSWORD: test_only_ci_password
@@ -28,7 +35,7 @@ jobs:
         env:
           SMARTCORE_TEST_DB: Host=localhost;Database=smartcore_test;Username=smartcore_test;Password=test_only_ci_password
           SMARTCORE_TEST_ALLOW_RESET: 'yes'
-          SMARTCORE_TEST_ENGINE: PostgreSQL 17
+          SMARTCORE_TEST_ENGINE: PostgreSQL ${{ matrix.postgres }}
           SMARTCORE_EVENT_FIXTURES: /tmp/identity-events.json
       - run: python scripts/check-events.py /tmp/identity-events.json
       - run: python scripts/check-reset-event-proposal.py /tmp/identity-events.json

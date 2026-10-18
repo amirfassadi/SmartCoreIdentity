@@ -1,5 +1,5 @@
 """Opt-in authenticated BFF adapter HTTP checks against disposable test accounts."""
-import base64,json,os,secrets,subprocess,time,urllib.request,urllib.error
+import hashlib,hmac,uuid,base64,json,os,secrets,subprocess,time,urllib.request,urllib.error
 from pathlib import Path
 import yaml
 from jsonschema import Draft202012Validator,FormatChecker
@@ -10,7 +10,7 @@ env.update(ASPNETCORE_ENVIRONMENT='Development',ASPNETCORE_URLS='http://127.0.0.
  Identity__MacKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__MaterialKey=base64.b64encode(secrets.token_bytes(32)).decode(),
  Identity__AccessSigningKey=base64.b64encode(secrets.token_bytes(32)).decode(),
- Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
+ Identity__RefreshReceiptKey=secrets.token_urlsafe(32),Identity__BffClientKey=secrets.token_urlsafe(32),Identity__AuthenticationEnabled='true',
  Identity__DevInboxKey=secrets.token_urlsafe(32),Identity__WorkerEnabled='true')
 dotnet=env.get('SMARTCORE_DOTNET','dotnet');project=str(root/'src/SmartCore.Identity.Api')
 subprocess.run([dotnet,'run','--project',project,'--no-build','--','--migrate'],env=env,check=True)
@@ -47,7 +47,7 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   verification=dict(verificationSessionId=start['verificationSessionId'],code=inbox['code'],bindingSecret=binding)
   assert call('/auth/register/verify',verification)[0]==201
   login=dict(email=email,password=password)
-  assert call('/auth/login',login)[0]==401
+  assert call('/auth/login',login)[0]==403
   assert call('/auth/login',{**login,'password':None},bff)[0]==400
   assert call('/auth/login',{**login,'extra':True},bff)[0]==400
   # Await Ready through bounded authorized proof replay, not by inspecting Credential state.
@@ -59,11 +59,11 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   status,result=call('/auth/login',login,bff);assert status==200
   session=result['session'];auth={**bff,'Authorization':'Bearer '+session['accessToken']}
   assert call('/me',headers=auth)[0]==200
-  assert call('/me',headers={'X-Bff-Client-Key':env['Identity__BffClientKey'],'Authorization':auth['Authorization']})[0]==400
+  assert call('/me',headers={'X-Bff-Client-Key':env['Identity__BffClientKey'],'Authorization':auth['Authorization']})[0]==403
   for _ in range(35):assert call('/me',headers=auth)[0]==200 # Independent Session budget exceeds the former shared 30/min ceiling.
   assert call('/me',headers=bff)[0]==401
   assert call('/auth/refresh',{'refreshToken':session['refreshToken']},bff)[0]==400
-  assert call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True}, {'X-Bff-Client-Key':'wrong-client'})[0]==401
+  assert call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True}, {'X-Bff-Client-Key':'wrong-client'})[0]==403
   status,rotated=call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True},bff)
   assert status==200 and rotated['expiresAt']==session['expiresAt'] and rotated['refreshToken']!=session['refreshToken']
   assert call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True},bff)[0]==401
@@ -74,6 +74,21 @@ with subprocess.Popen([dotnet,'run','--project',project,'--no-build'],env=env,st
   assert call('/auth/logout',{'sessionId':session['sessionId']},auth)[0]==204
   assert call('/auth/logout',{'sessionId':session['sessionId']},auth)[0]==204
   assert call('/me',headers=auth)[0]==401
+  status,result=call('/auth/login',login,bff);assert status==200
+  session=result['session'];limited={**bff,'X-Bff-Subject':secrets.token_urlsafe(32),'Authorization':'Bearer '+session['accessToken']}
+  bad_reference=str(uuid.uuid4())
+  status,rejected=call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True},{**bff,'X-Bff-Client-Key':'wrong-client','X-Refresh-Request':bad_reference})
+  assert status==403 and rejected['code']=='BFF_CREDENTIALS_REJECTED' and rejected['requestReference']==bad_reference
+  bad_message=f"identity-refresh-not-processed-v1\n403\nBFF_CREDENTIALS_REJECTED\n{bad_reference}\n{rejected['retryAfterSeconds']}".encode()
+  assert hmac.compare_digest(base64.b64decode(rejected['proof']),hmac.digest(env['Identity__RefreshReceiptKey'].encode(),bad_message,'sha256'))
+  for _ in range(120):assert call('/me',headers=limited)[0]==200
+  reference=str(uuid.uuid4())
+  status,receipt=call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True},{**limited,'X-Refresh-Request':reference})
+  assert status==429 and receipt['disposition']=='NotProcessed' and receipt['requestReference']==reference
+  message=f"identity-refresh-not-processed-v1\n429\nRATE_LIMITED\n{reference}\n{receipt['retryAfterSeconds']}".encode()
+  assert hmac.compare_digest(base64.b64decode(receipt['proof']),hmac.digest(env['Identity__RefreshReceiptKey'].encode(),message,'sha256'))
+  status,retry=call('/auth/refresh',{'refreshToken':session['refreshToken'],'foreground':True},{**bff,'X-Bff-Subject':secrets.token_urlsafe(32)})
+  assert status==200 and retry['refreshToken']!=session['refreshToken']
   print('HTTP AUTH PASS: BFF admission, strict input, Ready login/self, rotation, zero-grace reuse and bound logout replay')
  finally:
   process.terminate()

@@ -4,3 +4,10 @@
 TestResults/
 *.user
 dev-secrets/
+**/node_modules/
+**/.next/
+**/*.tsbuildinfo
+**/__pycache__/
+**/.env*
+!**/.env.example
+.vercel/

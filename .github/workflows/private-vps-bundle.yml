@@ -1,0 +1,79 @@
+name: Debian 12 and Ubuntu private VPS bundle
+on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  package-and-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: disposable_ci_only_password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: python -m unittest discover -s tests/private-stack -v
+      - name: Publish hosts for the bundled shared runtime outside checkout
+        shell: bash
+        run: |
+          dotnet restore src/SmartCore.Identity.Api --locked-mode
+          mkdir -p "$RUNNER_TEMP/private-api-source" "$RUNNER_TEMP/private-bff-source"
+          git archive HEAD global.json src database | tar -x -C "$RUNNER_TEMP/private-api-source"
+          git archive HEAD global.json src database | tar -x -C "$RUNNER_TEMP/private-bff-source"
+          dotnet publish "$RUNNER_TEMP/private-api-source/src/SmartCore.Identity.Api" -c Release --self-contained false -p:UseAppHost=false -o "$RUNNER_TEMP/private-publish/api"
+          dotnet publish "$RUNNER_TEMP/private-bff-source/src/SmartCore.Identity.Bff.Host" -c Release --self-contained false -p:UseAppHost=false -o "$RUNNER_TEMP/private-publish/bff"
+      - run: npm ci --ignore-scripts --prefix web/identity
+      - run: npm run build --prefix web/identity
+        env:
+          NEXT_PUBLIC_BFF_ACCOUNTS_ENABLED: 'true'
+          NEXT_PUBLIC_BFF_REGISTRATION_ENABLED: 'true'
+          NEXT_PUBLIC_BFF_RECOVERY_ENABLED: 'true'
+          NEXT_PUBLIC_PRIVATE_TEST_MODE: 'true'
+      - name: Package private runtime without keys or database credentials
+        shell: bash
+        run: |
+          python tools/package_private_bundle.py --output "$RUNNER_TEMP/bundle/smartcore-identity-private" --api "$RUNNER_TEMP/private-publish/api" --bff "$RUNNER_TEMP/private-publish/bff" --node "$(command -v node)" --dotnet "$(command -v dotnet)"
+          echo "SMARTCORE_PRIVATE_BUNDLE=$RUNNER_TEMP/bundle/smartcore-identity-private" >> "$GITHUB_ENV"
+      - name: Initialize private keys and test bounded database provisioning
+        run: |
+          python "$SMARTCORE_PRIVATE_BUNDLE/run.py" init
+          python scripts/private-bundle-provision-checks.py
+        env:
+          CI_PG_CONTAINER: ${{ job.services.postgres.id }}
+      - name: Real prebuilt account flow and immediate session-preserving restart
+        run: python scripts/private-stack-smoke.py
+      - name: Run the same prebuilt bundle on Debian 12 without SDK or system Node
+        shell: bash
+        run: |
+          docker build -t smartcore-private-debian12-check -f deploy/private/Dockerfile.debian12-check deploy/private
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            --mount "type=bind,src=$SMARTCORE_PRIVATE_BUNDLE,dst=$SMARTCORE_PRIVATE_BUNDLE" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/source,readonly" \
+            -e SMARTCORE_PRIVATE_BUNDLE smartcore-private-debian12-check \
+            python3 /source/scripts/private-stack-smoke.py
+      - name: Publish only the pre-initialization archive and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartcore-identity-private-linux-x64
+          path: |
+            ${{ runner.temp }}/bundle/smartcore-identity-private.tar.gz
+            ${{ runner.temp }}/bundle/smartcore-identity-private.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
