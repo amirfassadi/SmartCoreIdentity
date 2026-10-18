@@ -65,6 +65,7 @@ if (args.Contains("--keyring-proof")) {
 }
 await app.Services.GetRequiredService<BffStore>().Migrate();
 if (args.Contains("--migrate")) return;
+app.UseMiddleware<GatewayTrustMiddleware>(configuration.Transport);
 app.UseForwardedHeaders();
 app.Use(async (context, next) => {
     context.Response.Headers.CacheControl = "no-store";

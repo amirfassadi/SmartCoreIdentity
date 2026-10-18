@@ -2,6 +2,8 @@
 Includes live TLS/session-bound CSRF guards; no actual browser login/account E2E claim.
 """
 import base64
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -40,6 +42,16 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
         'Bff__SessionMacKey':base64.b64encode(secrets.token_bytes(32)).decode(), 'Bff__SessionMaterialKey':base64.b64encode(secrets.token_bytes(32)).decode(),
         'Bff__DataProtection__KeyRing':str(directory/'ring'), 'Bff__DataProtection__CertificatePath':str(directory/'wrap.pfx'), 'Bff__DataProtection__CertificatePassword':password}
     assert run(env, '--validate-config').returncode == 0
+    staging = {**env, 'ASPNETCORE_ENVIRONMENT': 'RestrictedStaging',
+        'Bff__ExternalOrigin': 'https://accounts.example.test',
+        'Bff__StagingBrowserOrigin': 'https://accounts.example.test',
+        'Bff__RestrictedStagingEnabled': 'true', 'Bff__GatewayProof': 'p' * 43}
+    assert run(staging, '--validate-config').returncode == 0
+    for overrides in [{'ASPNETCORE_ENVIRONMENT': 'Production'}, {'ASPNETCORE_URLS': 'http://0.0.0.0:5171'},
+        {'Bff__IdentityOrigin': 'https://public.example.test'}, {'Bff__RestrictedStagingEnabled': 'false'},
+        {'Bff__GatewayProof': ''}, {'Bff__StagingBrowserOrigin': 'https://alias.example.test'}]:
+        assert run({**staging, **overrides}, '--validate-config').returncode != 0
+    print('Restricted staging host config PASS: explicit HTTPS origin/proof accepted; Production, public listeners/Identity and incomplete opt-in rejected.')
     required = ['ASPNETCORE_URLS', 'ConnectionStrings__Bff', 'Bff__ExternalOrigin', 'Bff__IdentityOrigin',
         'Bff__ClientKey', 'Bff__ReceiptKey', 'Bff__SessionMacKey', 'Bff__SessionMaterialKey',
         'Bff__DataProtection__KeyRing', 'Bff__DataProtection__CertificatePath', 'Bff__DataProtection__CertificatePassword']
@@ -89,6 +101,24 @@ with tempfile.TemporaryDirectory(prefix='smartcore-bff-host-') as scratch:
                 except urllib.error.HTTPError as error: response = error
                 assert response.status == status, (path, method, response.status, status)
                 validate_response(contract,path,method,status,json.loads(response.read()),dict(response.headers.items()))
+        restricted_key = secrets.token_urlsafe(32)
+        restricted_proof = base64.urlsafe_b64encode(hmac.new(restricted_key.encode(), b'SmartCore.Bff.Gateway.v1', hashlib.sha256).digest()).decode().rstrip('=')
+        for port in (6171, 6172):
+            process = subprocess.Popen([dotnet, assembly], env={**staging,
+                'ASPNETCORE_URLS': f'http://127.0.0.1:{port}', 'Bff__GatewayProof': restricted_proof,
+                'Bff__AccountsEnabled': 'false', 'Bff__RegistrationEnabled': 'false', 'Bff__RecoveryEnabled': 'false'},
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            processes.append(process)
+            for _ in range(200):
+                assert process.poll() is None, 'Restricted BFF exited before readiness'
+                try:
+                    if opener.open(f'http://127.0.0.1:{port}/health/ready', timeout=1).status == 204: break
+                except OSError: pass
+                time.sleep(.1)
+            else: raise AssertionError('Restricted BFF readiness timed out')
+        subprocess.run(['node', str(root/'scripts/staging-transport-checks.mjs')], check=True, timeout=60, env={**os.environ,
+            'NODE_EXTRA_CA_CERTS': str(directory/'tls.crt'), 'SMARTCORE_TEST_GATEWAY_KEY': restricted_key,
+            'SMARTCORE_TEST_TLS_KEY': str(directory/'tls.key'), 'SMARTCORE_TEST_TLS_CERT': str(directory/'tls.crt')})
         ingress = subprocess.Popen(['node',str(root/'deploy/development/https-ingress.mjs')],env={**os.environ,
             'SMARTCORE_INGRESS_ENVIRONMENT':'Testing','SMARTCORE_INGRESS_ORIGIN':'https://localhost:7443',
             'SMARTCORE_TLS_KEY':str(directory/'tls.key'),'SMARTCORE_TLS_CERT':str(directory/'tls.crt')},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

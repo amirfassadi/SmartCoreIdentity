@@ -56,6 +56,12 @@ def package(output, api, bff, node, dotnet):
     for source, destination in [('tools/private_stack.py', 'tools/private_stack.py'),
                                 ('deploy/private/run.py', 'run.py'),
                                 ('deploy/private/service.py', 'service.py'),
+                                ('deploy/private/staging.py', 'staging.py'),
+                                ('deploy/gateway/server.mjs', 'deploy/gateway/server.mjs'),
+                                ('web/identity/src/lib/bff/bridge.mjs', 'web/identity/src/lib/bff/bridge.mjs'),
+                                ('deploy/gateway/nginx-ip-tls.conf', 'deploy/gateway/nginx-ip-tls.conf'),
+                                ('deploy/gateway/smartcore-identity-staging.service', 'deploy/gateway/smartcore-identity-staging.service'),
+                                ('docs/implementation/RESTRICTED_STAGING.md', 'RESTRICTED_STAGING.md'),
                                 ('deploy/development/https-ingress.mjs', 'deploy/development/https-ingress.mjs'),
                                 ('docs/implementation/PRIVATE_VPS_BUNDLE.md', 'README.md')]:
         target = output / destination
@@ -63,7 +69,7 @@ def package(output, api, bff, node, dotnet):
         shutil.copy2(ROOT / source, target)
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     version = subprocess.check_output([str(node), '--version'], text=True).strip()
-    manifest = {'source': source, 'platform': 'linux-x64-glibc',
+    manifest = {'source': source, 'platform': 'linux-x64-glibc', 'capabilities': ['restricted-staging-v1'],
                 'build_os': 'ubuntu-22.04', 'test_os': ['ubuntu-22.04', 'debian-12'],
                 'postgres_major': 18, 'node': version, 'dotnet': runtime, 'sha256': {}}
     for path in sorted(output.rglob('*')):

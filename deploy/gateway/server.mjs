@@ -1,7 +1,7 @@
 // Authenticated loopback gateway behind an operator-managed HTTPS Nginx vhost.
 // Never log requests, credentials, exception messages, response bodies or cookies.
 import http from 'node:http';
-import {createHash, timingSafeEqual} from 'node:crypto';
+import {createHash, createHmac, timingSafeEqual} from 'node:crypto';
 import {readFile, lstat} from 'node:fs/promises';
 import {dirname, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -40,6 +40,7 @@ export function createGateway(env, {bffOrigins = ['http://127.0.0.1:5171'], time
     throw new Error('Independent gateway configuration required');
   const digest = value => createHash('sha256').update(value).digest();
   const expectedKey = digest(env.SMARTCORE_BFF_GATEWAY_KEY);
+  const bffProof = createHmac('sha256', env.SMARTCORE_BFF_GATEWAY_KEY).update('SmartCore.Bff.Gateway.v1').digest('base64url');
   if (bffOrigins.length < 1 || bffOrigins.length > 2) throw new Error('One or two BFF peers required');
   const peers = bffOrigins.map(value => {
     const url = new URL(value);
@@ -81,7 +82,7 @@ export function createGateway(env, {bffOrigins = ['http://127.0.0.1:5171'], time
       || site !== undefined && site !== 'same-origin' && site !== 'none') {fail(403, 'ORIGIN_REJECTED'); return;}
     const target = peers[turn++ % peers.length];
     const headers = {host: target.host, 'x-forwarded-host': browser.host, 'x-forwarded-proto': 'https',
-      'x-forwarded-for': '127.0.0.1'};
+      'x-forwarded-for': '127.0.0.1', 'x-smartcore-bff-gateway-proof': bffProof};
     for (const name of ['accept', 'accept-language', 'content-type', 'origin', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest', 'x-csrf-token']) {
       if (request.headers[name] !== undefined) headers[name] = request.headers[name];
     }
@@ -124,7 +125,7 @@ export function createGateway(env, {bffOrigins = ['http://127.0.0.1:5171'], time
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const env = await readSettings(process.argv[2] ?? '/home/amir/.config/smartcore-identity/.env');
-    const server = createGateway(env);
+    const server = createGateway(env, {bffOrigins: (process.env.SMARTCORE_BFF_ORIGINS ?? 'http://127.0.0.1:5171').split(',')});
     server.on('error', () => {console.error('Gateway listener failed; details suppressed.'); process.exitCode = 1;});
     server.listen(5181, '127.0.0.1', () => console.log('Authenticated gateway listening on loopback.'));
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => server.close(() => process.exit(0)));

@@ -1,7 +1,8 @@
 # Vercel to VPS transport preparation
 
 Status: Next transport and standalone VPS gateway implemented; disabled by default. This does not enable public
-accounts or close RELEASE_GATES. VPS installation and external-origin acceptance
+accounts or close RELEASE_GATES. Restricted-staging policy/runner are implemented;
+VPS installation and external-origin acceptance
 are still required. No deployed backend, database, runtime or provider was changed.
 
 ## Intended request path
@@ -54,9 +55,10 @@ retains JSON 404 and all existing account UI flags remain false by default.
    before dispatch, accepts only account paths and rebuilds forwarded headers.
    See `VPS_GATEWAY.md`. TLS verification stays enabled. The gateway key alone is
    not a browser session or CSRF proof.
-3. Add and test an explicit restricted staging deployment policy in ASP.NET.
-   Current HostConfiguration rejects non-loopback browser origins and Production;
-   changing a Vercel environment variable cannot bypass that requirement.
+3. Deploy and accept the explicit restricted staging policy and runner described
+   in RESTRICTED_STAGING.md. Only an explicitly confirmed browser origin and
+   gateway proof permit restricted staging; Production remains rejected.
+   Changing a Vercel variable cannot upgrade the old VPS host or runner.
 4. Run real Next -> TLS gateway -> two BFF hosts -> PostgreSQL login/refresh/logout
    and recovery acceptance with disposable test accounts, including forged gateway
    headers, untrusted origins, rejected keys, response loss and persistent key-ring

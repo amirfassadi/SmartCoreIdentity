@@ -1,0 +1,31 @@
+[Unit]
+Description=SmartCore Identity restricted staging transport (accounts disabled)
+After=network.target postgresql.service
+Conflicts=smartcore-identity-private.service
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=amir
+WorkingDirectory=/home/amir/smartcore-identity-private
+ExecStart=/usr/bin/python3 /home/amir/smartcore-identity-private/staging.py run --settings /home/amir/.config/smartcore-identity/.env
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=50
+KillSignal=SIGTERM
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/amir/smartcore-identity-private/dev-secrets
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

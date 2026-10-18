@@ -37,8 +37,9 @@ fixed TLS probe. It never reads `.env`, private configuration.json, key-ring
 contents, command-line process arguments, logs or systemd environment settings.
 
 Use its bundle source/runtime and listener inventory to prepare an upgrade which
-preserves existing private state. The ASP.NET external-origin policy, restricted
-staging runner/service, gateway installation and real two-host account acceptance
+preserves existing private state. The explicit ASP.NET policy and transport-only
+staging runner/service template are implemented in RESTRICTED_STAGING.md. Their
+VPS installation, gateway activation and real Vercel/two-host account acceptance
 are still outstanding. Production remains blocked by the existing release gates.
 
 The explicit Vercel project lookup still returned scope authorization 403 for

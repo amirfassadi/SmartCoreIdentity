@@ -1,20 +1,24 @@
 # Standalone authenticated VPS gateway
 
 Status: implemented and tested with controlled BFF peers on loopback sockets.
-Not installed on the owner's VPS. Public TLS and real ASP.NET account acceptance
-are not claimed. Do not enable the owner's bridge configuration yet.
+Not installed on the owner's VPS. IP-based public TLS was separately verified by
+the operator; see VPS_TLS_STATUS.md. Real ASP.NET account acceptance is not claimed.
+Do not enable the owner's bridge configuration yet.
 
 ## Topology
 
 Vercel's server-only Next bridge calls the fixed HTTPS backend hostname. Nginx
-terminates TLS on its existing 443 listener in a separate server_name vhost and
+terminates TLS on the dedicated IP certificate listener at port 8443 and
 forwards only `/bff` routes to `http://127.0.0.1:5181`. Identity, BFF and PostgreSQL
 remain bound to loopback. Existing Nginx sites/listeners must stay intact.
 
 The gateway has no request/response logging. It requires its dedicated key before
 dispatching, using SHA-256 digests and constant-time comparison; raw browser trust
-headers and the gateway key never reach ASP.NET. Forwarded host/proto are rebuilt
-from the configured browser origin. Forwarded-for is conservatively 127.0.0.1;
+headers and the gateway key never reach ASP.NET. An independent derived internal
+gateway proof is added before dispatch. The
+restricted BFF checks it before processing forwarded headers; see RESTRICTED_STAGING.md.
+Forwarded host/proto are rebuilt from the configured browser origin.
+Forwarded-for is conservatively 127.0.0.1;
 no remote client-IP claim is accepted from Vercel/browser headers. IP-based budgets
 will therefore aggregate until a separately accepted trusted-client scheme exists.
 
@@ -55,10 +59,10 @@ this source checkout is not a self-contained replacement for the existing bundle
 - Dedicated Nginx vhost and trusted TLS certificate, tested without replacing
   current sites or stopping services. Do not publish an AAAA record unless IPv6
   routing and TLS for this hostname are verified too.
-- Explicit ASP.NET restricted-staging policy for the real external browser origin.
-  Current HostConfiguration still rejects non-loopback external origins and
-  Production. Do not bypass that by forging Origin into localhost.
-- Service/runner wiring, ownership, persistent encrypted key ring and safe restart.
+- Deploy and accept the explicit ASP.NET restricted-staging policy, packaged
+  runner and service template in RESTRICTED_STAGING.md. Production still fails
+  closed. Do not bypass the policy by forging Origin into localhost.
+- Verify the actual bundle upgrade, ownership, persistent encrypted key ring and restart.
 - Real two-host account E2E through the TLS gateway, not just synthetic peers.
 - Secret provisioning in Vercel matching the VPS gateway key; it must never enter
   NEXT_PUBLIC variables, chat, source control, command-line arguments or logs.

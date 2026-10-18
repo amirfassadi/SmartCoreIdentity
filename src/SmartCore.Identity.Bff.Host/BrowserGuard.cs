@@ -75,7 +75,7 @@ public sealed class BrowserGuard(HostConfiguration configuration, IAntiforgery a
             if ((isRegistration || anonymousRecovery || path == "/bff/login") && context.User.Identity?.IsAuthenticated == true) {
                 await Error(context, 409, "SESSION_ALREADY_ACTIVE"); return;
             }
-            // Explicit opt-in for private account acceptance; public deployment remains rejected at startup.
+            // Explicit opt-in for private account acceptance; Production remains rejected at startup.
             if (!settings.GetValue("Bff:AccountsEnabled", false)) { await Error(context, 503, "BFF_UNAVAILABLE"); return; }
             if (isRegistration) await registration.Handle(context, path, (JsonElement)context.Items["browser-registration"]!);
             else if (isRecovery) await recovery.Handle(context, path, (JsonElement)context.Items["browser-recovery"]!);

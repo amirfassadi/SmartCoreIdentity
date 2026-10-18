@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import {createHmac} from 'node:crypto';
 import {mkdtemp, writeFile, chmod, rm, symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -66,12 +67,16 @@ test('VPS gateway validates settings and authenticated transport over real HTTP 
     const reply = await call(target, '/bff/login', {
       Cookie: `smartcore-locale=fa; unknown=secret; __Host-smartcore-session=${'A'.repeat(43)}; __Host-smartcore-antiforgery=proof`,
       Authorization: 'Bearer forged', 'X-CSRF-Token': 'proof', 'X-Forwarded-Host': 'evil.test', 'X-Forwarded-Proto': 'http',
-      'X-Forwarded-For': '203.0.113.1', 'X-Bff-Client-Key': 'forged', 'X-Dev-Inbox-Key': 'forged'});
+      'X-Forwarded-For': '203.0.113.1', 'X-Bff-Client-Key': 'forged', 'X-Dev-Inbox-Key': 'forged',
+      'X-SmartCore-Bff-Gateway-Proof': 'forged'});
     assert.equal(reply.status, 200); assert.equal(reply.headers['cache-control'], 'no-store');
     const forwarded = seen.at(-1).headers;
     for (const name of ['authorization', 'x-smartcore-gateway-key', 'x-bff-client-key', 'x-dev-inbox-key']) assert.equal(forwarded[name], undefined);
     assert.equal(forwarded['x-forwarded-host'], 'identity.example.test'); assert.equal(forwarded['x-forwarded-proto'], 'https');
     assert.equal(forwarded['x-forwarded-for'], '127.0.0.1'); assert.equal(forwarded['x-csrf-token'], 'proof');
+    assert.equal(forwarded['x-smartcore-bff-gateway-proof'],
+      createHmac('sha256', env.SMARTCORE_BFF_GATEWAY_KEY).update('SmartCore.Bff.Gateway.v1').digest('base64url'));
+    assert.notEqual(forwarded['x-smartcore-bff-gateway-proof'], env.SMARTCORE_BFF_GATEWAY_KEY);
     assert.equal(forwarded.cookie, `__Host-smartcore-session=${'A'.repeat(43)}; __Host-smartcore-antiforgery=proof`);
     const csrf = await call(target, '/bff/csrf', {}, '', 'GET'); assert.equal(csrf.headers['set-cookie'].length, 2);
     assert(seen.some(x => x.peer === 'a') && seen.some(x => x.peer === 'b'));
