@@ -4,6 +4,7 @@ import RecoveryPanel from './RecoveryPanel';
 import ResetPanel from './ResetPanel';
 import RegistrationPanel from './RegistrationPanel';
 import PasswordField from './PasswordField';
+import {PlatformLink} from '../platform-link';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {bootstrap, BrowserError, invalidateCsrf, post, type Person} from '@/lib/bff/client';
 
@@ -112,7 +113,7 @@ export default function AccountShell() {
     <a className="skip-link" href="#account-content">{t('skip')}</a>
     <header className="site-header">
       <a className="brand" href={`/${locale}`} aria-label={t('brand')}><span className="brand-symbol" aria-hidden="true">S</span><span>{t('brand')}<small>SMARTCORE IDENTITY</small></span></a>
-      <a className="language-link" href={locale === 'fa' ? '/en' : '/fa'} lang={locale === 'fa' ? 'en' : 'fa'}>{t('language')} <span aria-hidden="true">↗</span></a>
+      <div className="header-links"><PlatformLink/><a className="language-link" href={locale === 'fa' ? '/en' : '/fa'} lang={locale === 'fa' ? 'en' : 'fa'}>{t('language')} <span aria-hidden="true">↗</span></a></div>
     </header>
     <div className={`identity-layout ${person ? 'is-account' : ''}`}>
       <aside className="identity-story" aria-labelledby="story-title">
@@ -126,7 +127,7 @@ export default function AccountShell() {
         <div className="surface-heading"><span className="eyebrow">{person ? a('accountHome') : register ? a('register') : reset ? a('resetHeading') : a('loginHeading')}</span><span className="section-number" aria-hidden="true">{person ? '02' : '01'}</span></div>
         {process.env.NEXT_PUBLIC_PRIVATE_TEST_MODE === 'true' && <p className="environment-notice">{t('privateNotice')}</p>}
         <div aria-busy={busy || checking}>
-        {!enabled ? <div className="empty-state"><h2>{t('previewTitle')}</h2><p>{t('previewDescription')}</p></div> : checking ? <p role="status" className="loading-state">{a('checking')}</p> : person ? <div data-testid="profile">
+        {!enabled ? <div className="empty-state"><h2>{t('previewTitle')}</h2><p>{t('previewDescription')}</p><fieldset disabled className="preview-fields auth-form" aria-label={t('previewTitle')}><label className="field-label">{a('contact')}<input type="text" autoComplete="off" dir="ltr" placeholder="name@example.com"/></label><label className="field-label">{a('password')}<input type="password" autoComplete="off" placeholder="••••••••••••"/></label><button type="button" className="primary-button">{a('login')}</button></fieldset></div> : checking ? <p role="status" className="loading-state">{a('checking')}</p> : person ? <div data-testid="profile">
           <div className="profile-heading"><span className="avatar" aria-hidden="true">{person.displayName.slice(0,1)}</span><div><h2>{a('welcome', {name: person.displayName})}</h2><p className="profile-contact" dir="ltr">{person.email ?? person.mobile}</p></div></div>
           <p role="status" className="success-notice">{a('signedIn')}</p>
           <nav className="account-navigation" aria-label={a('navigation')}>
